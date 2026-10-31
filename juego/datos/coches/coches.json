@@ -12,11 +12,18 @@
    "area_frontal_nota": "No publicada en ninguna fuente abierta: el juego la estima como 0,84 × ancho × alto (≈2,29 m²).",
    "ojos": [
     -0.37,
-    1.13,
-    0.3
+    1.1,
+    0.12
    ],
    "modelo_3d": {
-    "tipo": "procedural",
+    "tipo": "gltf",
+    "ruta": "res://modelos/arteon_lod0.gltf",
+    "ruta_lod1": "res://modelos/arteon_lod1.glb",
+    "largo_modelo_m": 4.866,
+    "fuente": "https://sketchfab.com/3d-models/volkswagen-arteon-be4640e14cd24a39860216944c133048",
+    "autor": "MattDoesBlender (https://sketchfab.com/MattDoesBlender)",
+    "licencia": "CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/)",
+    "nota": "Modelo 3D real del Arteon R-Line (anterior al lavado de cara, 2017–2020, misma carrocería fastback) de MattDoesBlender, CC BY 4.0. Adaptado para el juego: escalado al largo real (4.866 mm), ruedas separadas para que giren y giren con la dirección, materiales PBR rehechos y reducido de 2,1 M a ~70 k triángulos (jugador) y ~10 k (tráfico). Ver modelos/LEEME.md.",
     "perfil": {
      "nota": "Perfil procedural low-poly hecho para este juego a las medidas reales del Arteon (largo, ancho, alto, batalla, vía de la ficha). Las proporciones de la silueta (voladizos, línea de techo fastback) son aproximadas a ojo sobre fotos laterales; no son cotas de fábrica.",
      "voladizo_del": 0.93,
@@ -290,8 +297,7 @@
        0.16
       ]
      ]
-    },
-    "nota": "Para usar un modelo descargado: {\"tipo\": \"gltf\", \"ruta\": \"res://modelos/arteon.glb\"} (licencia CC0/CC-BY con atribución en el README)."
+    }
    },
    "colores": [
     {
@@ -596,7 +602,8 @@
       "Altura 1.460 mm, batalla 2.838 mm y vía trasera 1.582 mm (difieren ligeramente del resto, según km77)."
      ]
     }
-   ]
+   ],
+   "ojos_nota": "Ojos del conductor (x, y, z en m desde el centro de la batalla, al nivel del suelo; −x = izquierda): asiento del conductor detrás del volante del modelo 3D."
   }
  ]
 }

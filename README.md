@@ -1,4 +1,4 @@
-# Carreteras de España · escala 1:1  (v2)
+# Carreteras de España · escala 1:1  (v3)
 
 **Novedades v2**: sin vibración (ver §6) y coches reales elegibles con su ficha técnica (§7). De momento, todos VW Arteon.
 
@@ -20,9 +20,9 @@ Cómo ejecutarlo en local:
   con un servidor local, por ejemplo `python -m http.server 8000 --directory build/web` y abre `http://localhost:8000`
   (abrir el `index.html` con doble clic no funciona: el navegador bloquea la carga del `.wasm` desde disco).
 
-**Controles** (también salen en pantalla, H para la ayuda): W/↑ acelerar · S/↓ frenar y marcha atrás · A D / ← → girar ·
-Espacio freno · P piloto automático · C crucero · + / − velocidad · K adaptar en curvas · 9 / 0 tráfico ·
-V cámara · R volver a la carretera · Esc pausa.
+**Controles** (también salen en pantalla, H para la ayuda): W/↑ acelerar · S/↓ frenar y marcha atrás · ← → girar
+(también A D) · P piloto automático · O adelantar · + / − velocidad · K adaptar en curvas · 9 / 0 tráfico ·
+V cámara · R volver a la carretera · Esc pausa. Pulsa el perfil de altitud o el mapa de abajo para ir a ese punto.
 
 ## 1. Estructura
 
@@ -112,12 +112,16 @@ si km fin < km inicio la recorres en sentido contrario, p. ej. bajando el puerto
 adaptar en curvas, tráfico 0–100 %, cámara y **coche** (versión real del Arteon y color de VW, con su ficha).
 
 **Mandos**:
-- W/↑ acelerar · S/↓ frenar (parado: marcha atrás) · A D / ← → girar · Espacio freno
-- P piloto automático · C control de crucero · + / − velocidad elegida · K adaptar velocidad en curvas
+- W/↑ acelerar · S/↓ frenar (parado: marcha atrás) · ← → girar (A D también funcionan, y Espacio frena, aunque
+  ya no salen en la ayuda de pantalla)
+- P piloto automático · O adelantar (con el piloto puesto) · + / − velocidad elegida · K adaptar velocidad en curvas
 - 9 / 0 menos / más tráfico · V cámara (persecución / cabina) · R volver a la carretera · Esc pausa · H ayuda
 
 **HUD**: velocidad (km/h), altitud (m), pendiente real (%) en tu sentido de marcha, carretera (M-601 / CL-601 y
-su nombre), PK, km recorridos, km que faltan y minipefil con tu posición. Al llegar al km final: tiempo, velocidad
+su nombre), PK, km recorridos, km que faltan y, abajo, el perfil de altitud (mitad izquierda) y el mapa de la ruta
+visto desde arriba con el norte arriba (mitad derecha: salida en verde, llegada en rojo, lo recorrido en naranja y tu
+coche como flecha). Al pasar el ratón por encima se ve "km 7,4 · 1.512 m"; al pulsar, el coche aparece parado en ese
+km, en su carril, y se quitan los coches que hubiera a menos de 50 m. Al llegar al km final: tiempo, velocidad
 media y máxima, pendiente máxima, desnivel acumulado, derrapes y choques.
 
 **Física**: la del coche elegido en el menú (masa, potencia, 0-100, velocidad máxima, batalla y vía reales, §7); la gravedad de la pendiente real frena o empuja; rozamiento de rodadura y
@@ -126,7 +130,7 @@ más de ~33 km/h, el coche se va de morro (es la física real: v = √(μ·g·R)
 
 **Piloto automático**: sigue el carril derecho (persecución pura), mantiene la velocidad elegida con la fuerza que
 hace falta en cada pendiente y, si activas "adaptar en curvas", frena antes de cada curva según su radio real y hace
-cola detrás del tráfico (IDM). Sin adaptar, si vas demasiado rápido verás el aviso y derraparás.
+cola detrás del tráfico (IDM). Sin adaptar, si vas demasiado rápido derraparás.
 
 **Tráfico**: coches en los dos sentidos, cada uno en su carril, con el *Intelligent Driver Model* (Treiber, 2000)
 y velocidad máxima de curva; un 12 % son vehículos lentos y se forman colas detrás. Solo existen a ±1,3 km del
@@ -247,6 +251,9 @@ y la atribución aquí). Aparece solo en el menú.
   - el **Arteon 2.0 TSI 280 CV 4Motion** es el anterior al lavado de cara (2017–2018).
   Cada cifra lleva su URL en `juego/datos/coches/coches.json` (§7).
 - **Fuente de texto de respaldo** para las flechas en la versión web: DejaVu Sans (`juego/fuentes/`, licencia libre de DejaVu/Bitstream Vera).
+- **Modelo 3D del Arteon**: "Volkswagen Arteon" de [MattDoesBlender](https://sketchfab.com/MattDoesBlender),
+  [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/), <https://sketchfab.com/3d-models/volkswagen-arteon-be4640e14cd24a39860216944c133048>.
+  Modificado: reducido de triángulos, escalado a medidas reales, ruedas separadas y materiales rehechos (`juego/modelos/LEEME.md`).
 - Motor: [Godot Engine](https://godotengine.org) 4.7.2 (MIT).
 
 ## 9. Versión web y GitHub Pages
@@ -257,3 +264,96 @@ y lo publica en https://davizz-dev13.github.io/carreteras/. El progreso se ve en
 
 Para actualizar el juego online: cambia lo que quieras, `git commit` y `git push`. En 3–4 minutos está publicado.
 No hace falta subir la carpeta `build/` (está en `.gitignore`).
+
+## 10. Novedades de la v3
+
+**Arteon con modelo 3D real.** El coche del jugador es un modelo 3D real del Volkswagen Arteon:
+*"Volkswagen Arteon"* de **MattDoesBlender**, licencia **CC BY 4.0**
+(<https://sketchfab.com/3d-models/volkswagen-arteon-be4640e14cd24a39860216944c133048>). Es un Arteon R-Line de
+2018 (antes del restyling de 2020: faros y paragolpes algo distintos del actual). El original tiene 1,62 millones de
+triángulos; se ha convertido a `.glb` con Blender (script en `modelos/LEEME.md`):
+- `modelos/arteon_lod0.gltf (+ arteon_lod0_0.bin, arteon_lod0_1.bin)` (jugador): ~75.800 triángulos, 4,7 MB, una textura de 2048 px como máximo.
+- `modelos/arteon_lod1.glb` (tráfico): 28.620 triángulos, 1,7 MB. Sale del LOD0 reduciendo cada material por
+  separado (interior al 20 %, el resto al 36 %) y agrupando los materiales en 6 + 2 por rueda, para que cada coche
+  de tráfico cueste pocas llamadas de dibujo.
+- Escalado a 4,866 m de largo; batalla 2,837 m (real 2,836); vías 1,576 m (reales 1,587 / 1,577); alto 1,444 m (real
+  1,457). Cada rueda es una pieza aparte con su centro en el eje: giran según la velocidad y las delanteras giran con
+  la dirección (las pinzas de freno giran con la dirección pero no ruedan).
+- La pintura usa el color elegido en el menú con aspecto metalizado y barniz (clearcoat).
+- El tráfico usa el LOD1 y deja de dibujarse a más de 600 m; sus ruedas no proyectan sombra.
+- Sombras: 2 cascadas (los primeros 30 m con mucha resolución, hasta 100 m) y filtro suave, también en WebGL2.
+
+**Choques reales** (`scripts/colisiones.gd`): cada coche es una caja con sus medidas reales y su masa de la ficha.
+Cuando dos cajas se tocan se aplica un impulso que conserva el momento (coeficiente de restitución 0,15, rozamiento
+entre chapas 0,35), con sub-pasos para que no se atraviesen a velocidad alta. Los coches de tráfico golpeados se
+sueltan de su carril, derrapan, giran y se paran por rozamiento. Se han quitado los avisos rojos de la pantalla.
+
+**Adelantar con O** (con el piloto puesto): el coche espera un hueco seguro y adelanta solo si:
+- no hay línea continua (radio > 350 m),
+- la visibilidad alcanza para la maniobra (calculada con el trazado real),
+- no viene nadie de frente en esa distancia, contando con la aceleración real del coche.
+Si aparece un coche de frente antes de llegar a la altura del adelantado, aborta y vuelve detrás. Si ya está a su
+lado, termina a fondo. El estado sale en el recuadro de arriba a la derecha.
+
+**Dirección con teclado**: el volante se mueve de forma progresiva (unos 0,35 s hasta el tope y 0,25 s para volver
+al centro). El ángulo máximo depende de la velocidad: es el que pide, como mucho, el 85 % del agarre (todo el volante a
+20 km/h, pocos grados a 100 km/h). Así, mantener ← o → no hace derrapar ni frena el coche. El piloto automático no
+cambia.
+
+**Cámara de cabina** (V): ojos del conductor en el asiento izquierdo, con el salpicadero y el volante del modelo.
+
+**Fallo del km 2,8** (`scripts/cruces.gd`): el terreno (malla de 20 m) tapaba el asfalto en el pueblo y 9 caminos de
+OpenStreetMap se montaban sobre la carretera. Ahora:
+- los cruces se cortan en el borde de la carretera y empalman a su altura,
+- el terreno se baja bajo cada carretera para que quede al menos 25 cm por debajo del asfalto,
+- el asfalto tiene un talud de tierra a los lados.
+Revisado en los 40 cruces de la ruta 0.
+
+**Mapa por trozos (streaming)** (`scripts/mapa_streaming.gd`): solo existe en memoria el mapa alrededor del coche.
+- Carreteras: ~2 km por delante y 0,5 km por detrás.
+- Terreno fino y árboles: ~2,2 km por delante y 0,8 km por detrás.
+- Lo que queda atrás se libera. Lo de delante se construye poco a poco, como mucho 3 ms por fotograma y sin hilos,
+  así que funciona igual en la web.
+- Un terreno de 100 m de malla, siempre cargado, mantiene las montañas en el horizonte.
+- Al saltar (R, o pulsar el perfil o el mapa) se reconstruye la zona de golpe.
+
+Medido recorriendo la ruta 0 entera con un 30 % de tráfico:
+
+| | Antes | Ahora |
+|---|---|---|
+| Carga de la escena | 2,6 s | 0,8 s |
+| Memoria de vídeo | 103 MB | 63 MB |
+| Nodos | 1.568 | ~650 |
+| Primitivas por fotograma | 1,38 M | 0,82 M |
+
+**Límites de velocidad**: señal redonda junto al velocímetro con el límite del tramo y del sentido en que vas
+(`datos/navacerrada/limites_velocidad.json`, sacado de `maxspeed` de OpenStreetMap). Si OSM no tiene el dato, se
+usa el límite genérico de ese tipo de vía y la señal sale más tenue y con `*`. Si superas el límite en más de
+5 km/h, la velocidad se pone en rojo. Si falta el fichero, no sale la señal.
+
+**Pruebas automáticas** (sin ventana, `--headless`):
+```
+godot --headless res://escenas/juego.tscn -- --captura=choque_alcance --ruta=0 --km_ini=19.6 --km_fin=24 --trafico=0
+godot --headless res://escenas/juego.tscn -- --captura=choque_frontal --ruta=0 --km_ini=19.6 --km_fin=24 --trafico=0
+godot --headless res://escenas/juego.tscn -- --captura=adelantar --ruta=0 --km_ini=19.45 --km_fin=24 --trafico=30 --vel=90 --v_lento=45 --pulsar=3 --duracion=60
+godot --headless res://escenas/juego.tscn -- --captura=giro --ruta=0 --km_ini=19.6 --km_fin=24 --trafico=0   (--lado=1 para la derecha)
+godot --headless res://escenas/juego.tscn -- --captura=perfil --ruta=0 --km_ini=0 --km_fin=24.3 --trafico=40
+godot res://escenas/juego.tscn -- --captura=video --cuadros=999999 --medir_fps=300 --ruta=0 --km_ini=13.75 --km_fin=20 --trafico=60
+```
+Resultados en esta versión:
+- **Alcance** (90 contra 40 km/h): el momento se conserva (error 0,0000 %) y no se atraviesan.
+- **Frontal** (30 + 30 km/h): no se atraviesan; los dos quedan a ~5 km/h.
+- **Adelantamiento**:
+  - con 20–30 % de tráfico adelanta en la recta del km 19,6 en 7,8 s, sin choques;
+  - en la horquilla del km 14,2 no sale (línea continua);
+  - con 50 % de tráfico espera, porque vienen coches de frente cada ~110 m.
+- **Giro a 80 km/h con ← mantenido 5 s** (acelerador fijo): antes perdía 46,5 km/h; ahora 3 km/h respecto a ir recto
+  (en esa bajada, recto gana 3,6 km/h).
+- **Pulsar el perfil** al 25 / 50 / 90 %: el coche aparece en el km pedido (6,08 / 12,15 / 21,87) y en su carril.
+  Pulsar el punto del km 12 en el mapa lo lleva al km 12,00.
+- **Ruta 0 entera con el piloto** (km 0 → 24,3, 30 % de tráfico): llega al final con 0 choques y 0 derrapes.
+- **Rendimiento** (mismo punto, km 13,75, 60 % de tráfico, 44 coches):
+  - v2: 343 llamadas de dibujo y 0,88 M primitivas;
+  - v3: 646 llamadas de dibujo y 1,01 M primitivas.
+  En esta máquina de pruebas no hay tarjeta gráfica y todo se dibuja por software, así que los FPS medidos aquí
+  (2,0 → 1,65) no dicen cómo irá en una GTX 1650 Ti. Lo que cuenta son las llamadas de dibujo y las primitivas.

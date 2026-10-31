@@ -112,14 +112,14 @@ func _ready() -> void:
 	fila_b.add_child(ayuda)
 	col.add_child(fila_b)
 	var mandos := Label.new()
-	mandos.text = ("Mandos en carretera: W/↑ acelerar · S/↓ frenar (parado: marcha atrás) · A D/← → girar · Espacio freno · " +
-		"P piloto automático · C control de crucero · +/− velocidad · K adaptar en curvas · 9/0 menos/más tráfico · " +
+	mandos.text = ("Mandos en carretera: W/↑ acelerar · S/↓ frenar (parado: marcha atrás) · " +
+		"P piloto automático · O adelantar (con el piloto) · +/− velocidad · K adaptar en curvas · 9/0 menos/más tráfico · " +
 		"V cámara · R volver a la carretera · Esc pausa (tráfico y velocidad) · H ayuda")
 	mandos.autowrap_mode = TextServer.AUTOWRAP_WORD
 	mandos.modulate = Color(0.65, 0.7, 0.75)
 	col.add_child(mandos)
 	var fuentes := Label.new()
-	fuentes.text = "Datos: © colaboradores de OpenStreetMap (ODbL) · MDT05 © Instituto Geográfico Nacional (CC BY 4.0) · ETRS89 UTM 30N, 1 unidad = 1 metro"
+	fuentes.text = "Datos: © colaboradores de OpenStreetMap (ODbL) · MDT05 © Instituto Geográfico Nacional (CC BY 4.0) · ETRS89 UTM 30N, 1 unidad = 1 metro · Modelo 3D del Arteon: MattDoesBlender (CC BY 4.0)"
 	fuentes.modulate = Color(0.5, 0.55, 0.6)
 	fuentes.add_theme_font_size_override("font_size", 12)
 	col.add_child(fuentes)

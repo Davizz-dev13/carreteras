@@ -12,7 +12,16 @@ var s_fin := 0.0
 var s_coche := 0.0
 var lat_coche := 0.0
 var piloto := true
-var crucero := false
+var colisiones := Colisiones.new()
+# adelantamiento a petición (tecla O): 0 = no, 1 = esperando hueco, 2 = saliendo/pasando, 3 = volviendo a su carril
+var adel_estado := 0
+var adel_carril := 0.0          # 0 = carril propio … 1 = carril contrario (suavizado)
+var adel_lider: Dictionary = {}
+var adel_ultimo: Dictionary = {}  # último coche del grupo que se adelanta
+var adel_msg := ""
+var adel_msg_t := 0.0
+var adel_revisar := 0.0
+var adelantamientos := 0
 var tiempo := 0.0
 var v_max := 0.0
 var choques := 0
@@ -30,9 +39,10 @@ var l_modo := Label.new()
 var l_vel := Label.new()
 var l_alt := Label.new()
 var l_pend := Label.new()
-var l_aviso := Label.new()
 var l_ayuda := Label.new()
 var mini_perfil := Perfil.new()
+var mini_mapa := MapaRuta.new()
+var senal := SenalLimite.new()
 var panel_pausa := PanelContainer.new()
 var panel_fin := PanelContainer.new()
 var l_fin := Label.new()
@@ -74,7 +84,9 @@ func _ready() -> void:
 	cam.physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_OFF   # la cámara se mueve en _process
 	cargando.queue_free()
 	_crear_hud()
+	colisiones.juego = self
 	_reiniciar()
+	mundo.cargar_ventana(coche.position, ruta.tangente(s_ini) * dir)   # streaming: el mapa alrededor de la salida
 	cargado = true
 	if Ajustes.args.has("captura"):
 		_captura()
@@ -121,12 +133,17 @@ func _simular(dt: float) -> void:
 	s_coche = p.x
 	lat_coche = p.y
 	_mandos(dt)
+	var fw0 := coche.adelante()
+	var prev_jug := {"p": Vector2(coche.position.x, coche.position.z), "f": Vector2(fw0.x, fw0.z)}
 	coche.paso_fisica(dt)
 	var lado_jug := 1 if lat_coche > 0.0 else -1
 	var en_ruta := absf(lat_coche) < ruta.valor(ruta.ancho, s_coche) * 0.5 + 1.5
 	trafico.factor = Ajustes.trafico
 	trafico.actualizar(dt, s_coche, lat_coche, coche.v * dir, lado_jug if en_ruta else 0)
-	_choques()
+	colisiones.mover_sueltos(dt)
+	colisiones.resolver(dt, prev_jug)
+	choques = colisiones.golpes
+	_adelantamiento(dt)
 	if not terminado:
 		tiempo += dt
 		v_max = maxf(v_max, absf(coche.v))
@@ -137,7 +154,7 @@ func _simular(dt: float) -> void:
 	derrapando_antes = coche.derrapando
 
 
-## Teclado, crucero o piloto automático
+## Teclado o piloto automático
 func _mandos(_dt: float) -> void:
 	var acel := Input.get_action_strength("ui_up") if Input.is_action_pressed("ui_up") else 0.0
 	if Input.is_physical_key_pressed(KEY_W): acel = 1.0
@@ -155,7 +172,7 @@ func _mandos(_dt: float) -> void:
 		return
 	if piloto and (acel > 0.0 or fren > 0.0 or vol != 0.0):
 		piloto = false            # tocar los mandos desconecta el piloto (como en un coche real)
-		crucero = false
+		_cancelar_adelantamiento("")
 	if piloto:
 		coche.giro_directo = true
 		coche.volante = _volante_piloto()
@@ -163,9 +180,6 @@ func _mandos(_dt: float) -> void:
 		return
 	coche.giro_directo = false
 	coche.volante = vol
-	if crucero and acel == 0.0 and fren == 0.0:
-		_control_velocidad(Ajustes.velocidad / 3.6)
-		return
 	if fren > 0.0 and coche.v < 0.3 and not Input.is_physical_key_pressed(KEY_SPACE):
 		coche.marcha_atras = true
 		coche.acelerador = fren
@@ -183,7 +197,7 @@ func _mandos(_dt: float) -> void:
 func _volante_piloto() -> float:
 	var mira := clampf(absf(coche.v) * 0.75, 7.0, 26.0)
 	var s := s_coche + dir * mira
-	var obj := ruta.punto(s) + ruta.derecha(s) * dir * ruta.valor(ruta.ancho, s) * 0.25
+	var obj := ruta.punto(s) + ruta.derecha(s) * dir * ruta.valor(ruta.ancho, s) * 0.25 * (1.0 - 2.0 * adel_carril)
 	var fw := coche.adelante()
 	var der := Vector3(-fw.z, 0.0, fw.x)
 	var d := obj - coche.position
@@ -197,6 +211,11 @@ func _volante_piloto() -> float:
 ## Velocidad del piloto: la elegida, limitada por curvas (si se adapta) y por el coche de delante (IDM)
 func _velocidad_objetivo() -> float:
 	var v0 := Ajustes.velocidad / 3.6
+	if adel_estado == 3 and adel_abortado and not adel_lider.is_empty():
+		v0 = minf(v0, float(adel_lider["v"]) - 15.0 / 3.6)
+	elif adel_estado == 2 and not adel_lider.is_empty():
+		# para pasar hace falta ir claramente más rápido que el adelantado (+25 km/h como mínimo)
+		v0 = maxf(v0, float(adel_lider["v"]) + 25.0 / 3.6)
 	if Ajustes.adaptar_curvas:
 		v0 = minf(v0, trafico.vel_curva(s_coche, dir, 4.0, 220.0))
 	return v0
@@ -207,6 +226,7 @@ func _control_velocidad(v0: float) -> void:
 	var v_lider := v0
 	for c in trafico.coches:
 		if c["dir"] != dir: continue
+		if adel_carril > 0.45: continue     # en el carril contrario: los de nuestro sentido van al lado
 		var d: float = (c["s"] - s_coche) * dir
 		if d > 0.0 and d - trafico.largo < hueco:
 			hueco = d - trafico.largo
@@ -220,24 +240,14 @@ func _control_velocidad(v0: float) -> void:
 	var fi := coche.ficha
 	var f := fi.masa * a + coche.fuerza_resistente(v) + fi.masa * Coche.G * seno
 	coche.marcha_atras = false
+	if adel_estado == 2 and v < v0:
+		f = coche.fuerza_motor(v)      # adelantando: a fondo (como en la comprobación de seguridad)
 	if f >= 0.0:
 		coche.acelerador = clampf(f / coche.fuerza_motor(v), 0.0, 1.0)
 		coche.freno = 0.0
 	else:
 		coche.acelerador = 0.0
 		coche.freno = clampf(-f / fi.f_freno_max, 0.0, 1.0)
-
-
-func _choques() -> void:
-	var fw := coche.adelante()
-	var der := Vector3(-fw.z, 0.0, fw.x)
-	for c in trafico.cerca_de(coche.position, 7.0):
-		var d: Vector3 = (c["nodo"] as Node3D).position - coche.position
-		if absf(d.dot(der)) < 1.8 and absf(d.dot(fw)) < 4.3 and coche.choque_t <= 0.0:
-			choques += 1
-			coche.choque_t = 2.0
-			coche.v *= 0.15
-			c["v"] = 0.0
 
 
 func _fin() -> void:
@@ -262,10 +272,9 @@ func _unhandled_input(ev: InputEvent) -> void:
 			Ajustes.camara = 1 - Ajustes.camara
 		KEY_P:
 			piloto = not piloto
-			crucero = false
-		KEY_C:
-			crucero = not crucero
-			piloto = false
+			if not piloto: _cancelar_adelantamiento("")
+		KEY_O:
+			_pedir_adelantamiento()
 		KEY_R:
 			_reiniciar(false)
 		KEY_H:
@@ -285,9 +294,11 @@ func _unhandled_input(ev: InputEvent) -> void:
 func _process(dt: float) -> void:
 	if not cargado:
 		return
+	mundo.actualizar_streaming(coche.position, coche.adelante())
 	_camara(dt)
 	_hud()
 	_telemetria()
+	_medir_fps()
 	if Ajustes.args.get("captura", "") == "video":
 		cuadros_video += 1
 		if cuadros_video >= int(Ajustes.args.get("cuadros", "450")):
@@ -426,24 +437,38 @@ func _crear_hud() -> void:
 	l_modo.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	var caja_m := _caja(Vector2(get_viewport().get_visible_rect().size.x - 330, 14), l_modo)
 	caja_m.custom_minimum_size.x = 314
-	l_aviso.add_theme_font_size_override("font_size", 26)
-	l_aviso.add_theme_color_override("font_color", Color(1, 0.3, 0.2))
-	l_aviso.add_theme_color_override("font_outline_color", Color.BLACK)
-	l_aviso.add_theme_constant_override("outline_size", 6)
-	l_aviso.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	l_aviso.size = Vector2(800, 40)
-	l_aviso.position = Vector2(get_viewport().get_visible_rect().size.x / 2 - 400, 120)
-	hud.add_child(l_aviso)
 	mini_perfil.ruta = ruta
 	mini_perfil.compacto = true
 	mini_perfil.s0 = s_ini
 	mini_perfil.s1 = s_fin
 	var vs := get_viewport().get_visible_rect().size
-	mini_perfil.size = Vector2(420, 78)
-	mini_perfil.position = Vector2(290, vs.y - 92)
+	# franja de abajo: mitad perfil de altitud, mitad mapa de la ruta
+	mini_perfil.size = Vector2(210, 110)
+	mini_perfil.position = Vector2(290, vs.y - 124)
+	mini_perfil.interactivo = true
+	mini_perfil.mouse_filter = Control.MOUSE_FILTER_STOP
+	mini_perfil.tooltip_text = ""
+	mini_perfil.salto.connect(_saltar_a)
 	hud.add_child(mini_perfil)
-	l_ayuda.text = ("W/↑ acelerar · S/↓ frenar (parado: marcha atrás) · A D/← → girar · Espacio freno\n" +
-		"P piloto automático · C crucero · +/− velocidad · K adaptar en curvas · 9/0 tráfico\n" +
+	mini_mapa.ruta = ruta
+	mini_mapa.s0 = s_ini
+	mini_mapa.s1 = s_fin
+	mini_mapa.sentido = dir
+	mini_mapa.position = Vector2(506, vs.y - 124)
+	mini_mapa.size = Vector2(204, 110)
+	mini_mapa.mouse_filter = Control.MOUSE_FILTER_STOP
+	mini_mapa.salto.connect(_saltar_a)
+	hud.add_child(mini_mapa)
+	mini_mapa.preparar()
+	# límite de velocidad del tramo (si existe el fichero de límites)
+	senal.size = Vector2(64, 64)
+	senal.position = Vector2(262, vs.y - 214)
+	senal.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	senal.cargar(Ajustes.ruta_idx, ruta.nombre)
+	senal.visible = false
+	hud.add_child(senal)
+	l_ayuda.text = ("W/↑ acelerar · S/↓ frenar (parado: marcha atrás)\n" +
+		"P piloto automático · O adelantar · +/− velocidad · K curvas · 9/0 tráfico\n" +
 		"V cámara · R volver a la carretera · Esc pausa · H ocultar ayuda")
 	l_ayuda.add_theme_font_size_override("font_size", 13)
 	var caja_a := _caja(Vector2(vs.x - 520, vs.y - 86), l_ayuda)
@@ -474,29 +499,20 @@ func _hud() -> void:
 	var flecha := "↗" if g > 0.5 else ("↘" if g < -0.5 else "→")
 	l_pend.text = "Pendiente: %s %s %%" % [flecha, ("+" if g > 0 else "") + _num(g, 1)]
 	l_pend.add_theme_color_override("font_color", Color(1, 1, 1).lerp(Color(1, 0.35, 0.2), clampf(absf(g) / 10.0, 0.0, 1.0)))
-	var modo := "PILOTO AUTOMÁTICO" if piloto else ("CRUCERO" if crucero else "MANUAL")
-	l_modo.text = coche.ficha.nombre + " · %d CV\n" % roundi(coche.ficha.potencia_cv) + "%s\nVelocidad elegida: %d km/h\nAdaptar en curvas: %s\nTráfico: %d %% (%d coches)\nCámara: %s" % [
+	var modo := "PILOTO AUTOMÁTICO" if piloto else "MANUAL"
+	if adel_estado == 1: modo += "\nAdelantamiento: esperando hueco"
+	elif adel_estado == 2: modo += "\nAdelantando…"
+	elif adel_estado == 3: modo += "\nAdelantamiento: volviendo al carril"
+	elif adel_msg_t > 0.0: modo += "\n" + adel_msg
+	l_modo.text = coche.ficha.nombre + " · %d CV\n" % roundi(coche.ficha.potencia_cv) + "%s\nVelocidad elegida: %d km/h\nAdaptar en curvas: %s\nTráfico: %d %%\nCámara: %s" % [
 		modo, roundi(Ajustes.velocidad), "sí" if Ajustes.adaptar_curvas else "no", roundi(Ajustes.trafico * 100.0),
-		trafico.coches.size(), "cabina" if Ajustes.camara == 1 else "persecución"]
+		"cabina" if Ajustes.camara == 1 else "persecución"]
 	mini_perfil.marcador = s_coche
+	mini_mapa.actualizar(s_coche)
+	senal.actualizar(s_coche, dir)
+	var pasado := senal.visible and senal.limite > 0 and absf(coche.v) * 3.6 > senal.limite + 5.0
+	l_vel.add_theme_color_override("font_color", Color(1, 0.3, 0.25) if pasado else Color.WHITE)
 	mini_perfil.queue_redraw()
-	# avisos
-	var aviso := ""
-	var v_lim_100 := 1e9
-	var d := 0.0
-	while d <= 100.0:
-		var k := absf(ruta.valor(ruta.curvatura, s_coche + dir * d))
-		v_lim_100 = minf(v_lim_100, sqrt(Coche.MU_ASFALTO * Coche.G / maxf(k, 1e-5)))
-		d += 5.0
-	if coche.derrapando:
-		aviso = "¡DERRAPE! A %d km/h el neumático no da para este giro" % roundi(absf(coche.v) * 3.6)
-	elif absf(coche.v) > v_lim_100 and v_lim_100 < 60.0:
-		aviso = "¡Curva cerrada! Límite físico ≈ %d km/h" % roundi(v_lim_100 * 3.6)
-	elif coche.choque_t > 0.0:
-		aviso = "¡Choque!"
-	elif not coche.en_carretera:
-		aviso = "Fuera de la carretera · pulsa R"
-	l_aviso.text = aviso
 
 
 func _crear_pausa() -> void:
@@ -588,6 +604,20 @@ func _pausa(on: bool) -> void:
 # ---------------- verificación automática ----------------
 ## --captura=conduccion|video: simula unos segundos de conducción y guarda una imagen (o deja grabar el vídeo)
 func _captura() -> void:
+	if Ajustes.args["captura"] == "giro":
+		_prueba_giro()
+		return
+	if Ajustes.args["captura"] == "perfil":
+		_prueba_perfil()
+		return
+	if Ajustes.args["captura"] in ["choque_alcance", "choque_frontal", "adelantar"]:
+		_prueba(Ajustes.args["captura"])
+		return
+	if Ajustes.args.has("poner_trafico"):
+		# para la foto del tráfico: uno delante en nuestro carril y dos de frente
+		trafico.crear_prueba(s_coche + dir * 45.0, dir, 12.0, false)
+		trafico.crear_prueba(s_coche + dir * 120.0, -dir, 14.0, false)
+		trafico.crear_prueba(s_coche + dir * 170.0, -dir, 14.0, false)
 	var presim := float(Ajustes.args.get("presim", "6"))
 	var n := int(presim * 60.0)
 	for i in n:
@@ -599,6 +629,7 @@ func _captura() -> void:
 			break
 	coche.reset_physics_interpolation()
 	trafico.reiniciar_interpolacion()
+	mundo.cargar_ventana(coche.position, coche.adelante())
 	reiniciar_camara()
 	print("CAPTURA terminado=%s tiempo=%.0f s choques=%d s=%.1f km lat=%.2f v=%.1f km/h alt=%.1f via=%d coches=%d derrapes=%d" % [terminado, tiempo, choques, s_coche / 1000.0, lat_coche,
 		coche.v * 3.6, coche.position.y, coche.id_via, trafico.coches.size(), derrapes])
@@ -628,3 +659,392 @@ func _telemetria() -> void:
 		var f := FileAccess.open(Ajustes.args["telemetria"], FileAccess.WRITE)
 		f.store_string("frame,cx,cy,cz,cpitch,cyaw,croll,kx,ky,kz,kpitch,kyaw,kroll,v\n" + "\n".join(_tele))
 		f.close()
+
+
+## --medir_fps=N: mide los FPS medios en N fotogramas (tras 60 de calentamiento) y sale (verificación)
+var _fps_n := 0
+var _fps_t0 := 0
+func _medir_fps() -> void:
+	if not Ajustes.args.has("medir_fps"):
+		return
+	_fps_n += 1
+	if _fps_n == 60:
+		_fps_t0 = Time.get_ticks_usec()
+	var n := int(Ajustes.args["medir_fps"])
+	if _fps_n == 60 + n:
+		var t := (Time.get_ticks_usec() - _fps_t0) / 1e6
+		print("FPS_MEDIDO %.2f (%d fotogramas en %.2f s, %d coches de tráfico, %d draw calls, %d primitivas)" % [n / t, n, t, trafico.coches.size(),
+			RenderingServer.get_rendering_info(RenderingServer.RENDERING_INFO_TOTAL_DRAW_CALLS_IN_FRAME),
+			RenderingServer.get_rendering_info(RenderingServer.RENDERING_INFO_TOTAL_PRIMITIVES_IN_FRAME)])
+		get_tree().quit()
+
+
+# ---------------- adelantamiento a petición (tecla O) ----------------
+## Solo con el piloto automático y solo cuando el jugador lo pide. Antes de salir comprueba, con la aceleración
+## REAL de esta versión (motor, aire, rodadura y la pendiente real del tramo), cuánto tiempo y cuántos metros
+## necesita para pasar, y que en toda esa zona: no haya línea continua (el juego la pinta en curvas de radio
+## < 350 m), se vea la carretera lo bastante lejos (curvas y cambios de rasante) para un coche que viniera de
+## frente a la velocidad máxima de la vía, y ningún coche real de frente llegue antes de terminar.
+const ADEL_MARGEN := 12.0        # m por delante del último adelantado antes de volver al carril
+const ADEL_T_CAMBIO := 2.2       # s para cambiar de carril
+const ADEL_HUECO_GRUPO := 30.0   # coches pegados al líder (< 30 m) se adelantan de una vez
+var adel_motivo := ""
+var adel_abortado := false
+
+
+func _aviso_adel(msg: String) -> void:
+	adel_msg = msg
+	adel_msg_t = 3.0
+
+
+func _pedir_adelantamiento() -> void:
+	if adel_estado == 1:
+		_cancelar_adelantamiento("Adelantamiento cancelado")
+		return
+	if adel_estado >= 2:
+		return
+	if not piloto:
+		_aviso_adel("Activa el piloto (P) para adelantar")
+		return
+	var l := _lider_lento()
+	if l.is_empty():
+		_aviso_adel("No hay ningún coche lento delante")
+		return
+	adel_lider = l
+	adel_estado = 1
+	adel_revisar = 0.0
+	adel_motivo = ""
+
+
+func _cancelar_adelantamiento(msg: String) -> void:
+	adel_estado = 3 if adel_carril > 0.0 else 0
+	if msg != "":
+		_aviso_adel(msg)
+
+
+func _existe(c: Dictionary) -> bool:
+	for o in trafico.coches:
+		if is_same(o, c):
+			return true
+	return false
+
+
+## El coche de nuestro sentido más cercano por delante (hasta 70 m) que va más lento de lo que queremos ir
+func _lider_lento() -> Dictionary:
+	var mejor := {}
+	var dmin := 70.0
+	for c in trafico.coches:
+		if c["dir"] != dir or c.get("suelto", false):
+			continue
+		var d: float = (c["s"] - s_coche) * dir
+		if d > 0.0 and d < dmin:
+			dmin = d
+			mejor = c
+	if mejor.is_empty() or float(mejor["v"]) > (Ajustes.velocidad - 5.0) / 3.6:
+		return {}
+	return mejor
+
+
+func _grupo(l: Dictionary) -> Array:
+	var g := [l]
+	var ultimo := l
+	for _i in 3:
+		var sig := {}
+		var dmin := ADEL_HUECO_GRUPO + trafico.largo
+		for c in trafico.coches:
+			if c["dir"] != dir or is_same(c, ultimo):
+				continue
+			var d: float = (c["s"] - ultimo["s"]) * dir
+			if d > 0.0 and d < dmin:
+				dmin = d
+				sig = c
+		if sig.is_empty():
+			break
+		g.append(sig)
+		ultimo = sig
+	return g
+
+
+## "" si se puede adelantar ya; si no, el motivo
+func _hueco_seguro() -> String:
+	var grupo := _grupo(adel_lider)
+	var ultimo: Dictionary = grupo[grupo.size() - 1]
+	var v_l: float = adel_lider["v"]
+	var ganar: float = (ultimo["s"] - s_coche) * dir + trafico.largo + ADEL_MARGEN
+	var v := absf(coche.v)
+	var v_obj := maxf(Ajustes.velocidad / 3.6, v_l + 25.0 / 3.6)
+	var t := 0.0
+	var recorrido := 0.0
+	var rel := 0.0
+	var fi := coche.ficha
+	while rel < ganar and t < 40.0:
+		var seno := ruta.valor(ruta.pendiente, s_coche + dir * recorrido) * dir / 100.0
+		var a := (coche.fuerza_motor(v) - coche.fuerza_resistente(v) - fi.masa * Coche.G * seno) / fi.masa
+		if v >= v_obj:
+			a = minf(a, 0.0)
+		v = maxf(v + a * 0.1, 0.0)
+		recorrido += v * 0.1
+		rel += (v - v_l) * 0.1
+		t += 0.1
+	if rel < ganar:
+		return "el coche no da para pasar aquí"
+	t += ADEL_T_CAMBIO
+	recorrido += v * ADEL_T_CAMBIO
+	var d := 0.0
+	while d <= recorrido + 15.0:
+		if absf(ruta.valor(ruta.curvatura, s_coche + dir * d)) > 1.0 / 350.0:
+			return "curva / línea continua"
+		d += 4.0
+	var v_frente := maxf(ruta.valor(ruta.vmax, s_coche + dir * recorrido), 50.0) / 3.6
+	var necesaria := recorrido + v_frente * t + 30.0
+	var vis := _visibilidad(necesaria)
+	if vis < necesaria:
+		return "sin visibilidad (%d de %d m)" % [roundi(vis), roundi(necesaria)]
+	for c in trafico.coches:
+		if c["dir"] == dir:
+			continue
+		var dc: float = (c["s"] - s_coche) * dir
+		if dc > -10.0 and dc < recorrido + absf(float(c["v"])) * t + 30.0:
+			return "viene un coche de frente"
+	adel_ultimo = ultimo
+	return ""
+
+
+## Hasta dónde se ve la carretera desde el asiento (m): la visual a 1,1 m no puede salirse de la calzada
+## en las curvas ni pasar por debajo del asfalto en un cambio de rasante
+func _visibilidad(hasta: float) -> float:
+	var ojo := ruta.punto(s_coche) + Vector3.UP * 1.1
+	var d := 20.0
+	while d <= hasta + 19.0:
+		var obj := ruta.punto(s_coche + dir * d) + Vector3.UP * 1.1
+		var n := maxi(2, int(d / 10.0))
+		for i in range(1, n):
+			var u := float(i) / n
+			var p := ojo.lerp(obj, u)
+			var sm := s_coche + dir * d * u
+			var c := ruta.punto(sm)
+			if Vector2(p.x - c.x, p.z - c.z).length() > ruta.valor(ruta.ancho, sm) * 0.5 + 4.0 or p.y < c.y + 0.3:
+				return d - 20.0
+		d += 20.0
+	return hasta
+
+
+func _adelantamiento(dt: float) -> void:
+	adel_msg_t = maxf(0.0, adel_msg_t - dt)
+	var paso := dt / ADEL_T_CAMBIO
+	match adel_estado:
+		0:
+			adel_carril = move_toward(adel_carril, 0.0, paso)
+		1:
+			if not piloto or not _existe(adel_lider) or (adel_lider["s"] - s_coche) * dir < 0.0 or (adel_lider["s"] - s_coche) * dir > 90.0:
+				_cancelar_adelantamiento("Ya no hay coche lento delante")
+				return
+			adel_revisar -= dt
+			if adel_revisar <= 0.0:
+				adel_revisar = 0.25
+				adel_motivo = _hueco_seguro()
+				if adel_motivo == "":
+					adel_estado = 2
+					adel_abortado = false
+		2:
+			adel_carril = move_toward(adel_carril, 1.0, paso)
+			if not _existe(adel_ultimo) or not _existe(adel_lider):
+				adel_estado = 3
+				return
+			var d_ult: float = (adel_ultimo["s"] - s_coche) * dir
+			var d_lid: float = (adel_lider["s"] - s_coche) * dir
+			# ¿aparece alguien de frente demasiado cerca? se aborta y se vuelve detrás
+			for c in trafico.coches:
+				if c["dir"] == dir:
+					continue
+				var dc: float = (c["s"] - s_coche) * dir
+				var cierre := absf(coche.v) + absf(float(c["v"]))
+				# solo se aborta si aún no ha llegado a la altura del adelantado (puede volver detrás de él);
+				# si ya está a su lado, lo más seguro es terminar a fondo
+				if dc > -3.0 and dc < cierre * 2.5 + 15.0 and d_lid > trafico.largo + 1.0:
+					adel_abortado = true
+					adel_estado = 3
+					_aviso_adel("Adelantamiento abortado: viene un coche")
+					return
+			if d_ult < -(trafico.largo + ADEL_MARGEN):
+				adel_estado = 3
+		3:
+			adel_carril = move_toward(adel_carril, 0.0, paso)
+			if adel_carril <= 0.0:
+				adel_estado = 0
+				if not adel_abortado:
+					adelantamientos += 1
+					_aviso_adel("Adelantamiento completado")
+
+
+# ---------------- pruebas automáticas (verificación) ----------------
+## --captura=choque_alcance | choque_frontal | adelantar  (ver README §10)
+func _prueba(modo: String) -> void:
+	var dt := 1.0 / 60.0
+	Ajustes.trafico = float(Ajustes.args.get("trafico", "0")) / 100.0
+	if modo.begins_with("choque"):
+		piloto = false
+		var frontal := modo == "choque_frontal"
+		var v_j := float(Ajustes.args.get("v_jug", "30" if frontal else "90")) / 3.6
+		var v_t := float(Ajustes.args.get("v_traf", "30" if frontal else "40")) / 3.6
+		var s0 := s_coche
+		var lado := dir * ruta.valor(ruta.ancho, s0) * 0.25 * (-1.0 if frontal else 1.0)
+		coche.colocar(ruta.punto(s0) + ruta.derecha(s0) * lado, ruta.tangente(s0) * dir)
+		coche.v = v_j
+		var t := trafico.crear_prueba(s0 + dir * 30.0, -dir if frontal else dir, v_t, true)
+		var maxt := 0.0
+		var cruzado := false
+		for i in 360:
+			# el jugador mantiene la velocidad (acelerador justo) hasta el golpe
+			if colisiones.registro.is_empty():
+				coche.v = v_j
+			_simular(dt)
+			# ¿lo atraviesa? el centro del jugador no puede pasar al otro lado del coche golpeado
+			var dl: float = (t["s"] - s_coche) * dir
+			if dl < -1.0 and absf(lat_coche - (ruta.proyectar(t["nodo"].position, t["s"]).y)) < 1.0:
+				cruzado = true
+		var r: Dictionary = colisiones.registro[0] if not colisiones.registro.is_empty() else {}
+		if r.is_empty():
+			print("PRUEBA %s: SIN CHOQUE" % modo)
+			get_tree().quit()
+			return
+		var p0: Vector2 = r["va0"] * r["ma"] + r["vb0"] * r["mb"]
+		var p1: Vector2 = r["va1"] * r["ma"] + r["vb1"] * r["mb"]
+		var fw := Vector2(coche.adelante().x, coche.adelante().z)
+		print("PRUEBA %s: masas %.0f / %.0f kg · antes: jugador %.1f km/h, otro %.1f km/h · justo después: jugador %.1f km/h, otro %.1f km/h · giro otro %.2f rad/s" % [
+			modo, r["ma"], r["mb"], r["va0"].length() * 3.6, r["vb0"].length() * 3.6, r["va1"].length() * 3.6, r["vb1"].length() * 3.6, r["wb1"]])
+		print("PRUEBA %s: momento antes (%.0f, %.0f) kg·m/s · después (%.0f, %.0f) · error %.4f %% · restitución medida %.3f · atraviesa: %s · choques contados %d · al final: jugador %.1f km/h, otro %.1f km/h, distancia entre centros %.2f m" % [
+			modo, p0.x, p0.y, p1.x, p1.y, (p1 - p0).length() / maxf(p0.length(), 1.0) * 100.0,
+			-((r["va1"] - r["vb1"]).dot((r["va0"] - r["vb0"]).normalized())) / maxf((r["va0"] - r["vb0"]).length(), 0.01),
+			"SÍ" if cruzado else "no", colisiones.golpes, absf(coche.v) * 3.6, (t["v2"] as Vector2).length() * 3.6 if t.get("suelto", false) else float(t["v"]) * 3.6,
+			Vector2(coche.position.x - t["nodo"].position.x, coche.position.z - t["nodo"].position.z).length()])
+		get_tree().quit()
+		return
+	if modo == "adelantar":
+		piloto = true
+		Ajustes.velocidad = float(Ajustes.args.get("vel", "90"))
+		var lento := trafico.crear_prueba(s_coche + dir * 45.0, dir, float(Ajustes.args.get("v_lento", "45")) / 3.6, false)
+		lento["v0"] = float(Ajustes.args.get("v_lento", "45")) / 3.6
+		coche.v = lento["v"]
+		var pulsar := float(Ajustes.args.get("pulsar", "4"))
+		var t := 0.0
+		var espera := 0.0
+		var max_carril := 0.0
+		var motivos := {}
+		var inicio := -1.0
+		var fin := -1.0
+		var s_pulsado := 0.0
+		while t < float(Ajustes.args.get("duracion", "70")):
+			if absf(t - pulsar) < dt * 0.5:
+				_pedir_adelantamiento()
+				s_pulsado = s_coche
+			_simular(dt)
+			t += dt
+			if adel_estado == 1:
+				espera += dt
+				motivos[adel_motivo] = motivos.get(adel_motivo, 0) + 1
+			if adel_estado == 2 and inicio < 0.0:
+				inicio = t
+				print("  sale a adelantar en t=%.1f s, PK %.3f km, radio de curva aquí %.0f m" % [t, s_coche / 1000.0, 1.0 / maxf(absf(ruta.valor(ruta.curvatura, s_coche)), 1e-5)])
+			max_carril = maxf(max_carril, adel_carril)
+			if Ajustes.args.has("traza") and int(t * 60.0) % 15 == 0 and t > pulsar:
+				var dmin := 1e9
+				for oc in trafico.coches:
+					if oc["dir"] != dir:
+						var dd: float = (oc["s"] - s_coche) * dir
+						if dd > -5.0: dmin = minf(dmin, dd)
+				print("  t=%.2f est=%d carril=%.2f lat=%.2f v=%.0f d_lento=%.1f frente=%.0f golpes=%d aborta=%s" % [t, adel_estado, adel_carril, lat_coche, coche.v * 3.6, (lento["s"] - s_coche) * dir, dmin, colisiones.golpes, adel_abortado])
+			if inicio > 0.0 and adel_estado == 0 and fin < 0.0:
+				fin = t
+			if fin > 0.0 and t > fin + 3.0:
+				break
+		print("PRUEBA adelantar: pulsado en PK %.3f km · completados %d · esperó %.1f s · motivos de espera %s · salió %s · terminó %s · choques %d · coches de tráfico %d · velocidad final %.0f km/h · lento delante a %.0f m (detrás = negativo)" % [
+			s_pulsado / 1000.0, adelantamientos, espera, str(motivos), "t=%.1f s" % inicio if inicio > 0 else "no", "t=%.1f s" % fin if fin > 0 else "no",
+			colisiones.golpes, trafico.coches.size(), absf(coche.v) * 3.6, (lento["s"] - s_coche) * dir if _existe(lento) else 0.0])
+		get_tree().quit()
+
+
+## --captura=giro: a 80 km/h, mantener A (o D con --lado=1) 5 s con el acelerador fijo que mantiene 80 km/h en recta
+func _prueba_giro() -> void:
+	var dt := 1.0 / 60.0
+	piloto = false
+	coche.v = float(Ajustes.args.get("v0", "80")) / 3.6
+	var v0 := coche.v
+	var acel_fija := clampf(coche.fuerza_resistente(v0) / coche.fuerza_motor(v0), 0.0, 1.0)
+	var lado := float(Ajustes.args.get("lado", "-1"))
+	var t := 0.0
+	var a_lat_max := 0.0
+	while t < 5.0:
+		coche.giro_directo = false
+		coche.volante = lado
+		coche.acelerador = acel_fija
+		coche.freno = 0.0
+		coche.marcha_atras = false
+		coche.paso_fisica(dt)
+		a_lat_max = maxf(a_lat_max, absf(coche.a_lat_actual))
+		t += dt
+	print("PRUEBA giro: tecla %s 5 s con acelerador fijo %.2f · velocidad %.1f → %.1f km/h (pierde %.1f km/h) · giro de ruedas final %.3f rad · a_lat máx %.1f m/s² · derrapando=%s" % [
+		"D" if lado > 0 else "A", acel_fija, v0 * 3.6, coche.v * 3.6, (v0 - coche.v) * 3.6, coche.giro, a_lat_max, coche.derrapando])
+	get_tree().quit()
+
+
+## Pulsar el perfil de altitud del HUD: el coche aparece en ese km de la ruta (carril correcto, parado)
+func _saltar_a(s: float) -> void:
+	s = clampf(s, 1.0, ruta.longitud() - 1.0)
+	_cancelar_adelantamiento("")
+	adel_estado = 0
+	adel_carril = 0.0
+	var lado := dir * ruta.valor(ruta.ancho, s) * 0.25
+	coche.colocar(ruta.punto(s) + ruta.derecha(s) * lado, ruta.tangente(s) * dir)
+	coche.v = 0.0
+	s_coche = s
+	# fuera los coches que haya justo donde cae
+	for i in range(trafico.coches.size() - 1, -1, -1):
+		var c: Dictionary = trafico.coches[i]
+		if absf(float(c["s"]) - s) < 50.0 or (c["nodo"] as Node3D).position.distance_to(coche.position) < 50.0:
+			(c["nodo"] as Node3D).queue_free()
+			trafico.coches.remove_at(i)
+	mundo.cargar_ventana(coche.position, ruta.tangente(s) * dir)
+	reiniciar_camara()
+	if terminado and (s_fin - s) * dir > 0.0:
+		terminado = false
+		panel_fin.visible = false
+
+
+## --captura=perfil: pulsa el perfil al 25 %, 50 % y 90 % y comprueba dónde aparece el coche
+func _prueba_perfil() -> void:
+	var area_x0 := 6.0
+	var ancho := mini_perfil.size.x - 12.0
+	for f in [0.25, 0.5, 0.9]:
+		var ev := InputEventMouseButton.new()
+		ev.button_index = MOUSE_BUTTON_LEFT
+		ev.pressed = true
+		ev.position = Vector2(area_x0 + f * ancho, mini_perfil.size.y * 0.5)
+		var s_pedido := mini_perfil.s_en_x(ev.position.x)
+		mini_perfil._gui_input(ev)
+		for i in 30:
+			_simular(1.0 / 60.0)
+		print("PRUEBA perfil: pulsado al %d %% → km pedido %.2f · coche en km %.2f · lateral %.2f m · altitud %.0f m · coches a <50 m: %d" % [
+			roundi(f * 100.0), s_pedido / 1000.0, s_coche / 1000.0, lat_coche, coche.position.y, trafico.cerca_de(coche.position, 50.0).size()])
+	# mapa: pulsar el punto del trazado que corresponde al km 12
+	var ev2 := InputEventMouseButton.new()
+	ev2.button_index = MOUSE_BUTTON_LEFT
+	ev2.pressed = true
+	ev2.position = mini_mapa._pto(12000.0)
+	var s_m := mini_mapa.s_en(ev2.position)
+	mini_mapa._gui_input(ev2)
+	for i in 30:
+		_simular(1.0 / 60.0)
+	print("PRUEBA mapa: pulsado el punto del km 12,0 → km pedido %.2f · coche en km %.2f · lateral %.2f m" % [s_m / 1000.0, s_coche / 1000.0, lat_coche])
+	var mv := InputEventMouseMotion.new()
+	mv.position = Vector2(area_x0 + 0.62 * ancho, mini_perfil.size.y * 0.5)
+	mini_perfil._gui_input(mv)
+	var mv2 := InputEventMouseMotion.new()
+	mv2.position = mini_mapa._pto(18000.0)
+	mini_mapa._gui_input(mv2)
+	if Ajustes.args.has("salida"):
+		for i in 20:
+			await get_tree().process_frame
+		await RenderingServer.frame_post_draw
+		get_viewport().get_texture().get_image().save_png(Ajustes.args["salida"])
+	get_tree().quit()

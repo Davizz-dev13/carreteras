@@ -29,6 +29,11 @@ var odometro := 0.0
 var choque_t := 0.0
 var a_long := 0.0               # aceleración longitudinal (m/s²) para la inclinación de la carrocería
 var a_lat_actual := 0.0
+# tras un choque: velocidad lateral (m/s, + derecha) y giro extra (rad/s alrededor del eje vertical) que los
+# neumáticos van frenando por rozamiento (μ·g); w_rumbo es el giro que pide la dirección en este paso
+var v_lat := 0.0
+var giro_ext := 0.0
+var w_rumbo := 0.0
 
 # suspensión visual (muelle crítico): ángulos de la carrocería y sus velocidades
 var cab := 0.0
@@ -53,7 +58,7 @@ func _init(f: Ficha = null) -> void:
 
 
 func _ready() -> void:
-	modelo = Catalogo.crear_modelo(ficha, Catalogo.color_jugador())
+	modelo = Catalogo.crear_modelo(ficha, Catalogo.color_jugador(), int(Ajustes.args.get("lod_jugador", "0")))
 	add_child(modelo)
 
 
@@ -70,6 +75,8 @@ func colocar(p: Vector3, direccion: Vector3) -> void:
 	position = p
 	v = 0.0
 	giro = 0.0
+	v_lat = 0.0
+	giro_ext = 0.0
 	cab_v = 0.0
 	bal_v = 0.0
 	var obj := _objetivo_apoyo()
@@ -126,23 +133,40 @@ func paso_fisica(dt: float) -> void:
 	var objetivo := 0.0
 	if giro_directo:
 		objetivo = clampf(volante, -GIRO_MAX, GIRO_MAX)
+		giro = move_toward(giro, objetivo, 1.8 * dt)
 	else:
-		objetivo = volante * GIRO_MAX / (1.0 + absf(v) / 12.0)
-	giro = move_toward(giro, objetivo, 1.8 * dt)
+		# teclado (v3): dirección progresiva y sensible a la velocidad. El ángulo máximo es el que da, como mucho,
+		# el 85 % del agarre lateral (a = v²·tan(giro)/batalla ≤ 0,85·μ·g): a 20 km/h casi todo el volante,
+		# a 100 km/h unos pocos grados, así que mantener A/D a fondo traza la curva sin derrapar ni perder velocidad.
+		var g_max := minf(GIRO_MAX, atan(0.85 * mu * G * lb / maxf(v * v, 0.01)))
+		objetivo = volante * g_max
+		# ≈0,35 s hasta el tope al pulsar y ≈0,25 s para volver al centro al soltar
+		var ritmo := g_max / (0.35 if absf(objetivo) > absf(giro) and signf(objetivo) == signf(giro) or giro == 0.0 else 0.25)
+		giro = move_toward(giro, objetivo, maxf(ritmo, 0.05) * dt)
 	var omega := v * tan(giro) / lb
 	var a_lat := absf(v * omega)
 	var a_max := mu * G
 	derrapando = a_lat > a_max
 	if derrapando:
 		omega = signf(omega) * a_max / maxf(absf(v), 0.1)
-		v -= signf(v) * minf(absf(v), (a_lat - a_max) * 0.25 * dt)
+		v -= signf(v) * minf(absf(v), (a_lat - a_max) * 0.12 * dt)   # el neumático que desliza frena un poco
 	rumbo -= omega * dt
+	w_rumbo = -omega
+	# restos de un choque: los neumáticos frenan el deslizamiento lateral y el trompo
+	if absf(giro_ext) > 0.0:
+		rumbo += giro_ext * dt
+		giro_ext = move_toward(giro_ext, 0.0, (2.5 + absf(giro_ext) * 1.5) * dt)
+	if absf(v_lat) > 0.0:
+		v_lat = move_toward(v_lat, 0.0, mu * G * dt)
 	a_long = lerpf(a_long, (v - v_ant) / dt, 1.0 - exp(-dt * 6.0))
 	a_lat_actual = lerpf(a_lat_actual, v * omega, 1.0 - exp(-dt * 6.0))
 	# --- avance ---
 	var avance := adelante() * v * dt
+	var fw2 := adelante()
+	avance += Vector3(-fw2.z, 0.0, fw2.x) * v_lat * dt
 	position.x += avance.x
 	position.z += avance.z
+	Catalogo.animar_ruedas(modelo, v * dt, giro)
 	odometro += absf(v) * dt
 	choque_t = maxf(0.0, choque_t - dt)
 	_apoyar(dt)

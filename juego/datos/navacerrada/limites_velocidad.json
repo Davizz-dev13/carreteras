@@ -1,0 +1,968 @@
+{
+ "rutas": [
+  {
+   "id": 0,
+   "nombre": "Puerto de Navacerrada (M-601 → CL-601)",
+   "longitud_km": 24.305,
+   "tramos": [
+    {
+     "km_ini": 0.0,
+     "km_fin": 0.85,
+     "limite": 90,
+     "sentido": "ambos",
+     "fuente": "osm",
+     "osm_way": 403901650
+    },
+    {
+     "km_ini": 0.85,
+     "km_fin": 1.04,
+     "limite": 60,
+     "sentido": "ambos",
+     "fuente": "osm",
+     "osm_way": 549962756
+    },
+    {
+     "km_ini": 1.04,
+     "km_fin": 1.23,
+     "limite": 40,
+     "sentido": "ambos",
+     "fuente": "osm",
+     "osm_way": 33571962
+    },
+    {
+     "km_ini": 1.23,
+     "km_fin": 1.61,
+     "limite": 60,
+     "sentido": "ambos",
+     "fuente": "osm",
+     "osm_way": 74194589
+    },
+    {
+     "km_ini": 1.61,
+     "km_fin": 2.37,
+     "limite": 50,
+     "sentido": "ambos",
+     "fuente": "osm",
+     "osm_way": 315831636
+    },
+    {
+     "km_ini": 2.37,
+     "km_fin": 2.48,
+     "limite": 60,
+     "sentido": "ambos",
+     "fuente": "osm",
+     "osm_way": 971620547
+    },
+    {
+     "km_ini": 2.48,
+     "km_fin": 2.6,
+     "limite": 90,
+     "sentido": "ambos",
+     "fuente": "por_defecto_legal",
+     "osm_way": null
+    },
+    {
+     "km_ini": 2.6,
+     "km_fin": 5.01,
+     "limite": 60,
+     "sentido": "ambos",
+     "fuente": "osm",
+     "osm_way": 375012371
+    },
+    {
+     "km_ini": 5.01,
+     "km_fin": 5.57,
+     "limite": 50,
+     "sentido": "ambos",
+     "fuente": "osm",
+     "osm_way": 1075859290
+    },
+    {
+     "km_ini": 5.57,
+     "km_fin": 5.75,
+     "limite": 40,
+     "sentido": "ida",
+     "fuente": "osm",
+     "osm_way": 228577473
+    },
+    {
+     "km_ini": 5.57,
+     "km_fin": 5.75,
+     "limite": 90,
+     "sentido": "vuelta",
+     "fuente": "por_defecto_legal",
+     "osm_way": null
+    },
+    {
+     "km_ini": 5.75,
+     "km_fin": 5.86,
+     "limite": 40,
+     "sentido": "ambos",
+     "fuente": "osm",
+     "osm_way": 971620549
+    },
+    {
+     "km_ini": 5.86,
+     "km_fin": 6.78,
+     "limite": 50,
+     "sentido": "ambos",
+     "fuente": "osm",
+     "osm_way": 971620550
+    },
+    {
+     "km_ini": 6.78,
+     "km_fin": 7.47,
+     "limite": 40,
+     "sentido": "ambos",
+     "fuente": "osm",
+     "osm_way": 971620551
+    },
+    {
+     "km_ini": 7.47,
+     "km_fin": 7.84,
+     "limite": 50,
+     "sentido": "ambos",
+     "fuente": "osm",
+     "osm_way": 971620552
+    },
+    {
+     "km_ini": 7.84,
+     "km_fin": 10.19,
+     "limite": 60,
+     "sentido": "ambos",
+     "fuente": "osm",
+     "osm_way": 228577476
+    },
+    {
+     "km_ini": 10.19,
+     "km_fin": 10.53,
+     "limite": 50,
+     "sentido": "ambos",
+     "fuente": "osm",
+     "osm_way": 228600800
+    },
+    {
+     "km_ini": 10.53,
+     "km_fin": 14.06,
+     "limite": 70,
+     "sentido": "ambos",
+     "fuente": "osm",
+     "osm_way": 737575605
+    },
+    {
+     "km_ini": 14.06,
+     "km_fin": 14.12,
+     "limite": 50,
+     "sentido": "ambos",
+     "fuente": "osm",
+     "osm_way": 737575604
+    },
+    {
+     "km_ini": 14.12,
+     "km_fin": 14.34,
+     "limite": 30,
+     "sentido": "ida",
+     "fuente": "osm",
+     "osm_way": 737575603
+    },
+    {
+     "km_ini": 14.12,
+     "km_fin": 14.34,
+     "limite": 50,
+     "sentido": "vuelta",
+     "fuente": "osm",
+     "osm_way": 737575603
+    },
+    {
+     "km_ini": 14.34,
+     "km_fin": 15.31,
+     "limite": 50,
+     "sentido": "ambos",
+     "fuente": "osm",
+     "osm_way": 737575602
+    },
+    {
+     "km_ini": 15.31,
+     "km_fin": 15.49,
+     "limite": 30,
+     "sentido": "ambos",
+     "fuente": "osm",
+     "osm_way": 737575600
+    },
+    {
+     "km_ini": 15.49,
+     "km_fin": 15.68,
+     "limite": 50,
+     "sentido": "ambos",
+     "fuente": "osm",
+     "osm_way": 1213807259
+    },
+    {
+     "km_ini": 15.68,
+     "km_fin": 15.81,
+     "limite": 30,
+     "sentido": "ambos",
+     "fuente": "osm",
+     "osm_way": 737575598
+    },
+    {
+     "km_ini": 15.81,
+     "km_fin": 16.32,
+     "limite": 50,
+     "sentido": "ambos",
+     "fuente": "osm",
+     "osm_way": 228600799
+    },
+    {
+     "km_ini": 16.32,
+     "km_fin": 16.65,
+     "limite": 50,
+     "sentido": "ida",
+     "fuente": "osm",
+     "osm_way": 1213807256
+    },
+    {
+     "km_ini": 16.32,
+     "km_fin": 16.65,
+     "limite": 40,
+     "sentido": "vuelta",
+     "fuente": "osm",
+     "osm_way": 1213807256
+    },
+    {
+     "km_ini": 16.65,
+     "km_fin": 17.29,
+     "limite": 50,
+     "sentido": "ambos",
+     "fuente": "osm",
+     "osm_way": 1213807255
+    },
+    {
+     "km_ini": 17.29,
+     "km_fin": 20.0,
+     "limite": 60,
+     "sentido": "ambos",
+     "fuente": "osm",
+     "osm_way": 280788625
+    },
+    {
+     "km_ini": 20.0,
+     "km_fin": 21.46,
+     "limite": 80,
+     "sentido": "ida",
+     "fuente": "osm",
+     "osm_way": 1434213836
+    },
+    {
+     "km_ini": 20.0,
+     "km_fin": 21.46,
+     "limite": 60,
+     "sentido": "vuelta",
+     "fuente": "osm",
+     "osm_way": 1434213836
+    },
+    {
+     "km_ini": 21.46,
+     "km_fin": 22.84,
+     "limite": 60,
+     "sentido": "ambos",
+     "fuente": "osm",
+     "osm_way": 1501319098
+    },
+    {
+     "km_ini": 22.84,
+     "km_fin": 23.46,
+     "limite": 90,
+     "sentido": "ambos",
+     "fuente": "por_defecto_legal",
+     "osm_way": null
+    },
+    {
+     "km_ini": 23.46,
+     "km_fin": 24.3,
+     "limite": 50,
+     "sentido": "ambos",
+     "fuente": "osm",
+     "osm_way": 737575606
+    }
+   ],
+   "cobertura_osm_pct": {
+    "ida": 96.8,
+    "vuelta": 96.1
+   },
+   "tramos_pequenos_absorbidos": [
+    "ida: km 17.25–17.26 (10 m, 90 por_defecto_legal) absorbido por el contiguo (50 osm)",
+    "ida: km 17.26–17.29 (30 m, 40 osm) absorbido por el contiguo (50 osm)",
+    "ida: km 17.29–17.30 (10 m, 90 por_defecto_legal) absorbido por el contiguo (60 osm)",
+    "ida: km 19.81–19.83 (20 m, 90 por_defecto_legal) absorbido por el contiguo (60 osm)",
+    "vuelta: km 17.25–17.26 (10 m, 90 por_defecto_legal) absorbido por el contiguo (50 osm)",
+    "vuelta: km 17.26–17.29 (30 m, 40 osm) absorbido por el contiguo (50 osm)",
+    "vuelta: km 17.29–17.30 (10 m, 90 por_defecto_legal) absorbido por el contiguo (60 osm)",
+    "vuelta: km 19.81–19.83 (20 m, 90 por_defecto_legal) absorbido por el contiguo (60 osm)"
+   ]
+  },
+  {
+   "id": 1,
+   "nombre": "M-601 Navacerrada → Puerto",
+   "longitud_km": 10.242,
+   "tramos": [
+    {
+     "km_ini": 0.0,
+     "km_fin": 0.85,
+     "limite": 90,
+     "sentido": "ambos",
+     "fuente": "osm",
+     "osm_way": 403901650
+    },
+    {
+     "km_ini": 0.85,
+     "km_fin": 1.04,
+     "limite": 60,
+     "sentido": "ambos",
+     "fuente": "osm",
+     "osm_way": 549962756
+    },
+    {
+     "km_ini": 1.04,
+     "km_fin": 1.23,
+     "limite": 40,
+     "sentido": "ambos",
+     "fuente": "osm",
+     "osm_way": 33571962
+    },
+    {
+     "km_ini": 1.23,
+     "km_fin": 1.61,
+     "limite": 60,
+     "sentido": "ambos",
+     "fuente": "osm",
+     "osm_way": 74194589
+    },
+    {
+     "km_ini": 1.61,
+     "km_fin": 2.37,
+     "limite": 50,
+     "sentido": "ambos",
+     "fuente": "osm",
+     "osm_way": 315831636
+    },
+    {
+     "km_ini": 2.37,
+     "km_fin": 2.48,
+     "limite": 60,
+     "sentido": "ambos",
+     "fuente": "osm",
+     "osm_way": 971620547
+    },
+    {
+     "km_ini": 2.48,
+     "km_fin": 2.6,
+     "limite": 90,
+     "sentido": "ambos",
+     "fuente": "por_defecto_legal",
+     "osm_way": null
+    },
+    {
+     "km_ini": 2.6,
+     "km_fin": 5.01,
+     "limite": 60,
+     "sentido": "ambos",
+     "fuente": "osm",
+     "osm_way": 375012371
+    },
+    {
+     "km_ini": 5.01,
+     "km_fin": 5.56,
+     "limite": 50,
+     "sentido": "ambos",
+     "fuente": "osm",
+     "osm_way": 1075859290
+    },
+    {
+     "km_ini": 5.56,
+     "km_fin": 5.75,
+     "limite": 40,
+     "sentido": "ida",
+     "fuente": "osm",
+     "osm_way": 228577473
+    },
+    {
+     "km_ini": 5.56,
+     "km_fin": 5.75,
+     "limite": 90,
+     "sentido": "vuelta",
+     "fuente": "por_defecto_legal",
+     "osm_way": null
+    },
+    {
+     "km_ini": 5.75,
+     "km_fin": 5.86,
+     "limite": 40,
+     "sentido": "ambos",
+     "fuente": "osm",
+     "osm_way": 971620549
+    },
+    {
+     "km_ini": 5.86,
+     "km_fin": 6.78,
+     "limite": 50,
+     "sentido": "ambos",
+     "fuente": "osm",
+     "osm_way": 971620550
+    },
+    {
+     "km_ini": 6.78,
+     "km_fin": 7.47,
+     "limite": 40,
+     "sentido": "ambos",
+     "fuente": "osm",
+     "osm_way": 971620551
+    },
+    {
+     "km_ini": 7.47,
+     "km_fin": 7.84,
+     "limite": 50,
+     "sentido": "ambos",
+     "fuente": "osm",
+     "osm_way": 971620552
+    },
+    {
+     "km_ini": 7.84,
+     "km_fin": 10.24,
+     "limite": 60,
+     "sentido": "ambos",
+     "fuente": "osm",
+     "osm_way": 228577476
+    }
+   ],
+   "cobertura_osm_pct": {
+    "ida": 98.8,
+    "vuelta": 97.0
+   },
+   "tramos_pequenos_absorbidos": [
+    "ida: km 10.19–10.24 (52 m, 50 osm) absorbido por el contiguo (60 osm)",
+    "vuelta: km 10.19–10.24 (52 m, 50 osm) absorbido por el contiguo (60 osm)"
+   ]
+  },
+  {
+   "id": 2,
+   "nombre": "CL-601 Puerto → Valsaín",
+   "longitud_km": 14.063,
+   "tramos": [
+    {
+     "km_ini": 0.0,
+     "km_fin": 0.29,
+     "limite": 50,
+     "sentido": "ambos",
+     "fuente": "osm",
+     "osm_way": 228600800
+    },
+    {
+     "km_ini": 0.29,
+     "km_fin": 3.81,
+     "limite": 70,
+     "sentido": "ambos",
+     "fuente": "osm",
+     "osm_way": 737575605
+    },
+    {
+     "km_ini": 3.81,
+     "km_fin": 3.87,
+     "limite": 50,
+     "sentido": "ambos",
+     "fuente": "osm",
+     "osm_way": 737575604
+    },
+    {
+     "km_ini": 3.87,
+     "km_fin": 4.1,
+     "limite": 30,
+     "sentido": "ida",
+     "fuente": "osm",
+     "osm_way": 737575603
+    },
+    {
+     "km_ini": 3.87,
+     "km_fin": 4.1,
+     "limite": 50,
+     "sentido": "vuelta",
+     "fuente": "osm",
+     "osm_way": 737575603
+    },
+    {
+     "km_ini": 4.1,
+     "km_fin": 5.06,
+     "limite": 50,
+     "sentido": "ambos",
+     "fuente": "osm",
+     "osm_way": 737575602
+    },
+    {
+     "km_ini": 5.06,
+     "km_fin": 5.25,
+     "limite": 30,
+     "sentido": "ambos",
+     "fuente": "osm",
+     "osm_way": 737575600
+    },
+    {
+     "km_ini": 5.25,
+     "km_fin": 5.44,
+     "limite": 50,
+     "sentido": "ambos",
+     "fuente": "osm",
+     "osm_way": 1213807259
+    },
+    {
+     "km_ini": 5.44,
+     "km_fin": 5.57,
+     "limite": 30,
+     "sentido": "ambos",
+     "fuente": "osm",
+     "osm_way": 737575598
+    },
+    {
+     "km_ini": 5.57,
+     "km_fin": 6.08,
+     "limite": 50,
+     "sentido": "ambos",
+     "fuente": "osm",
+     "osm_way": 228600799
+    },
+    {
+     "km_ini": 6.08,
+     "km_fin": 6.41,
+     "limite": 50,
+     "sentido": "ida",
+     "fuente": "osm",
+     "osm_way": 1213807256
+    },
+    {
+     "km_ini": 6.08,
+     "km_fin": 6.41,
+     "limite": 40,
+     "sentido": "vuelta",
+     "fuente": "osm",
+     "osm_way": 1213807256
+    },
+    {
+     "km_ini": 6.41,
+     "km_fin": 7.05,
+     "limite": 50,
+     "sentido": "ambos",
+     "fuente": "osm",
+     "osm_way": 1213807255
+    },
+    {
+     "km_ini": 7.05,
+     "km_fin": 9.76,
+     "limite": 60,
+     "sentido": "ambos",
+     "fuente": "osm",
+     "osm_way": 280788625
+    },
+    {
+     "km_ini": 9.76,
+     "km_fin": 11.22,
+     "limite": 80,
+     "sentido": "ida",
+     "fuente": "osm",
+     "osm_way": 1434213836
+    },
+    {
+     "km_ini": 9.76,
+     "km_fin": 11.22,
+     "limite": 60,
+     "sentido": "vuelta",
+     "fuente": "osm",
+     "osm_way": 1434213836
+    },
+    {
+     "km_ini": 11.22,
+     "km_fin": 12.6,
+     "limite": 60,
+     "sentido": "ambos",
+     "fuente": "osm",
+     "osm_way": 1501319098
+    },
+    {
+     "km_ini": 12.6,
+     "km_fin": 13.22,
+     "limite": 90,
+     "sentido": "ambos",
+     "fuente": "por_defecto_legal",
+     "osm_way": null
+    },
+    {
+     "km_ini": 13.22,
+     "km_fin": 14.06,
+     "limite": 50,
+     "sentido": "ambos",
+     "fuente": "osm",
+     "osm_way": 737575606
+    }
+   ],
+   "cobertura_osm_pct": {
+    "ida": 95.4,
+    "vuelta": 95.4
+   },
+   "tramos_pequenos_absorbidos": [
+    "ida: km 7.01–7.05 (40 m, 40 osm) absorbido por el contiguo (50 osm)",
+    "ida: km 7.05–7.06 (10 m, 90 por_defecto_legal) absorbido por el contiguo (60 osm)",
+    "ida: km 9.57–9.59 (20 m, 90 por_defecto_legal) absorbido por el contiguo (60 osm)",
+    "vuelta: km 7.01–7.05 (40 m, 40 osm) absorbido por el contiguo (50 osm)",
+    "vuelta: km 7.05–7.06 (10 m, 90 por_defecto_legal) absorbido por el contiguo (60 osm)",
+    "vuelta: km 9.57–9.59 (20 m, 90 por_defecto_legal) absorbido por el contiguo (60 osm)"
+   ]
+  },
+  {
+   "id": 3,
+   "nombre": "M-607",
+   "longitud_km": 5.578,
+   "tramos": [
+    {
+     "km_ini": 0.0,
+     "km_fin": 1.23,
+     "limite": 90,
+     "sentido": "ambos",
+     "fuente": "por_defecto_legal",
+     "osm_way": null
+    },
+    {
+     "km_ini": 1.23,
+     "km_fin": 1.4,
+     "limite": 40,
+     "sentido": "ambos",
+     "fuente": "osm",
+     "osm_way": 20677313
+    },
+    {
+     "km_ini": 1.4,
+     "km_fin": 1.65,
+     "limite": 70,
+     "sentido": "ambos",
+     "fuente": "osm",
+     "osm_way": 48422428
+    },
+    {
+     "km_ini": 1.65,
+     "km_fin": 3.61,
+     "limite": 90,
+     "sentido": "ambos",
+     "fuente": "por_defecto_legal",
+     "osm_way": null
+    },
+    {
+     "km_ini": 3.61,
+     "km_fin": 3.79,
+     "limite": 70,
+     "sentido": "ambos",
+     "fuente": "osm",
+     "osm_way": 200002835
+    },
+    {
+     "km_ini": 3.79,
+     "km_fin": 3.98,
+     "limite": 50,
+     "sentido": "ambos",
+     "fuente": "por_defecto_legal",
+     "osm_way": null
+    },
+    {
+     "km_ini": 3.98,
+     "km_fin": 4.24,
+     "limite": 40,
+     "sentido": "ambos",
+     "fuente": "osm",
+     "osm_way": 83293295
+    },
+    {
+     "km_ini": 4.24,
+     "km_fin": 5.17,
+     "limite": 70,
+     "sentido": "ambos",
+     "fuente": "osm",
+     "osm_way": 316088560
+    },
+    {
+     "km_ini": 5.17,
+     "km_fin": 5.38,
+     "limite": 90,
+     "sentido": "ambos",
+     "fuente": "por_defecto_legal",
+     "osm_way": null
+    },
+    {
+     "km_ini": 5.38,
+     "km_fin": 5.43,
+     "limite": 90,
+     "sentido": "ida",
+     "fuente": "por_defecto_legal",
+     "osm_way": null
+    },
+    {
+     "km_ini": 5.38,
+     "km_fin": 5.43,
+     "limite": 70,
+     "sentido": "vuelta",
+     "fuente": "osm",
+     "osm_way": 397211098
+    },
+    {
+     "km_ini": 5.43,
+     "km_fin": 5.58,
+     "limite": 70,
+     "sentido": "ambos",
+     "fuente": "osm",
+     "osm_way": 193042140
+    }
+   ],
+   "cobertura_osm_pct": {
+    "ida": 33.9,
+    "vuelta": 34.8
+   },
+   "tramos_pequenos_absorbidos": [
+    "ida: km 4.50–4.55 (50 m, 90 por_defecto_legal) absorbido por el contiguo (70 osm)",
+    "ida: km 5.55–5.58 (28 m, 60 osm) absorbido por el contiguo (70 osm)",
+    "vuelta: km 4.50–4.55 (50 m, 90 por_defecto_legal) absorbido por el contiguo (70 osm)",
+    "vuelta: km 5.55–5.58 (28 m, 60 osm) absorbido por el contiguo (70 osm)"
+   ]
+  },
+  {
+   "id": 4,
+   "nombre": "M-614",
+   "longitud_km": 4.578,
+   "tramos": [
+    {
+     "km_ini": 0.0,
+     "km_fin": 0.17,
+     "limite": 60,
+     "sentido": "ambos",
+     "fuente": "osm",
+     "osm_way": 322898867
+    },
+    {
+     "km_ini": 0.17,
+     "km_fin": 3.03,
+     "limite": 80,
+     "sentido": "ambos",
+     "fuente": "osm",
+     "osm_way": 319077356
+    },
+    {
+     "km_ini": 3.03,
+     "km_fin": 3.31,
+     "limite": 90,
+     "sentido": "ambos",
+     "fuente": "por_defecto_legal",
+     "osm_way": null
+    },
+    {
+     "km_ini": 3.31,
+     "km_fin": 4.58,
+     "limite": 60,
+     "sentido": "ambos",
+     "fuente": "osm",
+     "osm_way": 403351149
+    }
+   ],
+   "cobertura_osm_pct": {
+    "ida": 93.9,
+    "vuelta": 93.9
+   },
+   "tramos_pequenos_absorbidos": []
+  },
+  {
+   "id": 5,
+   "nombre": "M-617",
+   "longitud_km": 2.144,
+   "tramos": [
+    {
+     "km_ini": 0.0,
+     "km_fin": 2.14,
+     "limite": 90,
+     "sentido": "ambos",
+     "fuente": "por_defecto_legal",
+     "osm_way": null
+    }
+   ],
+   "cobertura_osm_pct": {
+    "ida": 0.0,
+    "vuelta": 0.0
+   },
+   "tramos_pequenos_absorbidos": []
+  },
+  {
+   "id": 6,
+   "nombre": "M-622",
+   "longitud_km": 7.396,
+   "tramos": [
+    {
+     "km_ini": 0.0,
+     "km_fin": 0.56,
+     "limite": 50,
+     "sentido": "ambos",
+     "fuente": "osm",
+     "osm_way": 27179795
+    },
+    {
+     "km_ini": 0.56,
+     "km_fin": 1.41,
+     "limite": 70,
+     "sentido": "ambos",
+     "fuente": "osm",
+     "osm_way": 411091642
+    },
+    {
+     "km_ini": 1.41,
+     "km_fin": 2.34,
+     "limite": 50,
+     "sentido": "ambos",
+     "fuente": "osm",
+     "osm_way": 198398041
+    },
+    {
+     "km_ini": 2.34,
+     "km_fin": 5.67,
+     "limite": 40,
+     "sentido": "ambos",
+     "fuente": "osm",
+     "osm_way": 83293332
+    },
+    {
+     "km_ini": 5.67,
+     "km_fin": 7.26,
+     "limite": 60,
+     "sentido": "ambos",
+     "fuente": "osm",
+     "osm_way": 373151734
+    },
+    {
+     "km_ini": 7.26,
+     "km_fin": 7.4,
+     "limite": 40,
+     "sentido": "ambos",
+     "fuente": "osm",
+     "osm_way": 411091643
+    }
+   ],
+   "cobertura_osm_pct": {
+    "ida": 100.0,
+    "vuelta": 100.0
+   },
+   "tramos_pequenos_absorbidos": []
+  },
+  {
+   "id": 7,
+   "nombre": "M-714",
+   "longitud_km": 2.873,
+   "tramos": [
+    {
+     "km_ini": 0.0,
+     "km_fin": 2.87,
+     "limite": 40,
+     "sentido": "ambos",
+     "fuente": "osm",
+     "osm_way": 863098208
+    }
+   ],
+   "cobertura_osm_pct": {
+    "ida": 100.0,
+    "vuelta": 100.0
+   },
+   "tramos_pequenos_absorbidos": []
+  },
+  {
+   "id": 8,
+   "nombre": "M-966",
+   "longitud_km": 2.74,
+   "tramos": [
+    {
+     "km_ini": 0.0,
+     "km_fin": 0.34,
+     "limite": 90,
+     "sentido": "ambos",
+     "fuente": "por_defecto_legal",
+     "osm_way": null
+    },
+    {
+     "km_ini": 0.34,
+     "km_fin": 0.95,
+     "limite": 50,
+     "sentido": "ambos",
+     "fuente": "por_defecto_legal",
+     "osm_way": null
+    },
+    {
+     "km_ini": 0.95,
+     "km_fin": 2.74,
+     "limite": 90,
+     "sentido": "ambos",
+     "fuente": "por_defecto_legal",
+     "osm_way": null
+    }
+   ],
+   "cobertura_osm_pct": {
+    "ida": 0.0,
+    "vuelta": 0.0
+   },
+   "tramos_pequenos_absorbidos": [
+    "ida: km 0.00–0.05 (50 m, 50 por_defecto_legal) absorbido por el contiguo (90 por_defecto_legal)",
+    "vuelta: km 0.00–0.05 (50 m, 50 por_defecto_legal) absorbido por el contiguo (90 por_defecto_legal)"
+   ]
+  },
+  {
+   "id": 9,
+   "nombre": "SG-615",
+   "longitud_km": 6.831,
+   "tramos": [
+    {
+     "km_ini": 0.0,
+     "km_fin": 1.48,
+     "limite": 60,
+     "sentido": "ambos",
+     "fuente": "osm",
+     "osm_way": 1078455649
+    },
+    {
+     "km_ini": 1.48,
+     "km_fin": 1.65,
+     "limite": 40,
+     "sentido": "ambos",
+     "fuente": "osm",
+     "osm_way": 678907393
+    },
+    {
+     "km_ini": 1.65,
+     "km_fin": 6.83,
+     "limite": 60,
+     "sentido": "ambos",
+     "fuente": "osm",
+     "osm_way": 27536018
+    }
+   ],
+   "cobertura_osm_pct": {
+    "ida": 98.7,
+    "vuelta": 98.8
+   },
+   "tramos_pequenos_absorbidos": [
+    "ida: km 0.00–0.03 (30 m, 90 por_defecto_legal) absorbido por el contiguo (60 osm)",
+    "ida: km 6.78–6.83 (51 m, 90 por_defecto_legal) absorbido por el contiguo (60 osm)",
+    "vuelta: km 0.00–0.01 (10 m, 60 osm) absorbido por el contiguo (90 por_defecto_legal)",
+    "vuelta: km 0.00–0.03 (30 m, 90 por_defecto_legal) absorbido por el contiguo (60 osm)",
+    "vuelta: km 6.78–6.83 (51 m, 90 por_defecto_legal) absorbido por el contiguo (60 osm)"
+   ]
+  }
+ ],
+ "notas": "Límites reales de OpenStreetMap (etiquetas maxspeed, maxspeed:forward/backward; maxspeed:type=sign donde existe) emparejados con cada ruta del juego muestreando cada 10 m (la vía OSM más cercana a ≤12 m, con la misma orientación y preferencia por la misma ref, p. ej. M-601/CL-601); en las 10 rutas la distancia mediana al eje OSM es ~0,5 m. 'ida' = sentido de km creciente de la ruta; 'vuelta' = sentido contrario; 'ambos' = mismo límite en los dos sentidos. En tramos de calzadas separadas (vía OSM de sentido único) el límite de 'vuelta' se toma de la calzada contraria con la misma ref a ≤45 m. Donde OSM no tiene maxspeed se pone el genérico legal y fuente='por_defecto_legal' (NO es una señal real): 90 km/h en carretera convencional fuera de poblado; 50 km/h dentro de poblado (detectado solo si el punto cae dentro de un polígono landuse=residential de OSM; no había zone:maxspeed=ES:urban en la zona). Desde 2021 el genérico urbano es 50 en vías con dos o más carriles por sentido, 30 en vías de un carril por sentido y 20 en plataforma única; para estas travesías se usa 50 y queda marcado como genérico. Tramos de menos de 100 m sin señal confirmada se absorben en el contiguo (lista por ruta en 'tramos_pequenos_absorbidos'; en la ruta 0: el puente de la Cantina, 30 m a 40, km 17,26–17,29, queda dentro del 50). Ojo ruta 0 km 5,57–5,75 (calzadas separadas): la calzada de bajada no tiene maxspeed en OSM, de ahí el 90 genérico en 'vuelta' entre zonas de 50 y 40; probablemente la señal real es 40 pero no hay dato. Única señal de velocidad mapeada como nodo en la zona: traffic_sign=maxspeed sin valor (nodo 13100792759), no aporta límite. Datos © colaboradores de OpenStreetMap, ODbL.",
+ "proyeccion": "WGS84 (EPSG:4326) → ETRS89 / UTM 30N (EPSG:25830) con pyproj (always_xy), origen E0=414000, N0=4516000; X_juego = E − 414000, Z_juego = 4516000 − N (convenio de zona.json; mismo que pipeline/extraer.py)",
+ "consulta_osm_fecha": "2026-10-31T13:59:51Z",
+ "consulta_osm_url": "https://overpass-api.de/api/interpreter",
+ "bbox_wgs84": [
+  40.715,
+  -4.08,
+  40.88,
+  -3.96
+ ],
+ "resumen_ruta0": "km 0–0,85: 90 (OSM) · km 0,85–1,04: 60 (OSM) · km 1,04–1,23: 40 (OSM) · km 1,23–1,61: 60 (OSM) · km 1,61–2,37: 50 (OSM) · km 2,37–2,48: 60 (OSM) · km 2,48–2,6: 90 (genérico legal, sin dato OSM) · km 2,6–5,01: 60 (OSM) · km 5,01–5,57: 50 (OSM) · km 5,57–5,75: 40 subiendo/ida (OSM) · km 5,57–5,75: 90 en sentido contrario (genérico legal, sin dato OSM) · km 5,75–5,86: 40 (OSM) · km 5,86–6,78: 50 (OSM) · km 6,78–7,47: 40 (OSM) · km 7,47–7,84: 50 (OSM) · km 7,84–10,19: 60 (OSM) · km 10,19–10,53: 50 (OSM) · km 10,53–14,06: 70 (OSM) · km 14,06–14,12: 50 (OSM) · km 14,12–14,34: 30 subiendo/ida (OSM) · km 14,12–14,34: 50 en sentido contrario (OSM) · km 14,34–15,31: 50 (OSM) · km 15,31–15,49: 30 (OSM) · km 15,49–15,68: 50 (OSM) · km 15,68–15,81: 30 (OSM) · km 15,81–16,32: 50 (OSM) · km 16,32–16,65: 50 subiendo/ida (OSM) · km 16,32–16,65: 40 en sentido contrario (OSM) · km 16,65–17,29: 50 (OSM) · km 17,29–20: 60 (OSM) · km 20–21,46: 80 subiendo/ida (OSM) · km 20–21,46: 60 en sentido contrario (OSM) · km 21,46–22,84: 60 (OSM) · km 22,84–23,46: 90 (genérico legal, sin dato OSM) · km 23,46–24,3: 50 (OSM)"
+}

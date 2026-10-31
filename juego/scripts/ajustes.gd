@@ -66,7 +66,7 @@ func cargar() -> void:
 		for i in xs.size():
 			pts.append(Vector3(xs[i], v["y"][i], v["z"][i]))
 		vias.append({"pts": pts, "ancho": float(v["ancho"]), "nombre": v["ref"] if v["ref"] != "" else v["nombre"],
-				"tunel": int(v["tunel"])})
+				"tunel": int(v["tunel"]), "puente": int(v.get("puente", 0))})
 	var ter: Dictionary = info["terreno"]
 	ter_paso = float(ter["paso"])
 	ter_tesela = float(ter["tesela"])
@@ -81,6 +81,9 @@ func cargar() -> void:
 		ter_n = int(t["n"])
 		var clave := Vector2i(roundi((float(t["x0"]) - ter_x0) / ter_tesela), roundi((float(t["z0"]) - ter_z0) / ter_tesela))
 		terreno[clave] = h
+	# cruces limpios (secundarias cortadas en el borde de la principal) y terreno por debajo del asfalto
+	var cr := Cruces.preparar(rutas, vias)
+	print("Cruces: ", cr)
 	superficie = Superficie.new()
 	superficie.construir(rutas, vias)
 	print("Datos cargados en %d ms: %d rutas, %d vías, %d teselas" % [Time.get_ticks_msec() - t0, rutas.size(), vias.size(), terreno.size()])

@@ -7,6 +7,38 @@ var s0 := 0.0
 var s1 := 0.0
 var marcador := -1.0
 var compacto := false
+var interactivo := false        # en juego: pulsar el perfil lleva el coche a ese km
+var hover_s := -1.0
+
+signal salto(s: float)
+
+
+## Zona del dibujo (sin márgenes de rótulos)
+func _area() -> Rect2:
+	var m := 6.0 if compacto else 30.0
+	return Rect2(m, 6.0, size.x - m - 6.0, size.y - (14.0 if compacto else 26.0))
+
+
+func s_en_x(x: float) -> float:
+	var area := _area()
+	return clampf((x - area.position.x) / area.size.x, 0.0, 1.0) * ruta.longitud()
+
+
+func _gui_input(ev: InputEvent) -> void:
+	if not interactivo or ruta == null:
+		return
+	if ev is InputEventMouseMotion:
+		hover_s = s_en_x(ev.position.x)
+		queue_redraw()
+	elif ev is InputEventMouseButton and ev.pressed and ev.button_index == MOUSE_BUTTON_LEFT:
+		salto.emit(s_en_x(ev.position.x))
+		accept_event()
+
+
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_MOUSE_EXIT:
+		hover_s = -1.0
+		queue_redraw()
 
 
 func _draw() -> void:
@@ -24,8 +56,7 @@ func _draw() -> void:
 		zmax = maxf(zmax, ruta.pts[i].y)
 	zmin -= 20.0
 	zmax += 20.0
-	var m := 6.0 if compacto else 30.0
-	var area := Rect2(m, 6.0, w - m - 6.0, h - (14.0 if compacto else 26.0))
+	var area := _area()
 	var aqui := func(s: float, z: float) -> Vector2:
 		return Vector2(area.position.x + s / L * area.size.x, area.position.y + (1.0 - (z - zmin) / (zmax - zmin)) * area.size.y)
 	var a := minf(s0, s1)
@@ -55,3 +86,14 @@ func _draw() -> void:
 	for s in [s0, s1]:
 		var p: Vector2 = aqui.call(s, ruta.punto(s).y)
 		draw_line(Vector2(p.x, area.position.y), Vector2(p.x, area.end.y), Color(1, 1, 1, 0.6), 1.0)
+	if interactivo and hover_s >= 0.0:
+		var p: Vector2 = aqui.call(hover_s, ruta.punto(hover_s).y)
+		draw_line(Vector2(p.x, area.position.y), Vector2(p.x, area.end.y), Color(0.3, 0.9, 1.0, 0.9), 1.5)
+		draw_circle(p, 4.0, Color(0.3, 0.9, 1.0))
+		var z := roundi(ruta.punto(hover_s).y)
+		var etiqueta := "km " + ("%.1f" % (hover_s / 1000.0)).replace(".", ",") + " · " + ((str(z / 1000) + "." + ("%03d" % (z % 1000))) if z >= 1000 else str(z)) + " m"
+		var fuente := get_theme_default_font()
+		var ancho_txt := fuente.get_string_size(etiqueta, HORIZONTAL_ALIGNMENT_LEFT, -1, 13).x
+		var x := clampf(p.x - ancho_txt * 0.5, 0.0, size.x - ancho_txt)
+		draw_rect(Rect2(x - 4, -20, ancho_txt + 8, 18), Color(0, 0, 0, 0.7))
+		draw_string(fuente, Vector2(x, -6), etiqueta, HORIZONTAL_ALIGNMENT_LEFT, -1, 13, Color(0.6, 0.95, 1.0))

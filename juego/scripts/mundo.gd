@@ -2,18 +2,17 @@
 class_name Mundo
 extends Node3D
 
-const DIST_TERRENO := 14000.0
-const DIST_ARBOLES := 1600.0
-const DIST_MARCAS := 450.0
 
 var mat_terreno := StandardMaterial3D.new()
 var mat_asfalto := StandardMaterial3D.new()
 var mat_asfalto2 := StandardMaterial3D.new()
 var mat_marca := StandardMaterial3D.new()
+var mat_talud := StandardMaterial3D.new()
 var mat_marca_amarilla := StandardMaterial3D.new()
 var mat_copa := StandardMaterial3D.new()
 var mat_tronco := StandardMaterial3D.new()
 var entorno: Environment
+var streaming: MapaStreaming
 
 
 func construir() -> void:
@@ -23,6 +22,8 @@ func construir() -> void:
 	mat_asfalto.roughness = 0.95
 	mat_asfalto2.albedo_color = Color(0.2, 0.2, 0.19)
 	mat_asfalto2.roughness = 0.9
+	mat_talud.albedo_color = Color(0.30, 0.29, 0.21)
+	mat_talud.roughness = 1.0
 	mat_marca.albedo_color = Color(0.92, 0.92, 0.9)
 	mat_marca.roughness = 0.6
 	mat_marca_amarilla.albedo_color = Color(0.95, 0.75, 0.1)
@@ -30,12 +31,22 @@ func construir() -> void:
 	mat_copa.roughness = 1.0
 	mat_tronco.albedo_color = Color(0.36, 0.25, 0.17)
 	_cielo()
-	_terreno()
-	for r in Ajustes.rutas:
-		_ruta(r)
-	for v in Ajustes.vias:
-		_via(v)
-	_arboles()
+	# terreno, carreteras y pinos: por streaming (solo una ventana alrededor del coche, ver mapa_streaming.gd)
+	streaming = MapaStreaming.new()
+	streaming.name = "Streaming"
+	streaming.preparar(self)
+	add_child(streaming)
+
+
+## Llamar cada fotograma con la posición del coche: libera lo que queda atrás y construye lo de delante
+## (unas piezas por fotograma, ≤ 3 ms). Un salto grande (R, reiniciar) reconstruye la ventana de golpe.
+func actualizar_streaming(posicion_coche: Vector3, adelante := Vector3.ZERO) -> void:
+	streaming.actualizar(posicion_coche, adelante)
+
+
+## Carga inicial: toda la ventana alrededor de la salida, antes de mostrar el juego.
+func cargar_ventana(posicion_coche: Vector3, adelante := Vector3.ZERO) -> void:
+	streaming.cargar_ventana(posicion_coche, adelante)
 
 
 func _cielo() -> void:
@@ -43,8 +54,16 @@ func _cielo() -> void:
 	sol.rotation_degrees = Vector3(-38, -35, 0)
 	sol.light_energy = 1.15
 	sol.shadow_enabled = true
-	sol.directional_shadow_max_distance = 90.0
-	sol.directional_shadow_mode = DirectionalLight3D.SHADOW_ORTHOGONAL
+	sol.directional_shadow_max_distance = float(Ajustes.args.get("sombra_dist", "100"))
+	# 2 cascadas: los primeros 30 m (el coche) con mucha resolución y hasta 100 m más barata; filtro suave (PCF)
+	sol.directional_shadow_mode = int(Ajustes.args.get("sombra_modo", "1"))
+	sol.directional_shadow_split_1 = float(Ajustes.args.get("sombra_split", "0.3"))
+	sol.directional_shadow_blend_splits = true
+	sol.shadow_blur = float(Ajustes.args.get("sombra_blur", "1.0"))
+	if Ajustes.args.has("sombra_filtro"):
+		RenderingServer.directional_soft_shadow_filter_set_quality(int(Ajustes.args["sombra_filtro"]))
+	if Ajustes.args.has("sombra_atlas"):
+		RenderingServer.directional_shadow_atlas_set_size(int(Ajustes.args["sombra_atlas"]), true)
 	add_child(sol)
 	var cielo_mat := ProceduralSkyMaterial.new()
 	cielo_mat.sky_top_color = Color(0.32, 0.52, 0.80)
@@ -81,198 +100,6 @@ func _color_terreno(h: float, inclinacion: float) -> Color:
 	var c := prado.lerp(pinar, clampf((h - 1150.0) / 250.0, 0.0, 1.0))
 	c = c.lerp(cumbre, clampf((h - 1950.0) / 200.0, 0.0, 1.0))
 	return c.lerp(roca, clampf((inclinacion - 0.12) / 0.25, 0.0, 1.0))
-
-
-func _terreno() -> void:
-	var tz: Dictionary = Ajustes.info["terreno"]
-	var p := Ajustes.ter_paso
-	for t in tz["teselas"]:
-		var nn := int(t["n"])
-		var mm := int(t["m"])
-		var x0 := float(t["x0"])
-		var z0 := float(t["z0"])
-		var clave := Vector2i(roundi((x0 - Ajustes.ter_x0) / Ajustes.ter_tesela), roundi((z0 - Ajustes.ter_z0) / Ajustes.ter_tesela))
-		var h: PackedFloat32Array = Ajustes.terreno[clave]
-		var verts := PackedVector3Array()
-		var normales := PackedVector3Array()
-		var colores := PackedColorArray()
-		verts.resize(nn * mm)
-		normales.resize(nn * mm)
-		colores.resize(nn * mm)
-		for j in mm:
-			for i in nn:
-				var k := j * nn + i
-				var hl := h[j * nn + maxi(i - 1, 0)]
-				var hr := h[j * nn + mini(i + 1, nn - 1)]
-				var hu := h[maxi(j - 1, 0) * nn + i]
-				var hd := h[mini(j + 1, mm - 1) * nn + i]
-				var nrm := Vector3(hl - hr, 2.0 * p, hu - hd).normalized()
-				verts[k] = Vector3(x0 + i * p, h[k], z0 + j * p)
-				normales[k] = nrm
-				colores[k] = _color_terreno(h[k], 1.0 - nrm.y + 0.0)
-		var idx := PackedInt32Array()
-		idx.resize((nn - 1) * (mm - 1) * 6)
-		var c := 0
-		for j in mm - 1:
-			for i in nn - 1:
-				var k := j * nn + i
-				idx[c] = k; idx[c + 1] = k + 1; idx[c + 2] = k + nn
-				idx[c + 3] = k + 1; idx[c + 4] = k + nn + 1; idx[c + 5] = k + nn
-				c += 6
-		var arr := []
-		arr.resize(Mesh.ARRAY_MAX)
-		arr[Mesh.ARRAY_VERTEX] = verts
-		arr[Mesh.ARRAY_NORMAL] = normales
-		arr[Mesh.ARRAY_COLOR] = colores
-		arr[Mesh.ARRAY_INDEX] = idx
-		var malla := ArrayMesh.new()
-		malla.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arr)
-		malla.surface_set_material(0, mat_terreno)
-		var mi := MeshInstance3D.new()
-		mi.mesh = malla
-		mi.visibility_range_end = DIST_TERRENO
-		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-		add_child(mi)
-
-
-## Cinta de calzada a lo largo de una polilínea (trozos de ~400 m para que la cámara descarte lo que no ve)
-func _cinta(pts: PackedVector3Array, anchos: PackedFloat32Array, desde: int, hasta: int, desplaz: float,
-		semiancho_fijo: float, elev: float, mat: Material, visible_hasta: float, patron := PackedByteArray()) -> void:
-	var trozo := 200
-	var a := desde
-	while a < hasta:
-		var b := mini(a + trozo, hasta)
-		var verts := PackedVector3Array()
-		var nor := PackedVector3Array()
-		var idx := PackedInt32Array()
-		for i in range(a, b + 1):
-			var t := pts[mini(i + 1, pts.size() - 1)] - pts[maxi(i - 1, 0)]
-			var der := Vector3(-t.z, 0.0, t.x).normalized()
-			var hw := semiancho_fijo if semiancho_fijo > 0.0 else anchos[i] * 0.5
-			# desplaz = -1/+1: línea de borde a 25 cm del borde izquierdo/derecho; 0: eje
-			var centro := pts[i] + der * signf(desplaz) * (anchos[i] * 0.5 - 0.25)
-			if not patron.is_empty() and patron[i] == 0:
-				# hueco de línea discontinua: vértices degenerados
-				verts.append(centro + Vector3.UP * elev)
-				verts.append(centro + Vector3.UP * elev)
-			else:
-				verts.append(centro - der * hw + Vector3.UP * elev)
-				verts.append(centro + der * hw + Vector3.UP * elev)
-			nor.append(Vector3.UP)
-			nor.append(Vector3.UP)
-			if i > a:
-				var k := verts.size() - 4
-				idx.append_array([k, k + 2, k + 1, k + 1, k + 2, k + 3])
-		var arr := []
-		arr.resize(Mesh.ARRAY_MAX)
-		arr[Mesh.ARRAY_VERTEX] = verts
-		arr[Mesh.ARRAY_NORMAL] = nor
-		arr[Mesh.ARRAY_INDEX] = idx
-		var malla := ArrayMesh.new()
-		malla.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arr)
-		malla.surface_set_material(0, mat)
-		var mi := MeshInstance3D.new()
-		mi.mesh = malla
-		mi.visibility_range_end = visible_hasta
-		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-		add_child(mi)
-		a = b
-
-
-func _ruta(r: Ruta) -> void:
-	# tramos consecutivos que esta ruta debe dibujar
-	var i := 0
-	while i < r.n - 1:
-		if r.dibujar[i] == 0:
-			i += 1
-			continue
-		var j := i
-		while j < r.n - 1 and r.dibujar[j] == 1:
-			j += 1
-		_tramo_ruta(r, i, j)
-		i = j
-
-
-func _tramo_ruta(r: Ruta, a: int, b: int) -> void:
-	_cinta(r.pts, r.ancho, a, b, 0.0, 0.0, 0.05, mat_asfalto, DIST_TERRENO)
-	# líneas de borde (continuas, 15 cm)
-	_cinta(r.pts, r.ancho, a, b, -1.0, 0.075, 0.08, mat_marca, DIST_MARCAS)
-	_cinta(r.pts, r.ancho, a, b, 1.0, 0.075, 0.08, mat_marca, DIST_MARCAS)
-	# línea central: continua en curvas cerradas, discontinua (4,5 m de trazo cada 12 m) en rectas
-	var patron := PackedByteArray()
-	patron.resize(r.n)
-	for i in r.n:
-		var continua := absf(r.curvatura[i]) > 1.0 / 350.0
-		patron[i] = 1 if (continua or fmod(i * r.paso, 12.0) < 4.5) else 0
-	_cinta(r.pts, r.ancho, a, b, 0.0, 0.07, 0.085, mat_marca, DIST_MARCAS, patron)
-
-
-func _via(v: Dictionary) -> void:
-	var pts: PackedVector3Array = v["pts"]
-	if pts.size() < 2 or v["tunel"] == 1:
-		return
-	var anchos := PackedFloat32Array()
-	anchos.resize(pts.size())
-	anchos.fill(float(v["ancho"]))
-	_cinta(pts, anchos, 0, pts.size() - 1, 0.0, 0.0, 0.04, mat_asfalto2, 6000.0)
-
-
-## Pinos (MultiMesh por tesela): tronco + copa cónica, 1 sola malla de 2 superficies
-func _malla_pino() -> ArrayMesh:
-	var malla := ArrayMesh.new()
-	var copa := CylinderMesh.new()
-	copa.top_radius = 0.0
-	copa.bottom_radius = 2.6
-	copa.height = 10.0
-	copa.radial_segments = 7
-	copa.rings = 1
-	var tronco := CylinderMesh.new()
-	tronco.top_radius = 0.25
-	tronco.bottom_radius = 0.35
-	tronco.height = 5.0
-	tronco.radial_segments = 5
-	tronco.rings = 1
-	for par in [[copa, 9.0, mat_copa], [tronco, 2.5, mat_tronco]]:
-		var arr: Array = par[0].get_mesh_arrays()
-		var v: PackedVector3Array = arr[Mesh.ARRAY_VERTEX]
-		for i in v.size():
-			v[i].y += par[1]
-		arr[Mesh.ARRAY_VERTEX] = v
-		malla.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arr)
-		malla.surface_set_material(malla.get_surface_count() - 1, par[2])
-	return malla
-
-
-func _arboles() -> void:
-	var malla := _malla_pino()
-	var rng := RandomNumberGenerator.new()
-	rng.seed = 7
-	for t in Ajustes.info["terreno"]["teselas"]:
-		if int(t["arboles"]) == 0:
-			continue
-		var f := FileAccess.open(Ajustes.dir_datos() + "arboles/%s.bin" % t["nombre"], FileAccess.READ)
-		if f == null:
-			continue
-		var d := f.get_buffer(f.get_length()).to_float32_array()
-		var cuenta := d.size() / 4
-		var mm := MultiMesh.new()
-		mm.transform_format = MultiMesh.TRANSFORM_3D
-		mm.mesh = malla
-		mm.instance_count = cuenta
-		var centro := Vector3.ZERO
-		for i in cuenta:
-			var x := d[i * 4]
-			var z := d[i * 4 + 2]
-			var esc := d[i * 4 + 3]
-			var y := Ajustes.altura_terreno(x, z) - 0.3
-			var bas := Basis(Vector3.UP, rng.randf() * TAU).scaled(Vector3(esc, esc * rng.randf_range(0.85, 1.25), esc))
-			mm.set_instance_transform(i, Transform3D(bas, Vector3(x, y, z)))
-			centro += Vector3(x, y, z)
-		var mi := MultiMeshInstance3D.new()
-		mi.multimesh = mm
-		mi.visibility_range_end = DIST_ARBOLES
-		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-		add_child(mi)
 
 
 ## Coche low-poly (jugador y tráfico)

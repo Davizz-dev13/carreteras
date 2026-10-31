@@ -108,19 +108,35 @@ func actualizar(dt: float, s_jug: float, lat_jug: float, v_jug: float, dir_jug_c
 			if d > 0.0 and d - largo < hueco:
 				hueco = d - largo
 				v_lider = v_jug
+		if c.get("fijo", false):
+			continue          # coche de prueba (verificación): mantiene su velocidad
 		var v0: float = minf(c["v0"], c["vc"])
 		var v: float = c["v"]
 		var a := idm(v, v0, hueco, v - v_lider)
 		a = maxf(a, -9.0)
 		c["v"] = maxf(0.0, v + a * dt)
 	for c in coches:
+		if c.get("suelto", false):
+			continue          # tras un choque se mueve como cuerpo libre (Colisiones.mover_sueltos)
 		c["s"] += c["v"] * c["dir"] * dt
 		_colocar(c)
+		Catalogo.animar_ruedas(c["modelo"], c["v"] * dt, 0.0)
+
+
+## Para las pruebas automáticas: pone un coche en s, en el carril del sentido dir, a v m/s
+func crear_prueba(s: float, dir: int, v: float, fijo: bool) -> Dictionary:
+	_crear(s, dir)
+	var c: Dictionary = coches[coches.size() - 1]
+	c["v"] = v
+	c["v0"] = v
+	c["vc"] = 1e9 if fijo else c["vc"]
+	c["fijo"] = fijo
+	return c
 
 
 func _crear(s: float, dir: int) -> void:
 	var nodo := Node3D.new()
-	var modelo := Catalogo.crear_modelo(ficha_trafico, Catalogo.color_aleatorio(ficha_trafico, rng))
+	var modelo := Catalogo.crear_modelo(ficha_trafico, Catalogo.color_aleatorio(ficha_trafico, rng), 1)
 	nodo.add_child(modelo)
 	add_child(nodo)
 	var lim := float(ruta.vmax[clampi(int(s / ruta.paso), 0, ruta.n - 1)]) / 3.6
@@ -128,7 +144,7 @@ func _crear(s: float, dir: int) -> void:
 	if rng.randf() < 0.12:
 		v0 = lim * 0.55          # algún conductor lento: se forman colas detrás
 	var vc := vel_curva(s, dir, A_LAT)
-	var c := {"s": s, "dir": dir, "v": minf(v0, vc), "v0": v0, "vc": vc, "nodo": nodo}
+	var c := {"s": s, "dir": dir, "v": minf(v0, vc), "v0": v0, "vc": vc, "nodo": nodo, "modelo": modelo}
 	coches.append(c)
 	_colocar(c)
 	nodo.reset_physics_interpolation()     # recién aparecido: sin interpolar desde el origen

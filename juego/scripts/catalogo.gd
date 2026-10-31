@@ -74,30 +74,31 @@ func color_aleatorio(f: Ficha, rng: RandomNumberGenerator) -> Color:
 func material_carroceria(color: Color) -> StandardMaterial3D:
 	var k := color.to_html()
 	if not _materiales.has(k):
+		# pintura metalizada con barniz (clearcoat): base metálica algo rugosa + capa transparente brillante
 		var mat := StandardMaterial3D.new()
+		mat.resource_name = "pintura"
 		mat.albedo_color = color
-		mat.metallic = 0.55
-		mat.roughness = 0.32
+		mat.metallic = 0.62
+		mat.roughness = 0.34
 		mat.metallic_specular = 0.6
+		mat.clearcoat_enabled = true
+		mat.clearcoat = 1.0
+		mat.clearcoat_roughness = 0.06
 		_materiales[k] = mat
 	return _materiales[k]
 
 
 ## Crea el nodo visual de un coche: raíz (en el suelo, centro de la batalla, mirando a -Z)
-## con un hijo "carroceria" que puede inclinarse.
-func crear_modelo(f: Ficha, color: Color) -> Node3D:
+## con un hijo "carroceria" que puede inclinarse y, si el modelo las trae, 4 ruedas que giran y dirigen.
+## lod = 0: modelo detallado (jugador); 1: versión ligera (tráfico).
+func crear_modelo(f: Ficha, color: Color, lod := 0) -> Node3D:
 	var m := modelo_de(f)
 	var m3d: Dictionary = m.get("modelo_3d", {"tipo": "procedural"})
 	var raiz := Node3D.new()
-	if m3d.get("tipo", "") == "gltf" and ResourceLoader.exists(m3d.get("ruta", "")):
-		var escena: PackedScene = load(m3d["ruta"])
-		var n := escena.instantiate() as Node3D
-		n.name = "carroceria"
-		raiz.add_child(n)
-		# escala a su largo real
-		var caja := _caja(n)
-		if caja.size.z > 0.01:
-			n.scale = Vector3.ONE * (f.largo / caja.size.z)
+	var ruta: String = m3d.get("ruta_lod1", m3d.get("ruta", "")) if lod >= 1 else m3d.get("ruta", "")
+	if m3d.get("tipo", "") == "gltf" and ResourceLoader.exists(ruta):
+		raiz.set_meta("lod", lod)
+		_montar_gltf(raiz, load(ruta), f, color, m3d)
 		return raiz
 	if not _mallas.has(m["id"]):
 		_mallas[m["id"]] = ModeloProcedural.construir(m3d.get("perfil", {}), f)
@@ -114,6 +115,98 @@ func crear_modelo(f: Ficha, color: Color) -> Node3D:
 		r.rotation_degrees = Vector3(0, 0, 90)
 		raiz.add_child(r)
 	return raiz
+
+
+## Modelo glTF (ver modelos/LEEME.md): nodos "carroceria", "rueda_del_izq|del_der|tra_izq|tra_der" (la parte que gira:
+## neumático, llanta, disco) y "pinza_…" (pinza de freno: gira con la dirección pero no con la rueda), con su origen en
+## el centro de cada rueda. Se escala al largo real de la versión.
+func _montar_gltf(raiz: Node3D, escena: PackedScene, f: Ficha, color: Color, m3d: Dictionary) -> void:
+	var n := escena.instantiate() as Node3D
+	var esc := f.largo / float(m3d.get("largo_modelo_m", f.largo))
+	var cuerpo := Node3D.new()
+	cuerpo.name = "carroceria"
+	raiz.add_child(cuerpo)
+	var ruedas := []
+	var pivotes := {}
+	for hijo in n.find_children("*", "MeshInstance3D", true, false):
+		var mi := hijo as MeshInstance3D
+		var t := mi.global_transform if mi.is_inside_tree() else _transform_en(n, mi)
+		var nombre := String(mi.name)
+		mi.get_parent().remove_child(mi)
+		mi.owner = null
+		if nombre.begins_with("rueda_") or nombre.begins_with("pinza_"):
+			var clave := nombre.substr(6)
+			if not pivotes.has(clave):
+				var piv := Node3D.new()
+				piv.name = "eje_" + clave
+				piv.position = t.origin * esc
+				raiz.add_child(piv)
+				pivotes[clave] = piv
+				ruedas.append({"pivote": piv, "rueda": null, "delantera": clave.begins_with("del")})
+			var pv: Node3D = pivotes[clave]
+			mi.transform = Transform3D(t.basis.scaled(Vector3.ONE * esc), Vector3.ZERO)
+			# rueda y "pinza" giran juntas dentro de su propio nodo (en este modelo la cara de la llanta va en la pieza
+			# "pinza"); así tampoco se pisa la orientación que trae la malla
+			var rodar: Node3D = pv.get_node_or_null("rodar")
+			if rodar == null:
+				rodar = Node3D.new()
+				rodar.name = "rodar"
+				pv.add_child(rodar)
+			rodar.add_child(mi)
+			for r in ruedas:
+				if r["pivote"] == pv:
+					r["rueda"] = rodar
+					if nombre.begins_with("rueda_"):
+						r["malla"] = mi
+		else:
+			mi.transform = Transform3D(t.basis.scaled(Vector3.ONE * esc), t.origin * esc)
+			cuerpo.add_child(mi)
+			# la pintura de la carrocería: el color elegido con barniz
+			for i in mi.mesh.get_surface_count():
+				var mat := mi.mesh.surface_get_material(i)
+				if mat and mat.resource_name.begins_with("pintura"):
+					mi.set_surface_override_material(i, material_carroceria(color))
+	n.free()
+	# el tráfico lejano no se dibuja (a más de 600 m un coche ocupa unos pocos píxeles)
+	if m3d.get("ruta_lod1", "") != "" and esc > 0.0:
+		for gi in raiz.find_children("*", "GeometryInstance3D", true, false):
+			if raiz.get_meta("lod", 0) >= 1:
+				(gi as GeometryInstance3D).visibility_range_end = 600.0
+				if String(gi.name).begins_with("rueda") or String(gi.get_parent().name) == "rodar":
+					(gi as GeometryInstance3D).cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	var radio := 0.33
+	for r in ruedas:
+		if r.get("malla"):
+			var mm := r["malla"] as MeshInstance3D
+			var caja := mm.transform * mm.get_aabb()
+			radio = maxf(0.2, maxf(caja.size.y, caja.size.z) * 0.5)
+	raiz.set_meta("ruedas", ruedas)
+	raiz.set_meta("radio_rueda", radio)
+	raiz.set_meta("giro_rueda", 0.0)
+
+
+func _transform_en(raiz: Node3D, nodo: Node3D) -> Transform3D:
+	var t := Transform3D.IDENTITY
+	var x: Node = nodo
+	while x != null and x != raiz:
+		if x is Node3D:
+			t = (x as Node3D).transform * t
+		x = x.get_parent()
+	return t
+
+
+## Hace girar las ruedas según lo avanzado (m) y orienta las delanteras con el ángulo de dirección (rad, + derecha)
+func animar_ruedas(modelo: Node3D, avance: float, giro: float) -> void:
+	if modelo == null or not modelo.has_meta("ruedas"):
+		return
+	var ang: float = fmod(float(modelo.get_meta("giro_rueda")) - avance / float(modelo.get_meta("radio_rueda")), TAU)
+	modelo.set_meta("giro_rueda", ang)
+	for r in modelo.get_meta("ruedas"):
+		var piv: Node3D = r["pivote"]
+		if r["delantera"]:
+			piv.rotation.y = -giro
+		if r["rueda"]:
+			(r["rueda"] as Node3D).rotation.x = ang
 
 
 func _caja(n: Node) -> AABB:
