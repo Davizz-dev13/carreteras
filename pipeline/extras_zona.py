@@ -58,6 +58,11 @@ def main():
     ap.add_argument("--osm", required=True, help="descarga way[highway] del bbox (json de Overpass con fecha/url)")
     ap.add_argument("--residencial", required=True, help="landuse=residential del bbox (para el genérico urbano)")
     ap.add_argument("--sentido", default="Iznalloz → Darro", help="texto del sentido 'ida' (km creciente) para las notas")
+    ap.add_argument("--ancho_min", type=float, default=0.0,
+                    help="m: anchura mínima de la ruta fuera de calzadas separadas (0 = no se toca). En m406: 7 m donde la "
+                         "ruta sigue una calle de sentido único (hueco de la ref en OSM) por la que el juego hace circular los dos sentidos")
+    ap.add_argument("--lineas", help="json de --captura=lineas_adelantar ({ruta: [[km_ini, km_fin], …]}): se guarda como "
+                                     "linea_discontinua quitando los tramos de calzadas separadas (ahí la línea central es la mediana)")
     ap.add_argument("--absorber", type=float, default=60.0, help="m: tramos de límite más cortos se absorben")
     a = ap.parse_args()
     D = os.path.join(RAIZ, "juego", "datos", a.zona)
@@ -255,14 +260,38 @@ def main():
         objetivo = np.where(sep, (ida_c + vue_c) * 3.5 + 1.0, 0.0)
         objetivo = np.maximum(objetivo, gaussian_filter1d(objetivo, 10))
         nuevo = np.maximum(an, objetivo)
+        if a.ancho_min > 0:
+            minimo = np.where(sep, 0.0, a.ancho_min)
+            minimo = np.maximum(minimo, gaussian_filter1d(minimo, 10))
+            n_min = int(((nuevo < a.ancho_min - 0.01) & ~sep).sum())
+            nuevo = np.maximum(nuevo, minimo)
         r["ancho"] = np.round(nuevo, 2).tolist()
         r["ancho_ajustado"] = ("en calzadas separadas (%.0f m de ruta) la anchura es la suma de los carriles de las dos calzadas "
                                "(OSM lanes) × 3,5 m + 1 m, porque el juego hace circular los dos sentidos por la calzada que sigue la ruta" % (sep.sum() * PASO))
+        if a.ancho_min > 0:
+            r["ancho_ajustado"] += ("; fuera de calzadas separadas la anchura mínima es %.1f m (%.0f m de ruta ensanchados: calles "
+                                    "de sentido único o estrechas por las que el juego hace circular los dos sentidos; valor genérico, "
+                                    "no medido)" % (a.ancho_min, n_min * PASO))
         L = s[-1]
         pct = {sen: round(100 * sum(e["km_fin"] - e["km_ini"] for e in extra if e["sentido"] == sen) * 1000 / L, 2) for sen in ("ida", "vuelta")}
         sal_adel.append({"id": ri, "nombre": r["nombre"], "prohibido": sorted(pf, key=lambda t: t["km_ini"]),
                          "carril_adelantamiento": extra, "carriles": carriles, "pct_con_carril_adelantamiento": pct,
                          "distancia_mediana_eje_osm_m": round(float(np.nanmedian(dist)), 2)})
+        if a.lineas:
+            ld = json.load(open(a.lineas)).get(str(ri), [])
+            km_s = np.arange(len(sep)) * PASO / 1000.0
+            m = np.zeros(len(sep), bool)
+            for k0, k1 in ld: m |= (km_s >= k0) & (km_s <= k1)
+            m &= ~sep
+            ld2, i = [], 0
+            while i < len(m):
+                if m[i]:
+                    j = i
+                    while j + 1 < len(m) and m[j + 1]: j += 1
+                    if (j - i) * PASO >= 20: ld2.append([round(km_s[i], 3), round(km_s[j], 3)])
+                    i = j + 1
+                else: i += 1
+            sal_adel[-1]["linea_discontinua"] = ld2
         resumen[r["nombre"]] = {"cobertura_maxspeed": cobertura, "carril_extra_pct": pct, "n_carril_extra": len(extra)}
     fecha = bruto.get("fecha"); url = bruto.get("url")
     proy = f"WGS84 → ETRS89 / UTM 30N (EPSG:25830), origen E0={E0:.0f}, N0={N0:.0f}; X_juego = E − {E0:.0f}, Z_juego = {N0:.0f} − N"

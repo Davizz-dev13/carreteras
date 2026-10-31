@@ -18,6 +18,7 @@ from scipy.spatial import cKDTree
 
 sys.path.insert(0, os.path.dirname(__file__))
 import osm, dem, rutas as R
+import dirigido as D
 
 PRESETS = {
     "navacerrada": {
@@ -49,6 +50,29 @@ PRESETS = {
         "tipos": osm.TIPOS + "|residential",
         "arboles_osm": True,
         "max_mb_archivo": 3.0,
+    },
+    # M-406 (Comunidad de Madrid), de Alcorcón (enlace con la A-5) a la A-4. Autovía urbana de calzadas
+    # separadas (oneway=yes) con rotondas: la ruta sigue UNA calzada en su sentido legal (pipeline/dirigido.py, Dijkstra
+    # respetando oneway y el giro de las rotondas). OSM no tiene ref=M-406 en ~1,7 km del casco de Leganés: la ruta
+    # se parte ahí en dos rutas del juego (no se inventa la unión). Por la ruta circulan los dos sentidos (extras_zona.py ensancha a los carriles de las dos calzadas).
+    # Vías secundarias: sin las residential (zona urbana densa: miles de calles), solo a ≤ 2 km de la ruta y sin nombre.
+    "m406": {
+        "bbox": (40.28, -3.84, 40.38, -3.66),
+        "rutas": [("M-406", ["M-406"])],
+        "nombres_trozos": ["M-406 Alcorcón (A-5) → Leganés", "M-406 Leganés → A-4"],
+        "hueco_max_m": 300,
+        "solo_rutas": True,
+        "orden": "oeste_este",
+        "tipos": osm.TIPOS + "|residential",
+        "arboles_osm": True,
+        "parques": True,
+        "max_mb_archivo": 3.0,
+        "dirigido": True,
+        "vias_excluir": ["residential"],
+        "vias_sin_nombre": True,
+        "vias_radio_m": 2000,
+        # OSM leído de un extracto Geofabrik recortado al bbox (pipeline/osm_pbf.py escribe la caché con el formato de Overpass)
+        "fuente_osm": "© colaboradores de OpenStreetMap (ODbL), extracto Geofabrik europe/spain/madrid (2026-10-30T21:24:51Z) vía pipeline/osm_pbf.py",
     },
 }
 PASO_TERRENO = 20.0     # m entre vértices del terreno
@@ -132,10 +156,46 @@ def main():
     salida = os.path.join(a.salida, a.zona); os.makedirs(os.path.join(salida, "terreno"), exist_ok=True)
     os.makedirs(os.path.join(salida, "arboles"), exist_ok=True)
     rutas_out, stats, ways_dibujadas, procesadas = [], {}, set(), []
+    items = []
     for nombre, refs in defs:
-        sel = [w for w in ways if set(R.refs_de(w["tags"])) & set(refs)]
-        if not sel: print(f"      {nombre}: sin vías"); continue
-        pts = R.encadenar(sel, utm)
+        if not preset.get("dirigido"):
+            items.append((nombre, refs, None, None)); continue
+        # una calzada en su sentido legal (dirigido.py); las vías sin la ref solo cubren huecos de OSM (coste ×4).
+        # Un hueco de la ref de más de "hueco_max_m" parte la ruta en trozos (cada uno es una ruta del juego).
+        pa = D.encadenar_dirigido(ways, utm, preset.get("orden", "oeste_este"), refs=refs, penal=4.0)
+        con_ref = [bool(set(R.refs_de(ways[pa[k][2]]["tags"])) & set(refs)) for k in range(len(pa) - 1)]
+        trozos, k = [], 0
+        while k < len(con_ref):
+            if not con_ref[k]:
+                j = k
+                while j < len(con_ref) and not con_ref[j]: j += 1
+                lh = sum(np.hypot(pa[q + 1][0] - pa[q][0], pa[q + 1][1] - pa[q][1]) for q in range(k, j))
+                if lh > preset.get("hueco_max_m", 1e9) or k == 0 or j == len(con_ref):
+                    print(f"      {nombre}: hueco de la ref en OSM de {lh:.0f} m (puntos {k}–{j})" + (" → se parte la ruta" if 0 < k and j < len(con_ref) else " (extremo, se quita)"))
+                    trozos.append((k, j))
+                k = j
+            else: k += 1
+        cortes = [0] + [x for t in trozos for x in t] + [len(pa) - 1]
+        piezas = [(cortes[q], cortes[q + 1]) for q in range(0, len(cortes) - 1, 2) if cortes[q + 1] > cortes[q] + 1]
+        nombres = preset.get("nombres_trozos") or [nombre]
+        for q, (a0, a1) in enumerate(piezas):
+            sub = pa[a0:a1 + 1]
+            usadas = sorted(set(p_[2] for p_ in sub)); m_ = {w: kk for kk, w in enumerate(usadas)}
+            sel_ = [ways[w] for w in usadas]; pts_ = [(x, y, m_[w]) for x, y, w in sub]
+            rot, ant = 0, False
+            for kk in range(len(pts_) - 1):
+                es = sel_[pts_[kk][2]]["tags"].get("junction") in ("roundabout", "circular")
+                rot += es and not ant; ant = es
+            nm = nombres[q] if q < len(nombres) else f"{nombre} ({q + 1})"
+            print(f"      {nm}: calzada dirigida, {rot} rotondas atravesadas")
+            items.append((nm, refs, sel_, pts_))
+    for nombre, refs, sel0, pts0 in items:
+        if sel0 is not None:
+            sel, pts = sel0, pts0
+        else:
+            sel = [w for w in ways if set(R.refs_de(w["tags"])) & set(refs)]
+            if not sel: print(f"      {nombre}: sin vías"); continue
+            pts = R.encadenar(sel, utm)
         pts = recortar_a_rect(pts, xmin + 50, ymin + 50, xmax - 50, ymax - 50)
         if len(pts) < 5: continue
         orden = preset.get("orden")
@@ -182,10 +242,15 @@ def main():
 
     # resto de vías (sin ruta): solo para ver y circular por ellas
     vias_out = []
+    arbol_rutas = cKDTree(np.vstack([np.column_stack([r["x"], r["y"]]) for r in procesadas])) if procesadas else None
     for w in ways:
         if w["id"] in ways_dibujadas: continue
+        if w["tags"].get("highway") in preset.get("vias_excluir", ()): continue
         if "_link" in w["tags"].get("highway", "") and len(w["geom"]) < 3: pass
         xs_, ys_ = utm.transform([p[1] for p in w["geom"]], [p[0] for p in w["geom"]])
+        if preset.get("vias_radio_m") and arbol_rutas is not None and \
+                arbol_rutas.query(np.column_stack([xs_, ys_]))[0].min() > preset["vias_radio_m"]:
+            continue   # vía lejos de la ruta (zona urbana densa: solo las vías a ≤ vias_radio_m de la ruta)
         pts = recortar_a_rect([(x, y, 0) for x, y in zip(xs_, ys_)], xmin + 50, ymin + 50, xmax - 50, ymax - 50)
         if len(pts) < 2: continue
         L = sum(np.hypot(pts[k + 1][0] - pts[k][0], pts[k + 1][1] - pts[k][1]) for k in range(len(pts) - 1))
@@ -194,7 +259,7 @@ def main():
         X, Z = a_godot(r, E0, N0)
         vias_out.append({"x": np.round(X, 2).tolist(), "y": np.round(r["z"], 2).tolist(), "z": np.round(Z, 2).tolist(),
                          "ancho": round(float(np.mean(r["ancho"])), 2), "ref": w["tags"].get("ref", ""),
-                         "nombre": w["tags"].get("name", ""), "tipo": R.tipo_base(w["tags"]),
+                         "nombre": "" if preset.get("vias_sin_nombre") else w["tags"].get("name", ""), "tipo": R.tipo_base(w["tags"]),
                          "puente": int(r["puente"].any()), "tunel": int(r["tunel"].any())})
         procesadas.append(r)
     print(f"      {len(vias_out)} vías secundarias")
@@ -223,7 +288,7 @@ def main():
     H = Hf.reshape(H.shape)
     bosque = None
     if preset.get("arboles_osm"):
-        bosque = osm.mascara_bosque(bbox, os.path.join(a.cache, "osm"), utm, gxs, gys)
+        bosque = osm.mascara_bosque(bbox, os.path.join(a.cache, "osm"), utm, gxs, gys, parques=preset.get("parques", False))
         print(f"      bosque OSM: {100 * bosque.mean():.1f} % de la zona")
     teselas = []
     nt = int(TESELA / PASO_TERRENO)
@@ -279,7 +344,7 @@ def main():
                   ensure_ascii=False, separators=(",", ":"))
     zona = {"zona": a.zona, "bbox_wgs84": bbox, "crs": "EPSG:25830 (ETRS89 / UTM 30N)", "origen_utm": [E0, N0],
             "convenio": "X=E-E0, Z=N0-N, Y=altitud (m). Escala 1:1.",
-            "mdt": fuente_mdt, "osm": "© colaboradores de OpenStreetMap (ODbL), vía Overpass API",
+            "mdt": fuente_mdt, "osm": preset.get("fuente_osm", "© colaboradores de OpenStreetMap (ODbL), vía Overpass API"),
             "terreno": {"paso": PASO_TERRENO, "tesela": TESELA, "teselas": teselas,
                         "alt_min": float(H.min()), "alt_max": float(H.max())},
             "generado": time.strftime("%Y-%m-%d %H:%M")}

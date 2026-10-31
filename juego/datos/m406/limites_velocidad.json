@@ -1,0 +1,556 @@
+{
+ "rutas": [
+  {
+   "id": 0,
+   "nombre": "M-406 Alcorcón (A-5) → Leganés",
+   "longitud_km": 10.588,
+   "tramos": [
+    {
+     "km_ini": 0.0,
+     "km_fin": 0.398,
+     "limite": 90,
+     "sentido": "ida",
+     "fuente": "por_defecto_legal"
+    },
+    {
+     "km_ini": 0.0,
+     "km_fin": 0.186,
+     "limite": 50,
+     "sentido": "vuelta",
+     "fuente": "osm",
+     "osm_way": 244403635
+    },
+    {
+     "km_ini": 0.186,
+     "km_fin": 0.514,
+     "limite": 70,
+     "sentido": "vuelta",
+     "fuente": "osm",
+     "osm_way": 27886854
+    },
+    {
+     "km_ini": 0.398,
+     "km_fin": 0.514,
+     "limite": 90,
+     "sentido": "ida",
+     "fuente": "osm",
+     "osm_way": 64737466
+    },
+    {
+     "km_ini": 0.514,
+     "km_fin": 1.114,
+     "limite": 90,
+     "sentido": "ambos",
+     "fuente": "osm",
+     "osm_way": 64737465
+    },
+    {
+     "km_ini": 1.114,
+     "km_fin": 1.356,
+     "limite": 70,
+     "sentido": "ida",
+     "fuente": "osm",
+     "osm_way": 359883195
+    },
+    {
+     "km_ini": 1.114,
+     "km_fin": 1.356,
+     "limite": 90,
+     "sentido": "vuelta",
+     "fuente": "osm",
+     "osm_way": 28906069
+    },
+    {
+     "km_ini": 1.356,
+     "km_fin": 1.734,
+     "limite": 90,
+     "sentido": "ambos",
+     "fuente": "osm",
+     "osm_way": 37780194
+    },
+    {
+     "km_ini": 1.734,
+     "km_fin": 1.834,
+     "limite": 80,
+     "sentido": "ida",
+     "fuente": "osm",
+     "osm_way": 257259339
+    },
+    {
+     "km_ini": 1.734,
+     "km_fin": 1.834,
+     "limite": 90,
+     "sentido": "vuelta",
+     "fuente": "osm",
+     "osm_way": 244402285
+    },
+    {
+     "km_ini": 1.834,
+     "km_fin": 2.22,
+     "limite": 80,
+     "sentido": "ambos",
+     "fuente": "osm",
+     "osm_way": 257259339
+    },
+    {
+     "km_ini": 2.22,
+     "km_fin": 2.302,
+     "limite": 90,
+     "sentido": "ida",
+     "fuente": "por_defecto_legal"
+    },
+    {
+     "km_ini": 2.22,
+     "km_fin": 2.52,
+     "limite": 80,
+     "sentido": "vuelta",
+     "fuente": "osm",
+     "osm_way": 244402323
+    },
+    {
+     "km_ini": 2.302,
+     "km_fin": 3.254,
+     "limite": 90,
+     "sentido": "ida",
+     "fuente": "osm",
+     "osm_way": 257259341
+    },
+    {
+     "km_ini": 2.52,
+     "km_fin": 3.254,
+     "limite": 90,
+     "sentido": "vuelta",
+     "fuente": "por_defecto_legal"
+    },
+    {
+     "km_ini": 3.254,
+     "km_fin": 3.468,
+     "limite": 90,
+     "sentido": "ambos",
+     "fuente": "por_defecto_legal"
+    },
+    {
+     "km_ini": 3.468,
+     "km_fin": 3.532,
+     "limite": 90,
+     "sentido": "ida",
+     "fuente": "osm",
+     "osm_way": 244402312
+    },
+    {
+     "km_ini": 3.468,
+     "km_fin": 3.532,
+     "limite": 90,
+     "sentido": "vuelta",
+     "fuente": "por_defecto_legal"
+    },
+    {
+     "km_ini": 3.532,
+     "km_fin": 8.608,
+     "limite": 90,
+     "sentido": "ambos",
+     "fuente": "osm",
+     "osm_way": 244402312
+    },
+    {
+     "km_ini": 8.608,
+     "km_fin": 8.664,
+     "limite": 90,
+     "sentido": "ida",
+     "fuente": "osm",
+     "osm_way": 31454145
+    },
+    {
+     "km_ini": 8.608,
+     "km_fin": 8.664,
+     "limite": 90,
+     "sentido": "vuelta",
+     "fuente": "por_defecto_legal"
+    },
+    {
+     "km_ini": 8.664,
+     "km_fin": 8.696,
+     "limite": 90,
+     "sentido": "ambos",
+     "fuente": "por_defecto_legal"
+    },
+    {
+     "km_ini": 8.696,
+     "km_fin": 9.126,
+     "limite": 90,
+     "sentido": "ida",
+     "fuente": "por_defecto_legal"
+    },
+    {
+     "km_ini": 8.696,
+     "km_fin": 9.126,
+     "limite": 50,
+     "sentido": "vuelta",
+     "fuente": "osm",
+     "osm_way": 1176602863
+    },
+    {
+     "km_ini": 9.126,
+     "km_fin": 9.204,
+     "limite": 90,
+     "sentido": "ambos",
+     "fuente": "por_defecto_legal"
+    },
+    {
+     "km_ini": 9.204,
+     "km_fin": 9.274,
+     "limite": 40,
+     "sentido": "ida",
+     "fuente": "osm",
+     "osm_way": 338006631
+    },
+    {
+     "km_ini": 9.204,
+     "km_fin": 9.274,
+     "limite": 90,
+     "sentido": "vuelta",
+     "fuente": "por_defecto_legal"
+    },
+    {
+     "km_ini": 9.274,
+     "km_fin": 9.336,
+     "limite": 50,
+     "sentido": "ambos",
+     "fuente": "osm",
+     "osm_way": 889921783
+    },
+    {
+     "km_ini": 9.336,
+     "km_fin": 9.584,
+     "limite": 90,
+     "sentido": "ida",
+     "fuente": "osm",
+     "osm_way": 30994503
+    },
+    {
+     "km_ini": 9.336,
+     "km_fin": 9.394,
+     "limite": 50,
+     "sentido": "vuelta",
+     "fuente": "osm",
+     "osm_way": 246726035
+    },
+    {
+     "km_ini": 9.394,
+     "km_fin": 9.584,
+     "limite": 70,
+     "sentido": "vuelta",
+     "fuente": "osm",
+     "osm_way": 246726049
+    },
+    {
+     "km_ini": 9.584,
+     "km_fin": 9.606,
+     "limite": 90,
+     "sentido": "ambos",
+     "fuente": "osm",
+     "osm_way": 30994503
+    },
+    {
+     "km_ini": 9.606,
+     "km_fin": 9.734,
+     "limite": 70,
+     "sentido": "ida",
+     "fuente": "osm",
+     "osm_way": 338006595
+    },
+    {
+     "km_ini": 9.606,
+     "km_fin": 9.83,
+     "limite": 90,
+     "sentido": "vuelta",
+     "fuente": "osm",
+     "osm_way": 30994500
+    },
+    {
+     "km_ini": 9.734,
+     "km_fin": 9.83,
+     "limite": 40,
+     "sentido": "ida",
+     "fuente": "osm",
+     "osm_way": 338006604
+    },
+    {
+     "km_ini": 9.83,
+     "km_fin": 9.904,
+     "limite": 50,
+     "sentido": "ambos",
+     "fuente": "osm",
+     "osm_way": 663773953
+    },
+    {
+     "km_ini": 9.904,
+     "km_fin": 10.018,
+     "limite": 90,
+     "sentido": "ida",
+     "fuente": "por_defecto_legal"
+    },
+    {
+     "km_ini": 9.904,
+     "km_fin": 9.936,
+     "limite": 50,
+     "sentido": "vuelta",
+     "fuente": "osm",
+     "osm_way": 246726043
+    },
+    {
+     "km_ini": 9.936,
+     "km_fin": 10.018,
+     "limite": 70,
+     "sentido": "vuelta",
+     "fuente": "osm",
+     "osm_way": 246726029
+    },
+    {
+     "km_ini": 10.018,
+     "km_fin": 10.338,
+     "limite": 90,
+     "sentido": "ambos",
+     "fuente": "por_defecto_legal"
+    },
+    {
+     "km_ini": 10.338,
+     "km_fin": 10.588,
+     "limite": 50,
+     "sentido": "ida",
+     "fuente": "osm",
+     "osm_way": 338006648
+    },
+    {
+     "km_ini": 10.338,
+     "km_fin": 10.588,
+     "limite": 90,
+     "sentido": "vuelta",
+     "fuente": "por_defecto_legal"
+    }
+   ],
+   "cobertura_osm_pct": {
+    "ida": 83.7,
+    "vuelta": 82.1
+   },
+   "tramos_pequenos_absorbidos": [
+    {
+     "km_ini": 1.27,
+     "km_fin": 1.298,
+     "limite": 40,
+     "fuente": "osm"
+    },
+    {
+     "km_ini": 1.298,
+     "km_fin": 1.356,
+     "limite": 90,
+     "fuente": "por_defecto_legal"
+    },
+    {
+     "km_ini": 4.456,
+     "km_fin": 4.458,
+     "limite": 90,
+     "fuente": "por_defecto_legal"
+    },
+    {
+     "km_ini": 6.834,
+     "km_fin": 6.836,
+     "limite": 50,
+     "fuente": "osm"
+    },
+    {
+     "km_ini": 1.298,
+     "km_fin": 1.356,
+     "limite": 90,
+     "fuente": "por_defecto_legal",
+     "sentido": "vuelta"
+    },
+    {
+     "km_ini": 4.24,
+     "km_fin": 4.256,
+     "limite": 90,
+     "fuente": "por_defecto_legal",
+     "sentido": "vuelta"
+    },
+    {
+     "km_ini": 9.336,
+     "km_fin": 9.394,
+     "limite": 40,
+     "fuente": "osm",
+     "sentido": "vuelta"
+    },
+    {
+     "km_ini": 9.904,
+     "km_fin": 9.936,
+     "limite": 40,
+     "fuente": "osm",
+     "sentido": "vuelta"
+    }
+   ]
+  },
+  {
+   "id": 1,
+   "nombre": "M-406 Leganés → A-4",
+   "longitud_km": 3.162,
+   "tramos": [
+    {
+     "km_ini": 0.0,
+     "km_fin": 0.076,
+     "limite": 90,
+     "sentido": "ambos",
+     "fuente": "por_defecto_legal"
+    },
+    {
+     "km_ini": 0.076,
+     "km_fin": 1.2,
+     "limite": 90,
+     "sentido": "ida",
+     "fuente": "osm",
+     "osm_way": 23605801
+    },
+    {
+     "km_ini": 0.076,
+     "km_fin": 2.026,
+     "limite": 90,
+     "sentido": "vuelta",
+     "fuente": "por_defecto_legal"
+    },
+    {
+     "km_ini": 1.2,
+     "km_fin": 1.434,
+     "limite": 70,
+     "sentido": "ida",
+     "fuente": "osm",
+     "osm_way": 222299447
+    },
+    {
+     "km_ini": 1.434,
+     "km_fin": 1.7,
+     "limite": 90,
+     "sentido": "ida",
+     "fuente": "osm",
+     "osm_way": 45330171
+    },
+    {
+     "km_ini": 1.7,
+     "km_fin": 1.9,
+     "limite": 70,
+     "sentido": "ida",
+     "fuente": "osm",
+     "osm_way": 23605793
+    },
+    {
+     "km_ini": 1.9,
+     "km_fin": 2.026,
+     "limite": 40,
+     "sentido": "ida",
+     "fuente": "osm",
+     "osm_way": 222299453
+    },
+    {
+     "km_ini": 2.026,
+     "km_fin": 2.092,
+     "limite": 50,
+     "sentido": "ambos",
+     "fuente": "osm",
+     "osm_way": 23605756
+    },
+    {
+     "km_ini": 2.092,
+     "km_fin": 2.38,
+     "limite": 90,
+     "sentido": "ida",
+     "fuente": "osm",
+     "osm_way": 894048191
+    },
+    {
+     "km_ini": 2.092,
+     "km_fin": 2.38,
+     "limite": 70,
+     "sentido": "vuelta",
+     "fuente": "osm",
+     "osm_way": 1287818251
+    },
+    {
+     "km_ini": 2.38,
+     "km_fin": 2.61,
+     "limite": 90,
+     "sentido": "ambos",
+     "fuente": "osm",
+     "osm_way": 894048191
+    },
+    {
+     "km_ini": 2.61,
+     "km_fin": 2.69,
+     "limite": 90,
+     "sentido": "ida",
+     "fuente": "por_defecto_legal"
+    },
+    {
+     "km_ini": 2.61,
+     "km_fin": 2.69,
+     "limite": 90,
+     "sentido": "vuelta",
+     "fuente": "osm",
+     "osm_way": 23605763
+    },
+    {
+     "km_ini": 2.69,
+     "km_fin": 3.026,
+     "limite": 90,
+     "sentido": "ambos",
+     "fuente": "por_defecto_legal"
+    },
+    {
+     "km_ini": 3.026,
+     "km_fin": 3.162,
+     "limite": 40,
+     "sentido": "ambos",
+     "fuente": "osm",
+     "osm_way": 27805488
+    }
+   ],
+   "cobertura_osm_pct": {
+    "ida": 83.2,
+    "vuelta": 26.7
+   },
+   "tramos_pequenos_absorbidos": [
+    {
+     "km_ini": 1.324,
+     "km_fin": 1.35,
+     "limite": 40,
+     "fuente": "osm"
+    },
+    {
+     "km_ini": 1.35,
+     "km_fin": 1.394,
+     "limite": 50,
+     "fuente": "osm"
+    },
+    {
+     "km_ini": 1.394,
+     "km_fin": 1.434,
+     "limite": 90,
+     "fuente": "por_defecto_legal"
+    },
+    {
+     "km_ini": 1.35,
+     "km_fin": 1.394,
+     "limite": 50,
+     "fuente": "osm",
+     "sentido": "vuelta"
+    }
+   ]
+  }
+ ],
+ "notas": "Límites reales de OpenStreetMap (maxspeed, maxspeed:forward/backward) emparejados con cada muestra de la ruta (cada 2 m: la vía OSM de la misma ref más cercana a ≤15 m con la misma orientación; en calzadas separadas, la calzada contraria de la misma ref a ≤45 m da el límite de 'vuelta'; en rotondas sin ref, la carretera más cercana). 'ida' = km creciente (Alcorcón (A-5) → A-4). Donde OSM no tiene maxspeed: genérico legal, fuente='por_defecto_legal' (NO es una señal real; el juego lo pinta tenue y con *): 90 km/h en carretera convencional fuera de poblado, 50 dentro de poblado (punto dentro de un polígono landuse=residential de OSM). Tramos de menos de 60 m se absorben en el contiguo (lista en 'tramos_pequenos_absorbidos'). No hay señales de velocidad mapeadas como nodo en la zona. Datos © colaboradores de OpenStreetMap, ODbL.",
+ "proyeccion": "WGS84 → ETRS89 / UTM 30N (EPSG:25830), origen E0=436000, N0=4465000; X_juego = E − 436000, Z_juego = 4465000 − N",
+ "consulta_osm_fecha": "2026-10-31T17:29:02Z",
+ "consulta_osm_url": "https://download.geofabrik.de/europe/spain/m406_bbox.osm.pbf",
+ "bbox_wgs84": [
+  40.28,
+  -3.84,
+  40.38,
+  -3.66
+ ]
+}

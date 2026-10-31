@@ -1,0 +1,38 @@
+{
+ "M-406 Alcorcón (A-5) → Leganés": {
+  "longitud_km": 10.588,
+  "alt_min": 640.0,
+  "alt_max": 693.9,
+  "alt_inicio": 681.0,
+  "alt_fin": 642.8,
+  "desnivel_subida": 44.0,
+  "desnivel_bajada": 82.2,
+  "pendiente_max_puntual": 4.8,
+  "pendiente_max_100m": -4.4,
+  "km_pendiente_max_100m": 7.97,
+  "pendiente_max_1km": -2.8,
+  "km_pendiente_max_1km": 7.56,
+  "radio_min_m": 17.2,
+  "curvas_radio_menor_30m": 9,
+  "metros_puente": 358.0,
+  "metros_tunel": 0.0
+ },
+ "M-406 Leganés → A-4": {
+  "longitud_km": 3.164,
+  "alt_min": 605.0,
+  "alt_max": 616.0,
+  "alt_inicio": 616.0,
+  "alt_fin": 614.0,
+  "desnivel_subida": 10.1,
+  "desnivel_bajada": 12.1,
+  "pendiente_max_puntual": 6.3,
+  "pendiente_max_100m": 5.5,
+  "km_pendiente_max_100m": 2.72,
+  "pendiente_max_1km": 0.9,
+  "km_pendiente_max_1km": 2.16,
+  "radio_min_m": 20.0,
+  "curvas_radio_menor_30m": 7,
+  "metros_puente": 346.0,
+  "metros_tunel": 0.0
+ }
+}

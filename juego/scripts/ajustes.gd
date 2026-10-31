@@ -3,7 +3,7 @@ extends Node
 
 const ZONA_POR_DEFECTO := "navacerrada"
 ## Zonas incluidas: carpeta en res://datos/ → nombre en el menú
-const ZONAS := {"navacerrada": "Puerto de Navacerrada (Madrid/Segovia)", "a308": "A-308 Iznalloz – Darro (Granada)", "gr8101": "GR-8101 Sierra de Baza (Granada)"}
+const ZONAS := {"navacerrada": "Puerto de Navacerrada (Madrid/Segovia)", "a308": "A-308 Iznalloz – Darro (Granada)", "gr8101": "GR-8101 Sierra de Baza (Granada)", "m406": "M-406"}
 
 # --- opciones de la partida (las rellena el menú) ---
 var zona := ZONA_POR_DEFECTO
