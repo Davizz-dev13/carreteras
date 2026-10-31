@@ -69,18 +69,23 @@ func preparar(d: MaDatos) -> void:
 	Ajustes.superficie = sup
 	mat_terreno.vertex_color_use_as_albedo = true
 	mat_terreno.roughness = 1.0
+	mat_terreno.metallic_specular = 0.0
 	mat_asfalto.albedo_color = Color(0.21, 0.21, 0.2)
 	mat_asfalto.roughness = 0.95
 	mat_asfalto.metallic_specular = 0.15
 	mat_asfalto_v.albedo_color = Color(0.17, 0.17, 0.17)
 	mat_asfalto_v.roughness = 0.92
 	mat_asfalto_v.metallic_specular = 0.15
-	mat_talud.albedo_color = Color(0.42, 0.38, 0.27)
+	mat_talud.albedo_color = Color(0.27, 0.27, 0.18)
 	mat_talud.roughness = 1.0
+	mat_talud.metallic_specular = 0.0
 	mat_marca.albedo_color = Color(0.92, 0.92, 0.9)
 	mat_marca.roughness = 0.6
-	mat_tunel.albedo_color = Color(0.32, 0.31, 0.29)
-	mat_tunel.roughness = 1.0
+	mat_marca.metallic_specular = 0.1
+	# túnel: sin luz del cielo ni reflejos (medido: con el material normal las paredes salían azul claro, reflejando
+	# el cielo); sin sombreado, gris medio como un túnel iluminado
+	mat_tunel.albedo_color = Color(0.20, 0.195, 0.18)
+	mat_tunel.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	mat_tunel.cull_mode = BaseMaterial3D.CULL_DISABLED
 	mat_bionda.albedo_color = Color(0.26, 0.265, 0.27)
 	mat_bionda.metallic_specular = 0.0
@@ -507,9 +512,11 @@ static func _malla_arbol(conifera: bool) -> ArrayMesh:
 	var m_copa := StandardMaterial3D.new()
 	m_copa.albedo_color = Color(0.12, 0.24, 0.12) if conifera else Color(0.20, 0.27, 0.13)
 	m_copa.roughness = 1.0
+	m_copa.metallic_specular = 0.0
 	var m_tronco := StandardMaterial3D.new()
 	m_tronco.albedo_color = Color(0.36, 0.25, 0.17)
 	m_tronco.roughness = 1.0
+	m_tronco.metallic_specular = 0.0
 	var copa: PrimitiveMesh
 	var alto_copa := 9.0
 	if conifera:

@@ -587,12 +587,15 @@ func _captura() -> void:
 	coche.reset_physics_interpolation()
 	cam_iniciada = false
 	_camara(0.016)
-	if Ajustes.args.has("cam_alto"):
-		cam.global_position += Vector3.UP * float(Ajustes.args["cam_alto"])
-		cam.look_at(coche.position + coche.adelante() * float(Ajustes.args.get("cam_mira", "200")), Vector3.UP)
 	_hud()
 	for i in 10:
 		await get_tree().process_frame
+	if Ajustes.args.has("cam_alto"):
+		cargado = false     # que _process no vuelva a colocar la cámara
+		cam.global_position = coche.position - coche.adelante() * 40.0 + Vector3.UP * float(Ajustes.args["cam_alto"])
+		cam.look_at(coche.position + coche.adelante() * float(Ajustes.args.get("cam_mira", "200")), Vector3.UP)
+		for i in 3:
+			await get_tree().process_frame
 	await RenderingServer.frame_post_draw
 	get_viewport().get_texture().get_image().save_png(Ajustes.args.get("salida", "user://ma_captura.png"))
 	for c in trafico.coches:

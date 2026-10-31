@@ -8,10 +8,10 @@ render_mode diffuse_lambert, specular_disabled;
 uniform sampler2D orto : source_color, filter_linear_mipmap, repeat_disable;
 uniform sampler2D detalle : filter_linear_mipmap, repeat_enable;
 uniform vec4 marco;            // x0, z0, x1, z1 (m, coordenadas del juego) que cubre la imagen
-uniform float saturacion = 1.0;
-uniform float contraste = 1.06;
-uniform float brillo = 1.12;
-uniform vec3 tinte = vec3(1.06, 1.0, 0.86);   // compensa la luz azulada del cielo
+uniform float saturacion = 1.25;
+uniform float contraste = 1.12;
+uniform float brillo = 0.92;
+uniform vec3 tinte = vec3(1.12, 1.0, 0.74);   // compensa la luz azulada del cielo
 uniform float oclusion = 0.65;   // menos luz ambiente (azul) del cielo sobre el suelo
 uniform float cerca_ini = 150.0;
 uniform float cerca_fin = 500.0;
