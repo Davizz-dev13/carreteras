@@ -1,0 +1,38 @@
+{
+ "zona": "m406",
+ "paso": 100.0,
+ "ni": 661,
+ "nj": 641,
+ "x0": -33000.0,
+ "z0": -32000.0,
+ "marco_zona": [
+  -8000.0,
+  -7000.0,
+  8000.0,
+  7000.0
+ ],
+ "marco_lejos": [
+  -33000.0,
+  -32000.0,
+  33000.0,
+  32000.0
+ ],
+ "orto_cerca_px": [
+  3264,
+  2856
+ ],
+ "orto_lejos_px": [
+  2048,
+  1984
+ ],
+ "m_por_px_cerca": 4.9,
+ "m_por_px_lejos": 32.2,
+ "cota_nieve": 1550,
+ "fuentes": {
+  "relieve": "REAL: IGN MDT25 (CNIG, WCS servicios.idee.es Elevacion25830_25) remuestreado a 100 m por el servicio — CC BY 4.0 scne.es",
+  "suelo": "REAL: IGN PNOA máxima actualidad (WMS www.ign.es/wms-inspire/pnoa-ma) — CC BY 4.0 scne.es; ~4.9 m/px en la zona, ~32 m/px en el entorno",
+  "nieve": "SUPUESTO: Aproximación: misma cota que el Guadarrama (~1.500-1.600 m en pleno invierno). La M-406 va a 600-700 m y en su entorno (25 km) no hay terreno tan alto, así que en invierno no se ve nieve aquí. No es la nieve de un día concreto.",
+  "detalle_suelo": "SUPUESTO: textura de ruido procedural que solo varía el brillo de cerca (no añade información)",
+  "cielo_niebla": "SUPUESTO: cielo y bruma genéricos de Godot (no es el tiempo real)"
+ }
+}

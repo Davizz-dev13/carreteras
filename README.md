@@ -32,6 +32,18 @@ parado, L2 es marcha atrás) · joystick izquierdo girar (analógico, con zona m
 En el menú y en la pausa, la cruceta mueve el foco y ✕ pulsa. Teclado y mando se pueden usar a la vez: el teclado
 funciona exactamente igual que antes.
 
+## ▶ Versión para Windows (.exe)
+
+**[Carreteras-windows.zip](https://github.com/Davizz-dev13/carreteras/releases/download/windows-latest/Carreteras-windows.zip)** — se
+regenera sola con cada cambio (GitHub Actions, `.github/workflows/windows.yml`, release `windows-latest`). Descomprime y abre
+`Carreteras.exe`. No está firmado: si Windows SmartScreen avisa, "Más información" → "Ejecutar de todas formas".
+- Renderizador Forward+ (Vulkan; si no hay Vulkan, Godot prueba D3D12 y luego OpenGL), pantalla completa, MSAA 4x. La web sigue en
+  Compatibility (WebGL 2) exactamente igual (`rendering_method.windows` / `.web` en `project.godot`).
+- **Paisaje real solo en el .exe** (menú: Gráficos alto/bajo, Estación verano/invierno): relieve lejano IGN MDT25 hasta 25 km y
+  color del suelo con la ortofoto PNOA (`scripts/paisaje.gd`, datos en `datos/<zona>/paisaje/`, generados con
+  `python pipeline/paisaje.py --zona <zona>`; qué es real y qué es aproximado: `paisaje.json` de cada zona). La exportación web los
+  excluye (`exclude_filter`) y en el navegador el paisaje no se activa. Filtro anisótropo del suelo activado en Windows.
+
 ## 1. Estructura
 
 ```

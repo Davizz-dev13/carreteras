@@ -125,6 +125,7 @@ func _ready() -> void:
 	camara.selected = Ajustes.camara
 	opciones.add_child(camara)
 	col.add_child(opciones)
+	col.add_child(Paisaje.fila_menu())   # Gráficos alto/bajo y Estación (paisaje.gd; oculto en la web)
 	var boton := Button.new()
 	boton.text = "  ¡A conducir!  "
 	boton.add_theme_font_size_override("font_size", 22)

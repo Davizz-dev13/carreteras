@@ -3,7 +3,7 @@ class_name Mundo
 extends Node3D
 
 
-var mat_terreno := StandardMaterial3D.new()
+var mat_terreno = StandardMaterial3D.new()   # en Gráficos alto (solo .exe) lo sustituye el shader del paisaje real (paisaje.gd)
 var mat_asfalto := StandardMaterial3D.new()
 var mat_asfalto2 := StandardMaterial3D.new()
 var mat_marca := StandardMaterial3D.new()
@@ -31,6 +31,10 @@ func construir() -> void:
 	mat_copa.roughness = 1.0
 	mat_tronco.albedo_color = Color(0.36, 0.25, 0.17)
 	_cielo()
+	mat_terreno = Paisaje.material_terreno(mat_terreno)
+	var paisaje := Paisaje.new()
+	add_child(paisaje)
+	paisaje.preparar(self, mat_terreno)
 	# terreno, carreteras y pinos: por streaming (solo una ventana alrededor del coche, ver mapa_streaming.gd)
 	streaming = MapaStreaming.new()
 	streaming.name = "Streaming"

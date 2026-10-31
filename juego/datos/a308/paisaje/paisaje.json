@@ -1,0 +1,38 @@
+{
+ "zona": "a308",
+ "paso": 100.0,
+ "ni": 821,
+ "nj": 661,
+ "x0": -41000.0,
+ "z0": -33000.0,
+ "marco_zona": [
+  -16000.0,
+  -8000.0,
+  16000.0,
+  8000.0
+ ],
+ "marco_lejos": [
+  -41000.0,
+  -33000.0,
+  41000.0,
+  33000.0
+ ],
+ "orto_cerca_px": [
+  4096,
+  2048
+ ],
+ "orto_lejos_px": [
+  2048,
+  1648
+ ],
+ "m_por_px_cerca": 7.81,
+ "m_por_px_lejos": 40.0,
+ "cota_nieve": 1700,
+ "fuentes": {
+  "relieve": "REAL: IGN MDT25 (CNIG, WCS servicios.idee.es Elevacion25830_25) remuestreado a 100 m por el servicio — CC BY 4.0 scne.es",
+  "suelo": "REAL: IGN PNOA máxima actualidad (WMS www.ign.es/wms-inspire/pnoa-ma) — CC BY 4.0 scne.es; ~7.8 m/px en la zona, ~40 m/px en el entorno",
+  "nieve": "SUPUESTO: Aproximación: por encima de ~1.600-1.800 m (Sierra Harana / Sierra Arana, más de 1.900 m). La A-308 va mucho más baja y casi nunca tiene nieve. No es la nieve de un día concreto.",
+  "detalle_suelo": "SUPUESTO: textura de ruido procedural que solo varía el brillo de cerca (no añade información)",
+  "cielo_niebla": "SUPUESTO: cielo y bruma genéricos de Godot (no es el tiempo real)"
+ }
+}
