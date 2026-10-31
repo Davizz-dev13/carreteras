@@ -141,8 +141,33 @@ hace falta en cada pendiente y, si activas "adaptar en curvas", frena antes de c
 cola detrás del tráfico (IDM). Sin adaptar, si vas demasiado rápido derraparás.
 
 **Tráfico**: coches en los dos sentidos, cada uno en su carril, con el *Intelligent Driver Model* (Treiber, 2000)
-y velocidad máxima de curva; un 12 % son vehículos lentos y se forman colas detrás. Solo existen a ±1,3 km del
-jugador (máx. 44) para que el portátil vaya ligero.
+y velocidad máxima de curva. Solo existen a ±1,3 km del jugador (máx. 44) para que el portátil vaya ligero.
+
+**Tráfico: velocidades** (`trafico.gd`, `conductor()`). Cada conductor quiere ir a *límite × factor* (el factor es
+suyo y sigue los cambios de límite de la vía, frenando con calma antes de uno más bajo), y toma las curvas con su
+propia aceleración lateral. Reparto en una vía de 90 (semilla fija, siempre igual):
+
+| | parte | factor | en una de 90 |
+|---|---|---|---|
+| normales | 90 % | normal, media 0,995, desv. 0,12 (recorte 0,72–1,32) | p10 ≈ 76, p50 ≈ 90, p90 ≈ 104 km/h |
+| lentos (furgonetas, coches viejos, tranquilos) | 8 % | 0,72–0,86 | 65–77 km/h |
+| muy lentos | 2 % | 0,55–0,65 | 50–59 km/h |
+
+- **Dato real**: en carreteras convencionales de 90 km/h en España el **44 %** de turismos y furgonetas en flujo libre
+  supera el límite (ETSC, *PIN Flash 36: Reducing speeding in Europe*, 2019, fig. 4.3, datos del Ministerio del
+  Interior). La media se ajusta para que el total salga ≈ 44 %.
+- **Dato real**: límite legal de 80 km/h para el «resto de vehículos» en convencionales (RD 1514/2018, DGT) y
+  velocidades medias de 70–90 km/h en carreteras de dos carriles (M. G. Garrido, *Estudio de velocidades*, 1999,
+  carreteros.org) → clase lenta.
+- **Aproximación** (sin dato publicado a mano): la desviación del 12 % (≈ 11 km/h), el 2 % de muy lentos, y que en
+  vías de límite bajo (travesías de 50) la dispersión se estrecha: factor efectivo = 1 + (factor − 1)·k, con
+  k = (límite − 20)/70 entre 0,45 y 1.
+- **Curvas (aproximación)**: aceleración lateral por conductor log-normal, mediana 2,8 m/s², p10–p90 ≈ 2,2–3,6,
+  límites 1,8–4,0 (del orden de lo medido con turismos en curvas: Xu et al. 2015, *Math. Probl. Eng.* 494130;
+  Reymond et al. 2001); los que van más rápido suelen apurar más en curva (correlación 0,5). Ningún coche pasa de
+  la velocidad que su propia aceleración lateral permite en cada curva.
+- Medido con `pruebas/prueba_trafico.tscn` (tráfico 30 %), velocidad deseada en tramos de 90, p10/p50/p90:
+  antes 50/84/93 km/h (25–27 % por encima del límite), ahora 71/87–89/100–101 km/h (37–44 %).
 
 ## 4. Siguiente paso: toda España
 

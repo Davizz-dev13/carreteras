@@ -13,7 +13,28 @@ const A_MAX := 1.4            # IDM: aceleración máxima (m/s²)
 const B_COMODA := 2.2         # IDM: frenada cómoda (m/s²)
 const T_SEG := 1.5            # IDM: tiempo de seguridad (s)
 const S0 := 3.0               # IDM: distancia mínima parado (m)
-const A_LAT := 2.6            # aceleración lateral que acepta un conductor normal (m/s²)
+const A_LAT := 2.6            # aceleración lateral de referencia (m/s²); cada conductor lleva la suya (alat)
+
+## --- Velocidad deseada de cada conductor (ver README, «Tráfico: velocidades») ---
+## Dato real: en carreteras convencionales españolas de 90 km/h, el 44 % de los turismos y furgonetas en flujo libre
+## va por encima del límite (ETSC, PIN Flash 36 «Reducing speeding in Europe», 2019, fig. 4.3, datos del Ministerio
+## del Interior). La dispersión no la publica ese informe: se usa una desviación típica del 12 % del límite
+## (≈ 11 km/h en una de 90; APROXIMACIÓN, del orden de las medidas en carreteras de dos carriles europeas) y la media
+## se ajusta para que salga ese 44 %. Clase lenta (furgonetas, coches viejos, gente tranquila): el límite legal de
+## 80 km/h para «resto de vehículos» en convencionales (RD 1514/2018) y las medias de 70–90 km/h en carreteras de dos
+## carriles (Garrido, «Estudio de velocidades», 1999) → 8 % entre el 72 y el 86 % del límite. Muy lentos («los que
+## van a 50 en una de 90»): 2 %, entre el 55 y el 65 % (APROXIMACIÓN, sin dato publicado). En vías de límite bajo
+## (travesías, 50 km/h) la desviación se estrecha (APROXIMACIÓN): factor_efectivo = 1 + (factor − 1) · k(límite).
+const P_MUY_LENTO := 0.02
+const P_LENTO := 0.08
+const SIGMA_F := 0.12         # desviación típica del factor (fracción del límite) de los conductores "normales"
+const MEDIA_F := 0.995        # media: con el 10 % de lentos, el total por encima del límite queda en ≈ 44 %
+## Curvas: cada conductor acepta una aceleración lateral distinta (APROXIMACIÓN): mediana ≈ 2,8 m/s², del 10 % al 90 %
+## ≈ 2,2–3,6 m/s², límites 1,8–4,0 (valores del orden de los medidos con turismos en curvas de carreteras de dos
+## carriles, p. ej. Xu et al. 2015, «An Experimental Study on Lateral Acceleration of Cars…», Math. Probl. Eng.;
+## Reymond et al. 2001). Los rápidos suelen apurar más en curva (correlación 0,5 con su velocidad).
+const ALAT_MIN := 1.8
+const ALAT_MAX := 4.0
 var largo := 4.9              # largo real del coche del tráfico (de su ficha)
 var ficha_trafico: Ficha
 
@@ -100,7 +121,9 @@ func _actualizar(dt: float, s_jug: float, lat_jug: float, v_jug: float, dir_jug_
 	for k in coches.size():
 		var c: Dictionary = coches[k]
 		if (cuadro + k) % 12 == 0:
-			c["vc"] = vel_curva(c["s"], c["dir"], A_LAT)
+			c["vc"] = vel_curva(c["s"], c["dir"], c.get("alat", A_LAT))
+			if c.has("f"):
+				c["v0"] = vel_deseada(c["s"], c["dir"], c["f"])
 		var dir: int = c["dir"]
 		var s: float = c["s"]
 		var hueco := 1e4
@@ -136,6 +159,8 @@ func _actualizar(dt: float, s_jug: float, lat_jug: float, v_jug: float, dir_jug_
 func crear_prueba(s: float, dir: int, v: float, fijo: bool) -> Dictionary:
 	_crear(s, dir)
 	var c: Dictionary = coches[coches.size() - 1]
+	c.erase("f")              # velocidad fija dada por la prueba, no la de su conductor
+	c["alat"] = A_LAT
 	c["v"] = v
 	c["v0"] = v
 	c["vc"] = 1e9 if fijo else c["vc"]
@@ -148,15 +173,52 @@ func _crear(s: float, dir: int) -> void:
 	var modelo := Catalogo.crear_modelo(ficha_trafico, Catalogo.color_aleatorio(ficha_trafico, rng), 1)
 	nodo.add_child(modelo)
 	add_child(nodo)
-	var lim := float(ruta.vmax[clampi(int(s / ruta.paso), 0, ruta.n - 1)]) / 3.6
-	var v0 := lim * rng.randf_range(0.8, 1.08)
-	if rng.randf() < 0.12:
-		v0 = lim * 0.55          # algún conductor lento: se forman colas detrás
-	var vc := vel_curva(s, dir, A_LAT)
-	var c := {"s": s, "dir": dir, "v": minf(v0, vc), "v0": v0, "vc": vc, "nodo": nodo, "modelo": modelo}
+	var cond := conductor()
+	var v0 := vel_deseada(s, dir, cond["f"])
+	var vc := vel_curva(s, dir, cond["alat"])
+	var c := {"s": s, "dir": dir, "v": minf(v0, vc), "v0": v0, "vc": vc, "nodo": nodo, "modelo": modelo,
+			"f": cond["f"], "alat": cond["alat"]}
 	coches.append(c)
 	_colocar(c)
 	nodo.reset_physics_interpolation()     # recién aparecido: sin interpolar desde el origen
+
+
+## Sortea un conductor: f = su velocidad deseada como fracción del límite (en una vía de 90 km/h) y alat = la
+## aceleración lateral que acepta en curva (m/s²). Usa el rng con semilla fija: el reparto es siempre el mismo.
+func conductor() -> Dictionary:
+	var u := rng.randf()
+	var z := rng.randfn(0.0, 1.0)
+	var f: float
+	if u < P_MUY_LENTO:
+		f = rng.randf_range(0.55, 0.65)
+		z = -absf(z)
+	elif u < P_MUY_LENTO + P_LENTO:
+		f = rng.randf_range(0.72, 0.86)
+		z = -absf(z)
+	else:
+		f = clampf(MEDIA_F + SIGMA_F * z, 0.72, 1.32)
+	var za := 0.5 * z + 0.866 * rng.randfn(0.0, 1.0)
+	var alat := clampf(2.8 * exp(0.19 * za), ALAT_MIN, ALAT_MAX)
+	return {"f": f, "alat": alat}
+
+
+## Límite de la vía (m/s) en s
+func limite(s: float) -> float:
+	return float(ruta.vmax[clampi(int(s / ruta.paso), 0, ruta.n - 1)]) / 3.6
+
+
+## Velocidad a la que quiere ir un conductor de factor f en s: límite × factor, con la desviación más estrecha en
+## vías lentas, y mirando los próximos 200 m para frenar con calma antes de un límite más bajo.
+func vel_deseada(s: float, dir: int, f: float) -> float:
+	var vmin := 1e9
+	var d := 0.0
+	while d <= 200.0:
+		var lim := limite(s + dir * d)
+		var k := clampf((lim * 3.6 - 20.0) / 70.0, 0.45, 1.0)
+		var vd := lim * (1.0 + (f - 1.0) * k)
+		vmin = minf(vmin, sqrt(vd * vd + 2.0 * B_COMODA * d))
+		d += 20.0
+	return vmin
 
 
 func _colocar(c: Dictionary) -> void:
