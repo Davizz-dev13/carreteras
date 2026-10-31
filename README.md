@@ -24,6 +24,14 @@ Cómo ejecutarlo en local:
 (también A D) · P piloto automático · O adelantar · L límite al adelantar · + / − velocidad · K adaptar en curvas · 9 / 0 tráfico ·
 V cámara · R volver a la carretera · Esc pausa. Pulsa el perfil de altitud o el mapa de abajo para ir a ese punto.
 
+**Mando de PS4 (DualShock 4)**, también en la web (Chrome, Edge o Firefox; pulsa un botón del mando para que el navegador
+lo detecte y sale "Mando conectado"): R2 acelerar y L2 frenar, **analógicos** (cuanto más aprietas, más gas o más freno;
+parado, L2 es marcha atrás) · joystick izquierdo girar (analógico, con zona muerta pequeña) · ✕ freno de mano (Espacio) ·
+△ piloto automático (P) · □ adelantar (O) · R1 límite al adelantar (L) · L1 adaptar en curvas (K) · cruceta ↑ ↓ velocidad
+(+ / −) y ← → tráfico (9 / 0) · ○ cámara (V) · L3 / R3 volver a la carretera (R) · OPTIONS pausa (Esc) · SHARE ayuda (H).
+En el menú y en la pausa, la cruceta mueve el foco y ✕ pulsa. Teclado y mando se pueden usar a la vez: el teclado
+funciona exactamente igual que antes.
+
 ## 1. Estructura
 
 ```

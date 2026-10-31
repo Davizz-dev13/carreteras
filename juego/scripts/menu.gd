@@ -21,6 +21,7 @@ var lbl_traf := Label.new()
 var lista_coches := OptionButton.new()
 var lista_colores := OptionButton.new()
 var ficha_txt := Label.new()
+var boton_empezar: Button
 
 
 func _ready() -> void:
@@ -128,6 +129,7 @@ func _ready() -> void:
 	boton.text = "  ¡A conducir!  "
 	boton.add_theme_font_size_override("font_size", 22)
 	boton.pressed.connect(_empezar)
+	boton_empezar = boton
 	var fila_b := HBoxContainer.new()
 	fila_b.add_child(boton)
 	var ayuda := Label.new()
@@ -138,7 +140,10 @@ func _ready() -> void:
 	var mandos := Label.new()
 	mandos.text = ("Mandos en carretera: W/↑ acelerar · S/↓ frenar (parado: marcha atrás) · " +
 		"P piloto automático · O adelantar (con el piloto) · L respetar límite al adelantar · +/− velocidad · K adaptar en curvas · 9/0 menos/más tráfico · " +
-		"V cámara · R volver a la carretera · Esc pausa (tráfico y velocidad) · H ayuda")
+		"V cámara · R volver a la carretera · Esc pausa (tráfico y velocidad) · H ayuda\n" +
+		"Mando de PS4: R2 acelerar · L2 frenar (parado: marcha atrás) · joystick izquierdo girar · ✕ freno de mano · △ piloto · □ adelantar · " +
+		"R1 límite al adelantar · L1 curvas · cruceta ↑↓ velocidad y ←→ tráfico · ○ cámara · L3/R3 volver a la carretera · OPTIONS pausa · SHARE ayuda. " +
+		"En el navegador, pulsa un botón del mando para que lo detecte; en este menú, cruceta para moverte y ✕ para elegir.")
 	mandos.autowrap_mode = TextServer.AUTOWRAP_WORD
 	mandos.modulate = Color(0.65, 0.7, 0.75)
 	col.add_child(mandos)
@@ -151,8 +156,28 @@ func _ready() -> void:
 		s.value_changed.connect(func(_v): _refrescar())
 	lista_rutas.selected = Ajustes.ruta_idx
 	_al_cambiar_ruta(Ajustes.ruta_idx)
+	# mando: con uno conectado, el foco empieza en "¡A conducir!" (cruceta para moverse, ✕ para pulsar)
+	Input.joy_connection_changed.connect(_al_cambiar_mando)
+	if not Input.get_connected_joypads().is_empty():
+		_foco_mando()
 	if Ajustes.args.has("captura") and Ajustes.args["captura"] == "menu":
 		_captura_menu()
+
+
+func _al_cambiar_mando(_id: int, conectado: bool) -> void:
+	if conectado:
+		_foco_mando()
+
+
+func _foco_mando() -> void:
+	if get_viewport().gui_get_focus_owner() == null and boton_empezar:
+		boton_empezar.grab_focus.call_deferred()
+
+
+## Con el mando aún no detectado (el navegador lo da al pulsar un botón), cualquier botón o la cruceta lo despierta
+func _input(ev: InputEvent) -> void:
+	if (ev is InputEventJoypadButton and ev.pressed) or (ev is InputEventJoypadMotion and absf(ev.axis_value) > 0.5):
+		_foco_mando()
 
 
 func _etq(t: String, ancho: float) -> Label:

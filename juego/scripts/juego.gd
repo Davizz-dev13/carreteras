@@ -51,6 +51,8 @@ var sl_traf := HSlider.new()
 var sl_vel := HSlider.new()
 var l_traf_p := Label.new()
 var l_vel_p := Label.new()
+var b_continuar := Button.new()
+var b_repetir := Button.new()
 
 
 func _ready() -> void:
@@ -86,6 +88,7 @@ func _ready() -> void:
 	cam.physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_OFF   # la cámara se mueve en _process
 	cargando.queue_free()
 	_crear_hud()
+	_mando_iniciar()
 	colisiones.juego = self
 	_reiniciar()
 	mundo.cargar_ventana(coche.position, ruta.tangente(s_ini) * dir)   # streaming: el mapa alrededor de la salida
@@ -122,6 +125,7 @@ func _reiniciar(en_inicio := true) -> void:
 		derrapes = 0
 		terminado = false
 		panel_fin.visible = false
+		get_viewport().gui_release_focus()
 		coche.v = minf(Ajustes.velocidad, 40.0) / 3.6 if piloto else 0.0
 
 
@@ -157,15 +161,25 @@ func _simular(dt: float) -> void:
 	derrapando_antes = coche.derrapando
 
 
-## Teclado o piloto automático
+## Teclado, mando o piloto automático
 func _mandos(_dt: float) -> void:
-	var acel := Input.get_action_strength("ui_up") if Input.is_action_pressed("ui_up") else 0.0
-	if Input.is_physical_key_pressed(KEY_W): acel = 1.0
-	var fren := 1.0 if (Input.is_physical_key_pressed(KEY_S) or Input.is_action_pressed("ui_down")) else 0.0
+	# teclado (igual que siempre; las flechas se leen como teclas para que el joystick no las active a saltos)
+	var acel := 1.0 if (Input.is_physical_key_pressed(KEY_W) or Input.is_physical_key_pressed(KEY_UP)) else 0.0
+	var fren := 1.0 if (Input.is_physical_key_pressed(KEY_S) or Input.is_physical_key_pressed(KEY_DOWN)) else 0.0
 	var vol := 0.0
-	if Input.is_physical_key_pressed(KEY_A) or Input.is_action_pressed("ui_left"): vol -= 1.0
-	if Input.is_physical_key_pressed(KEY_D) or Input.is_action_pressed("ui_right"): vol += 1.0
-	if Input.is_physical_key_pressed(KEY_SPACE): fren = 1.0
+	if Input.is_physical_key_pressed(KEY_A) or Input.is_physical_key_pressed(KEY_LEFT): vol -= 1.0
+	if Input.is_physical_key_pressed(KEY_D) or Input.is_physical_key_pressed(KEY_RIGHT): vol += 1.0
+	var mano := Input.is_physical_key_pressed(KEY_SPACE)
+	var tocado := acel > 0.0 or fren > 0.0 or vol != 0.0 or mano
+	# mando: gatillos analógicos y joystick; se suma al teclado (gana el que pida más; el volante del teclado manda)
+	if _leer_mando():
+		acel = maxf(acel, pad_gas)
+		fren = maxf(fren, pad_freno)
+		if vol == 0.0: vol = pad_volante
+		mano = mano or pad_mano
+		# para desconectar el piloto hace falta pisar un gatillo o mover el joystick de verdad (no la deriva del stick)
+		tocado = tocado or pad_gas > 0.05 or pad_freno > 0.05 or absf(pad_x) > 0.3 or pad_mano
+	if mano: fren = 1.0
 	if terminado:
 		coche.acelerador = 0.0
 		coche.freno = 0.6
@@ -173,7 +187,7 @@ func _mandos(_dt: float) -> void:
 		if piloto: coche.volante = _volante_piloto()
 		else: coche.volante = vol
 		return
-	if piloto and (acel > 0.0 or fren > 0.0 or vol != 0.0):
+	if piloto and tocado:
 		piloto = false            # tocar los mandos desconecta el piloto (como en un coche real)
 		_cancelar_adelantamiento("")
 	if piloto:
@@ -183,7 +197,7 @@ func _mandos(_dt: float) -> void:
 		return
 	coche.giro_directo = false
 	coche.volante = vol
-	if fren > 0.0 and coche.v < 0.3 and not Input.is_physical_key_pressed(KEY_SPACE):
+	if fren > 0.0 and coche.v < 0.3 and not mano:
 		coche.marcha_atras = true
 		coche.acelerador = fren
 		coche.freno = 0.0
@@ -191,7 +205,7 @@ func _mandos(_dt: float) -> void:
 	if acel > 0.0:
 		coche.marcha_atras = false
 	coche.acelerador = acel if not coche.marcha_atras else 0.0
-	coche.freno = fren if not coche.marcha_atras else (1.0 if acel > 0.0 else 0.0)
+	coche.freno = fren if not coche.marcha_atras else acel
 	if coche.marcha_atras and acel == 0.0 and fren == 0.0:
 		coche.freno = 0.3
 
@@ -273,9 +287,13 @@ func _fin() -> void:
 		_num(dist / maxf(tiempo, 0.1) * 3.6, 1), _num(v_max * 3.6, 0), _num(t["pendiente_max"], 1),
 		roundi(t["sube"]), roundi(t["baja"]), roundi(t["z_ini"]), roundi(t["z_fin"]), derrapes, choques]
 	panel_fin.visible = true
+	if pad_id >= 0: b_repetir.grab_focus.call_deferred()      # con el mando: ✕ repite el tramo
 
 
 func _unhandled_input(ev: InputEvent) -> void:
+	if ev is InputEventJoypadButton and ev.pressed and cargado:
+		_boton_mando(ev.button_index)
+		return
 	if not (ev is InputEventKey and ev.pressed and not ev.echo) or not cargado:
 		return
 	match ev.physical_keycode:
@@ -306,12 +324,142 @@ func _unhandled_input(ev: InputEvent) -> void:
 			Ajustes.trafico = maxf(Ajustes.trafico - 0.1, 0.0)
 
 
+# ---------------- mando (PS4 / DualShock 4 o cualquier mando "estándar" del navegador) ----------------
+# En la web, Chrome/Edge/Firefox dan el DualShock 4 con el mapeo "standard" del Gamepad API y Godot convierte
+# R2/L2 (botones analógicos 7/6 del navegador) en los ejes JOY_AXIS_TRIGGER_RIGHT/LEFT (0..1).
+const AYUDA_TECLADO := ("W/↑ acelerar · S/↓ frenar (parado: marcha atrás)\n" +
+	"P piloto · O adelantar (L: límite) · +/− velocidad · K curvas · 9/0 tráfico\n" +
+	"V cámara · R volver a la carretera · Esc pausa · H ocultar ayuda")
+const AYUDA_MANDO := ("Mando: R2 acelerar · L2 frenar (parado: marcha atrás) · joystick girar\n" +
+	"△ piloto · □ adelantar · R1 límite · L1 curvas · ↑↓ velocidad · ←→ tráfico\n" +
+	"✕ freno de mano · ○ cámara · L3 a la carretera · OPTIONS pausa · SHARE ayuda")
+const PAD_ZONA_MUERTA := 0.08     # joystick: por debajo no gira (deriva del stick)
+const PAD_ZONA_GATILLO := 0.03    # gatillos: holgura en reposo
+var pad_id := -1                  # mando que se lee (-1 = ninguno)
+var pad_nombre := ""
+var pad_x := 0.0                  # joystick izquierdo X en bruto
+var pad_volante := 0.0            # -1..1 tras zona muerta y curva
+var pad_gas := 0.0                # 0..1 (R2)
+var pad_freno := 0.0              # 0..1 (L2)
+var pad_mano := false             # ✕ freno de mano
+var pad_gatillo_neg := {}         # eje -> true si ese gatillo da −1 en reposo (algunos mandos no estándar)
+var pad_aviso_t := 0.0
+var l_mando := Label.new()
+
+
+func _mando_iniciar() -> void:
+	Input.joy_connection_changed.connect(_al_cambiar_mando)
+	var pads := Input.get_connected_joypads()
+	if not pads.is_empty():
+		_al_cambiar_mando(pads[0], true)
+
+
+func _al_cambiar_mando(id: int, conectado: bool) -> void:
+	if conectado:
+		if pad_id < 0 or not Input.get_connected_joypads().has(pad_id):
+			pad_id = id
+		pad_nombre = Input.get_joy_name(pad_id)
+		l_mando.text = "Mando conectado" + (" (%s)" % pad_nombre if pad_nombre != "" else "")
+	elif id == pad_id:
+		var pads := Input.get_connected_joypads()
+		pad_id = pads[0] if not pads.is_empty() else -1
+		l_mando.text = "Mando desconectado" if pad_id < 0 else "Mando conectado"
+		pad_gas = 0.0
+		pad_freno = 0.0
+		pad_volante = 0.0
+		pad_mano = false
+	else:
+		return
+	l_ayuda.text = AYUDA_MANDO if pad_id >= 0 else AYUDA_TECLADO
+	l_mando.visible = true
+	pad_aviso_t = 5.0
+
+
+func _aviso_mando(dt: float) -> void:
+	if pad_aviso_t <= 0.0:
+		return
+	pad_aviso_t -= dt
+	l_mando.modulate.a = clampf(pad_aviso_t, 0.0, 1.0)
+	if pad_aviso_t <= 0.0:
+		l_mando.visible = false
+
+
+## Lee el mando; devuelve false si no hay ninguno
+func _leer_mando() -> bool:
+	if pad_id < 0:
+		return false
+	pad_x = Input.get_joy_axis(pad_id, JOY_AXIS_LEFT_X)
+	pad_volante = curva_joystick(pad_x)
+	pad_gas = _gatillo(JOY_AXIS_TRIGGER_RIGHT)
+	pad_freno = _gatillo(JOY_AXIS_TRIGGER_LEFT)
+	pad_mano = Input.is_joy_button_pressed(pad_id, JOY_BUTTON_A)
+	return true
+
+
+## Joystick → volante: zona muerta y curva suave (en el centro, poco ángulo para corregir fino; al fondo, todo)
+static func curva_joystick(x: float) -> float:
+	var m := absf(x)
+	if m <= PAD_ZONA_MUERTA:
+		return 0.0
+	var u := clampf((m - PAD_ZONA_MUERTA) / (1.0 - PAD_ZONA_MUERTA), 0.0, 1.0)
+	return signf(x) * (0.45 * u + 0.55 * u * u * u)
+
+
+func _gatillo(eje: JoyAxis) -> float:
+	var g := Input.get_joy_axis(pad_id, eje)
+	if g < -0.2:
+		pad_gatillo_neg[eje] = true      # este mando da el gatillo de −1 (suelto) a +1 (a fondo)
+	if pad_gatillo_neg.get(eje, false):
+		g = (g + 1.0) * 0.5
+	g = clampf(g, 0.0, 1.0)
+	if g <= PAD_ZONA_GATILLO:
+		return 0.0
+	return (g - PAD_ZONA_GATILLO) / (1.0 - PAD_ZONA_GATILLO)
+
+
+## Botones del mando → las mismas acciones que las teclas
+func _boton_mando(b: int) -> void:
+	if pad_id < 0:
+		var pads := Input.get_connected_joypads()
+		_al_cambiar_mando(pads[0] if not pads.is_empty() else 0, true)
+	if b == JOY_BUTTON_START:                 # OPTIONS: pausa (Esc)
+		_pausa(not pausado)
+		return
+	if pausado or terminado:
+		return          # en los menús la cruceta y ✕ mueven el foco y pulsan los botones (Godot ui_*)
+	match b:
+		JOY_BUTTON_Y:                         # △ piloto automático (P)
+			piloto = not piloto
+			if not piloto: _cancelar_adelantamiento("")
+		JOY_BUTTON_X:                         # □ adelantar (O)
+			_pedir_adelantamiento()
+		JOY_BUTTON_B:                         # ○ cámara (V)
+			Ajustes.camara = 1 - Ajustes.camara
+		JOY_BUTTON_LEFT_STICK, JOY_BUTTON_RIGHT_STICK:   # L3/R3 volver a la carretera (R)
+			_reiniciar(false)
+		JOY_BUTTON_BACK:                      # SHARE ocultar/mostrar ayuda (H)
+			l_ayuda.visible = not l_ayuda.visible
+		JOY_BUTTON_LEFT_SHOULDER:             # L1 adaptar en curvas (K)
+			Ajustes.adaptar_curvas = not Ajustes.adaptar_curvas
+		JOY_BUTTON_RIGHT_SHOULDER:            # R1 respetar límite al adelantar (L)
+			Ajustes.limite_adelantar = not Ajustes.limite_adelantar
+		JOY_BUTTON_DPAD_UP:                   # cruceta ↑↓ velocidad elegida (+/−)
+			Ajustes.velocidad = minf(Ajustes.velocidad + 5.0, 200.0)
+		JOY_BUTTON_DPAD_DOWN:
+			Ajustes.velocidad = maxf(Ajustes.velocidad - 5.0, 10.0)
+		JOY_BUTTON_DPAD_RIGHT:                # cruceta ←→ tráfico (9/0)
+			Ajustes.trafico = minf(Ajustes.trafico + 0.1, 1.0)
+		JOY_BUTTON_DPAD_LEFT:
+			Ajustes.trafico = maxf(Ajustes.trafico - 0.1, 0.0)
+
+
 func _process(dt: float) -> void:
 	if not cargado:
 		return
 	mundo.actualizar_streaming(coche.position, coche.adelante())
 	_camara(dt)
 	_hud()
+	_aviso_mando(dt)
 	_telemetria()
 	_medir_fps()
 	if Ajustes.args.get("captura", "") == "video":
@@ -500,12 +648,24 @@ func _crear_hud() -> void:
 	senal.cargar(Ajustes.ruta_idx, ruta.nombre)
 	senal.visible = false
 	hud.add_child(senal)
-	l_ayuda.text = ("W/↑ acelerar · S/↓ frenar (parado: marcha atrás)\n" +
-		"P piloto · O adelantar (L: límite) · +/− velocidad · K curvas · 9/0 tráfico\n" +
-		"V cámara · R volver a la carretera · Esc pausa · H ocultar ayuda")
+	l_ayuda.text = AYUDA_TECLADO
 	l_ayuda.add_theme_font_size_override("font_size", 13)
 	var caja_a := _caja(Vector2(vs.x - 520, vs.y - 86), l_ayuda)
 	caja_a.custom_minimum_size.x = 500
+	# aviso de mando conectado (arriba, en el centro)
+	l_mando.add_theme_font_size_override("font_size", 18)
+	l_mando.add_theme_color_override("font_color", Color(0.75, 1.0, 0.8))
+	l_mando.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.8))
+	l_mando.add_theme_constant_override("outline_size", 5)
+	l_mando.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	l_mando.anchor_left = 0.5
+	l_mando.anchor_right = 0.5
+	l_mando.offset_left = -320.0
+	l_mando.offset_right = 320.0
+	l_mando.offset_top = 92.0
+	l_mando.offset_bottom = 120.0
+	l_mando.visible = false
+	hud.add_child(l_mando)
 	_crear_pausa()
 	_crear_fin()
 
@@ -568,7 +728,7 @@ func _crear_pausa() -> void:
 		v.add_child(s)
 	sl_traf.value_changed.connect(_al_cambiar_trafico)
 	sl_vel.value_changed.connect(_al_cambiar_velocidad)
-	var b1 := Button.new()
+	var b1 := b_continuar
 	b1.text = "Continuar"
 	b1.pressed.connect(func(): _pausa(false))
 	var b2 := Button.new()
@@ -602,7 +762,7 @@ func _crear_fin() -> void:
 	var v := VBoxContainer.new()
 	l_fin.add_theme_font_size_override("font_size", 19)
 	v.add_child(l_fin)
-	var b1 := Button.new()
+	var b1 := b_repetir
 	b1.text = "Repetir tramo"
 	b1.pressed.connect(func(): _reiniciar(true))
 	var b2 := Button.new()
@@ -634,6 +794,9 @@ func _pausa(on: bool) -> void:
 		sl_vel.value = Ajustes.velocidad
 		l_traf_p.text = "Tráfico: %d %%" % roundi(sl_traf.value)
 		l_vel_p.text = "Velocidad elegida: %d km/h" % roundi(sl_vel.value)
+		if pad_id >= 0: b_continuar.grab_focus.call_deferred()   # con el mando: cruceta para moverse, ✕ para elegir
+	else:
+		get_viewport().gui_release_focus()   # que Espacio / ✕ no pulsen un botón del menú mientras conduces
 
 
 # ---------------- verificación automática ----------------
@@ -1332,6 +1495,7 @@ func _saltar_a(s: float) -> void:
 	if terminado and (s_fin - s) * dir > 0.0:
 		terminado = false
 		panel_fin.visible = false
+		get_viewport().gui_release_focus()
 
 
 ## --captura=perfil: pulsa el perfil al 25 %, 50 % y 90 % y comprueba dónde aparece el coche
