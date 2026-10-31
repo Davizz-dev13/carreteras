@@ -11,6 +11,7 @@ var traf := HSlider.new()
 var chk_piloto := CheckBox.new()
 var chk_curvas := CheckBox.new()
 var chk_limite_adel := CheckBox.new()
+var chk_piloto_lim := CheckBox.new()
 var camara := OptionButton.new()
 var info := Label.new()
 var lbl_ini := Label.new()
@@ -114,6 +115,10 @@ func _ready() -> void:
 	chk_limite_adel.tooltip_text = "Si está marcado, al adelantar no pasa del límite de velocidad del tramo (y si así no le da, no adelanta)"
 	chk_limite_adel.button_pressed = Ajustes.limite_adelantar
 	opciones.add_child(chk_limite_adel)
+	chk_piloto_lim.text = "Piloto respeta límites de velocidad"
+	chk_piloto_lim.tooltip_text = "Si está marcado, el piloto automático no pasa del límite de cada tramo; si no, va a la velocidad elegida (frenando igual en las curvas)"
+	chk_piloto_lim.button_pressed = Ajustes.piloto_limites
+	opciones.add_child(chk_piloto_lim)
 	camara.add_item("Cámara de persecución")
 	camara.add_item("Cámara de cabina")
 	camara.selected = Ajustes.camara
@@ -231,6 +236,7 @@ func _empezar() -> void:
 	Ajustes.piloto = chk_piloto.button_pressed
 	Ajustes.adaptar_curvas = chk_curvas.button_pressed
 	Ajustes.limite_adelantar = chk_limite_adel.button_pressed
+	Ajustes.piloto_limites = chk_piloto_lim.button_pressed
 	Ajustes.camara = camara.selected
 	get_tree().change_scene_to_file("res://escenas/juego.tscn")
 

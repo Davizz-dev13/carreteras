@@ -258,7 +258,7 @@ func _control_velocidad(v0: float) -> void:
 
 ## v4: el piloto no pasa del límite de la señal (y frena suave antes de una señal más baja), salvo adelantando
 func _tope_limite(v0: float) -> float:
-	if adel_estado >= 2:
+	if adel_estado >= 2 or not Ajustes.piloto_limites:
 		return v0
 	return minf(v0, senal.tope_piloto(s_coche, dir))
 
@@ -420,6 +420,13 @@ func _reloj(t: float) -> String:
 	return "%d:%02d,%d" % [int(t / 60.0), int(t) % 60, int(fmod(t, 1.0) * 10.0)]
 
 
+## nombre corto para el panel de la derecha: "Arteon 2.0 TDI 150 CV DSG" -> "Arteon TDI"
+func _nombre_corto(n: String) -> String:
+	var re := RegEx.new()
+	re.compile("\\s*\\(.*?\\)|\\s+\\d+[.,]\\d+(?=\\s)|\\s+\\d+\\s*CV|\\s+DSG")
+	return re.sub(n, "", true).strip_edges()
+
+
 func _caja(pos: Vector2, hijo: Control) -> PanelContainer:
 	var p := PanelContainer.new()
 	var sb := StyleBoxFlat.new()
@@ -451,8 +458,18 @@ func _crear_hud() -> void:
 	caja_v.position = Vector2(16, get_viewport().get_visible_rect().size.y - 308)
 	l_modo.add_theme_font_size_override("font_size", 17)
 	l_modo.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	var caja_m := _caja(Vector2(get_viewport().get_visible_rect().size.x - 330, 14), l_modo)
-	caja_m.custom_minimum_size.x = 314
+	l_modo.autowrap_mode = TextServer.AUTOWRAP_OFF
+	var caja_m := _caja(Vector2.ZERO, l_modo)
+	# anclado arriba a la derecha (16 px del borde): si el texto crece, el panel crece hacia la izquierda
+	caja_m.anchor_left = 1.0
+	caja_m.anchor_right = 1.0
+	caja_m.anchor_top = 0.0
+	caja_m.anchor_bottom = 0.0
+	caja_m.grow_horizontal = Control.GROW_DIRECTION_BEGIN
+	caja_m.offset_right = -16.0
+	caja_m.offset_left = -16.0 - 250.0
+	caja_m.offset_top = 14.0
+	caja_m.offset_bottom = 14.0
 	mini_perfil.ruta = ruta
 	mini_perfil.compacto = true
 	mini_perfil.s0 = s_ini
@@ -521,8 +538,8 @@ func _hud() -> void:
 	elif adel_estado == 2: modo += "\nAdelantando…"
 	elif adel_estado == 3: modo += "\nAdelantamiento: volviendo al carril"
 	elif adel_msg_t > 0.0: modo += "\n" + adel_msg
-	l_modo.text = coche.ficha.nombre + " · %d CV\n" % roundi(coche.ficha.potencia_cv) + "%s\nVelocidad elegida: %d km/h\nAdaptar en curvas: %s\nLímite al adelantar: %s\nTráfico: %d %%\nCámara: %s" % [
-		modo, roundi(Ajustes.velocidad), "sí" if Ajustes.adaptar_curvas else "no", "respetar" if Ajustes.limite_adelantar else "no",
+	l_modo.text = _nombre_corto(coche.ficha.nombre) + " · %d CV\n" % roundi(coche.ficha.potencia_cv) + "%s\nVelocidad elegida: %d km/h\nAdaptar en curvas: %s\nLímites (piloto): %s\nLímite al adelantar: %s\nTráfico: %d %%\nCámara: %s" % [
+		modo, roundi(Ajustes.velocidad), "sí" if Ajustes.adaptar_curvas else "no", "sí" if Ajustes.piloto_limites else "no", "respetar" if Ajustes.limite_adelantar else "no",
 		roundi(Ajustes.trafico * 100.0),
 		"cabina" if Ajustes.camara == 1 else "persecución"]
 	mini_perfil.marcador = s_coche
@@ -796,6 +813,7 @@ func _ajustes_adelantamiento() -> void:
 	if a.has("usar_linea"): ADEL_USAR_LINEA = a["usar_linea"] == "1"
 	if a.has("vis_compromiso"): ADEL_VIS_COMPROMISO = a["vis_compromiso"] == "1"
 	if a.has("limite_adel"): Ajustes.limite_adelantar = a["limite_adel"] == "1"
+	if a.has("piloto_limites"): Ajustes.piloto_limites = a["piloto_limites"] == "1"
 	adel_prohibido.clear()
 	var camino := Ajustes.dir_datos() + "adelantar.json"
 	if not ADEL_USAR_OSM or not FileAccess.file_exists(camino):

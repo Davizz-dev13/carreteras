@@ -13,6 +13,7 @@ var km_fin := 0.0          # si km_fin < km_ini se recorre la carretera en senti
 var velocidad := 80.0      # km/h de crucero / piloto automático
 var piloto := true         # el coche se conduce solo por su carril
 var adaptar_curvas := true # el piloto frena antes de las curvas
+var piloto_limites := false   # el piloto no pasa del límite de cada tramo (apagado = va a la velocidad elegida, como en la v3)
 var limite_adelantar := false  # al adelantar, no pasar del límite de velocidad del tramo (apagado = más agresivo)
 var trafico := 0.3         # 0..1
 var camara := 0            # 0 persecución, 1 cabina
