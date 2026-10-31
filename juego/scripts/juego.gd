@@ -13,6 +13,8 @@ var s_coche := 0.0
 var lat_coche := 0.0
 var piloto := true
 var colisiones := Colisiones.new()
+var toques_bionda := 0           # pasos de física con el coche tocando una bionda (pruebas)
+var biondas: Biondas             # choque contra los quitamiedos reales de la zona (quitamiedos.gd + biondas.gd)
 # adelantamiento a petición (tecla O): 0 = no, 1 = esperando hueco, 2 = saliendo/pasando, 3 = volviendo a su carril
 var adel_estado := 0
 var adel_carril := 0.0          # 0 = carril propio … 1 = carril contrario (suavizado)
@@ -70,6 +72,7 @@ func _ready() -> void:
 	await get_tree().process_frame
 	mundo.construir()
 	add_child(mundo)
+	biondas = Quitamiedos.choque(Ajustes.dir_datos(), Ajustes.rutas)
 	ruta = Ajustes.ruta()
 	s_ini = clampf(Ajustes.km_ini * 1000.0, 0.0, ruta.longitud())
 	s_fin = clampf(Ajustes.km_fin * 1000.0, 0.0, ruta.longitud())
@@ -149,6 +152,8 @@ func _simular(dt: float) -> void:
 	trafico.actualizar(dt, s_coche, lat_coche, coche.v * dir, lado_jug if en_ruta else 0)
 	colisiones.mover_sueltos(dt)
 	colisiones.resolver(dt, prev_jug)
+	if biondas != null and not biondas.vacia() and Biondas.resolver(coche, [biondas]) > 0.0:
+		toques_bionda += 1
 	choques = colisiones.golpes
 	_adelantamiento(dt)
 	_adelantar_auto(dt)
@@ -919,7 +924,7 @@ func _captura() -> void:
 		print("ADELANTAR_AUTO coche=%s preset=%s radio_min=%s trafico=%d dir=%d limite=%s: completados %d (coches pasados %d) · abortados %d · choques %d · terminado=%s tiempo=%.0f s v_media=%.1f km/h · segundos esperando por motivo %s" % [
 			coche.ficha.id, Ajustes.args.get("preset", "v3.1"), str(ADEL_RADIO_MIN), roundi(Ajustes.trafico * 100.0), dir, str(Ajustes.limite_adelantar),
 			adelantamientos, adel_coches_pasados, adel_abortos, choques, terminado, tiempo, coche.odometro / maxf(tiempo, 0.1) * 3.6, str(motivos_auto)])
-	print("CAPTURA terminado=%s tiempo=%.0f s choques=%d s=%.1f km lat=%.2f v=%.1f km/h alt=%.1f via=%d coches=%d derrapes=%d" % [terminado, tiempo, choques, s_coche / 1000.0, lat_coche,
+	print("CAPTURA terminado=%s tiempo=%.0f s choques=%d biondas=%d s=%.1f km lat=%.2f v=%.1f km/h alt=%.1f via=%d coches=%d derrapes=%d" % [terminado, tiempo, choques, toques_bionda, s_coche / 1000.0, lat_coche,
 		coche.v * 3.6, coche.position.y, coche.id_via, trafico.coches.size(), derrapes])
 	if Ajustes.args["captura"] == "video":
 		return

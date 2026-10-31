@@ -139,3 +139,24 @@ static func _preparar() -> void:
 	arr[Mesh.ARRAY_VERTEX] = vs
 	_malla_poste = ArrayMesh.new()
 	_malla_poste.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arr)
+
+
+## Choque: los mismos tramos como paredes para el coche del jugador (biondas.gd). La cara que da a la calzada está
+## a ancho/2 + margen − 0,23 m del eje (la onda va 15–23 cm por delante del poste, ver _preparar).
+static func choque(dir_datos: String, rutas: Array) -> Biondas:
+	var bi := Biondas.new()
+	for pz in piezas(dir_datos, rutas):
+		var ru: Ruta = pz["ruta"]
+		var lado := float(pz["lado"])
+		var s0: float = pz["s0"]
+		var s1: float = pz["s1"]
+		var n := maxi(int(ceil((s1 - s0) / PASO_POSTE)), 1)
+		var ant := Vector3.ZERO
+		for k in n + 1:
+			var s := lerpf(s0, s1, float(k) / n)
+			var der := ru.derecha(s)
+			var p := ru.punto(s) + der * lado * (ru.valor(ru.ancho, s) * 0.5 + float(pz["margen"]) - 0.23)
+			if k > 0:
+				bi.anadir(ant, p, -Vector2(der.x, der.z) * lado)
+			ant = p
+	return bi

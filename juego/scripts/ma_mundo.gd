@@ -31,6 +31,7 @@ var malla_conifera: ArrayMesh
 var malla_frondosa: ArrayMesh
 const DIST_ARBOLES := 1300.0
 var activas := {}                # Vector2i -> {nodo, lod}
+var biondas := {}                # Vector2i -> Biondas (paredes de los quitamiedos de la tesela, para el choque)
 var pendientes := {}             # Vector2i -> lod en construcción
 var _tareas := {}                # id de tarea -> Vector2i
 var _ultima := Vector2i(1 << 30, 0)
@@ -212,6 +213,7 @@ func _instalar(t: Vector2i, lod: int, r: Dictionary) -> void:
 	add_child(nodo)
 	activas[t] = {"nodo": nodo, "lod": lod}
 	sup.poner(t, r["sup"])
+	biondas[t] = r["biondas"]
 	est["cargadas"] += 1
 	est["ms_max"] = maxf(est["ms_max"], r["ms"])
 	est["ms_total"] += r["ms"]
@@ -223,7 +225,19 @@ func _descargar(t: Vector2i) -> void:
 		(a["nodo"] as Node3D).queue_free()
 	activas.erase(t)
 	sup.quitar(t)
+	biondas.erase(t)
 	est["descargadas"] += 1
+
+
+## Biondas de las teselas que tocan la caja del coche (± 4 m)
+func biondas_cerca(p: Vector3) -> Array:
+	var out := []
+	for dx in [-4.0, 4.0]:
+		for dz in [-4.0, 4.0]:
+			var b = biondas.get(Vector2i(floori((p.x + dx) / datos.tesela), floori((p.z + dz) / datos.tesela)))
+			if b != null and not out.has(b):
+				out.append(b)
+	return out
 
 
 func listas() -> int:
@@ -263,6 +277,7 @@ func construir_tesela(t: Vector2i, lod: int) -> Dictionary:
 	var mv := PackedVector3Array(); var mn := PackedVector3Array(); var mi := PackedInt32Array()
 	var uv := PackedVector3Array(); var un := PackedVector3Array(); var ui := PackedInt32Array()
 	var bv := PackedVector3Array(); var bn := PackedVector3Array(); var bi := PackedInt32Array()
+	var pedidas_bionda := []
 	for pz in d["piezas"]:
 		var k: int = pz[0]
 		var a: int = pz[1]
@@ -289,9 +304,15 @@ func construir_tesela(t: Vector2i, lod: int) -> Dictionary:
 			# biondas (quitamiedos) en autopistas y autovías: arcén derecho y mediana (APROXIMACIÓN: OSM casi nunca
 			# dice dónde hay; en las vías rápidas españolas van casi siempre en la mediana y en terraplenes/puentes)
 			if via_rapida and not tunel and int(tr["enlace"]) == 0:
-				_bionda(pts, a, b, ancho * 0.5 + 0.7, bv, bn, bi)
+				pedidas_bionda.append([pts, a, b, ancho * 0.5 + 0.7, k])
 				if int(tr["s"]) != 0:
-					_bionda(pts, a, b, -(ancho * 0.5 + 0.7), bv, bn, bi)
+					pedidas_bionda.append([pts, a, b, -(ancho * 0.5 + 0.7), k])
+	# biondas: se cortan donde otra calzada (enlace, ramal, vía paralela) llega a menos de 0,6 m de la valla, para no
+	# cruzar las salidas y entradas; las mismas líneas son las paredes del choque (biondas.gd)
+	var celdas_sup := MaSuperficie.indice(sa, sb, shw)
+	var choque := Biondas.new()
+	for pb in pedidas_bionda:
+		_bionda(pb[0], pb[1], pb[2], pb[3], bv, bn, bi, _continuaciones(int(pb[4])), int(pb[4]), sa, sb, shw, sk, celdas_sup, choque)
 	var mallas := [[v, n, ix, mat_asfalto], [vv, nv, iv, mat_asfalto_v], [tv, tn, ti, mat_talud], [uv, un, ui, mat_tunel], [bv, bn, bi, mat_bionda]]
 	var m := _malla(mallas)
 	if m.get_surface_count() > 0:
@@ -303,8 +324,8 @@ func construir_tesela(t: Vector2i, lod: int) -> Dictionary:
 		_arboles(t, ter, raiz)
 	if Ajustes.args.get("edificios", "1") == "1":
 		_edificios(t, ter, raiz, 0.0 if lod == 0 else 25.0)
-	var supd := {"a": sa, "b": sb, "hw": shw, "k": sk, "celdas": MaSuperficie.indice(sa, sb, shw), "ter": ter}
-	return {"nodo": raiz, "sup": supd, "ms": (Time.get_ticks_usec() - t0) / 1000.0, "orto": orto, "ter_mi": ter_mi,
+	var supd := {"a": sa, "b": sb, "hw": shw, "k": sk, "celdas": celdas_sup, "ter": ter}
+	return {"nodo": raiz, "sup": supd, "biondas": choque, "ms": (Time.get_ticks_usec() - t0) / 1000.0, "orto": orto, "ter_mi": ter_mi,
 			"marco": Vector4(float(d["x0"]), float(d["z0"]), float(d["x0"]) + datos.tesela, float(d["z0"]) + datos.tesela)}
 
 
@@ -638,18 +659,64 @@ static func _marcas(tr: Dictionary, pts: PackedVector3Array, a: int, b: int, anc
 			_franja(pts, a, b, 0.07, lat, 0.085, mv, mn, mi, false, PackedVector3Array(), PackedVector3Array(), PackedInt32Array(), 12.0)
 
 
-## Bionda: banda vertical de 0,45 a 0,8 m sobre la calzada a `lat` m del eje (+ derecha), sin postes
-static func _bionda(pts: PackedVector3Array, a: int, b: int, lat: float, v: PackedVector3Array, n: PackedVector3Array, ix: PackedInt32Array) -> void:
+## Bionda: banda vertical de 0,45 a 0,8 m sobre la calzada a `lat` m del eje (+ derecha), sin postes. Se corta donde
+## otra calzada de la tesela (que no sea la continuación del mismo tramo) pasa a menos de 0,6 m de la valla y a menos
+## de 3 m de altura; cada trozo que queda es también pared de choque (`choque`).
+static func _bionda(pts: PackedVector3Array, a: int, b: int, lat: float, v: PackedVector3Array, n: PackedVector3Array, ix: PackedInt32Array,
+		ignorar: Dictionary, k_propio: int, sa: PackedVector3Array, sb: PackedVector3Array, shw: PackedFloat32Array, sk: PackedInt32Array,
+		celdas: Dictionary, choque: Biondas) -> void:
 	var np := pts.size()
+	var ant := Vector3.ZERO
+	var ant_libre := false
 	for i in range(a, b + 1):
 		var t := pts[mini(i + 1, np - 1)] - pts[maxi(i - 1, 0)]
 		var der := Vector3(-t.z, 0.0, t.x).normalized()
 		var p := pts[i] + der * lat
-		v.append_array([p + Vector3.UP * 0.45, p + Vector3.UP * 0.8])
-		n.append_array([-der * signf(lat), -der * signf(lat)])
-		if i > a:
-			var k := v.size() - 4
-			ix.append_array([k, k + 2, k + 1, k + 1, k + 2, k + 3])
+		var libre := not _otra_calzada(p, k_propio, ignorar, sa, sb, shw, sk, celdas)
+		if libre:
+			v.append_array([p + Vector3.UP * 0.45, p + Vector3.UP * 0.8])
+			n.append_array([-der * signf(lat), -der * signf(lat)])
+			if ant_libre:
+				var k := v.size() - 4
+				ix.append_array([k, k + 2, k + 1, k + 1, k + 2, k + 3])
+				choque.anadir(ant, p, -Vector2(der.x, der.z) * signf(lat))
+		ant = p
+		ant_libre = libre
+
+
+static func _otra_calzada(p: Vector3, k_propio: int, ignorar: Dictionary, sa: PackedVector3Array, sb: PackedVector3Array,
+		shw: PackedFloat32Array, sk: PackedInt32Array, celdas: Dictionary) -> bool:
+	var lista = celdas.get(Vector2i(floori(p.x / MaSuperficie.CELDA_MA), floori(p.z / MaSuperficie.CELDA_MA)))
+	if lista == null:
+		return false
+	for s in lista:
+		var ks := sk[s]
+		if ks == k_propio or ignorar.has(ks):
+			continue
+		var q0 := sa[s]
+		var q1 := sb[s]
+		var ab := Vector2(q1.x - q0.x, q1.z - q0.z)
+		var l2 := ab.length_squared()
+		var u := 0.0
+		if l2 > 1e-6:
+			u = clampf(((p.x - q0.x) * ab.x + (p.z - q0.z) * ab.y) / l2, 0.0, 1.0)
+		var cx := q0.x + ab.x * u
+		var cz := q0.z + ab.y * u
+		if Vector2(p.x - cx, p.z - cz).length() < shw[s] + 0.6 and absf(q0.y + (q1.y - q0.y) * u - p.y) < 3.0:
+			return true
+	return false
+
+
+## Tramos que siguen al tramo k en un nodo sin cruce (2 tramos): su calzada no corta la bionda
+func _continuaciones(k: int) -> Dictionary:
+	var out := {}
+	var tr: Dictionary = datos.tramos[k]
+	for id in [tr["a"], tr["b"]]:
+		var nd = datos.nodos.get(int(id))
+		if nd != null and (nd[3] as Array).size() == 2:
+			for o in nd[3]:
+				out[int(o)] = true
+	return out
 
 
 ## Bóveda de túnel (paredes y techo a 5,5 m) para que el túnel se vea por dentro

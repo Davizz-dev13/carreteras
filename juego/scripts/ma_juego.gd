@@ -14,6 +14,7 @@ var piloto := true
 var cargado := false
 var tiempo := 0.0
 var choques := 0
+var toques_bionda := 0           # pasos de física tocando una bionda (pruebas)
 
 # piloto automático: camino por delante [[tramo, sentido], ...]; d = metros recorridos del primero
 var camino: Array = []
@@ -126,6 +127,8 @@ func _simular(dt: float) -> void:
 	_seguir_camino()
 	_mandos(dt)
 	coche.paso_fisica(dt)
+	if Biondas.resolver(coche, mundo.biondas_cerca(coche.position)) > 0.0:   # quitamiedos (biondas.gd)
+		toques_bionda += 1
 	var c := Ajustes.superficie.consultar(coche.position.x, coche.position.z, coche.position.y)
 	if c.z >= 0:
 		tramo_actual = int(c.z)
@@ -570,7 +573,7 @@ func _captura() -> void:
 				f.flush()
 			await get_tree().process_frame
 		f.close()
-		print("MA_FIN km=%.1f tiempo=%.0f s fuera=%.1f s choques=%d real=%d s" % [km, tiempo, fuera, choques, (Time.get_ticks_msec() - t0) / 1000])
+		print("MA_FIN km=%.1f tiempo=%.0f s fuera=%.1f s choques=%d biondas=%d real=%d s" % [km, tiempo, fuera, choques, toques_bionda, (Time.get_ticks_msec() - t0) / 1000])
 		get_tree().quit()
 		return
 	var presim := float(Ajustes.args.get("presim", "5"))
