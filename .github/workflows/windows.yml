@@ -2,19 +2,20 @@ name: Versión Windows (.exe)
 
 on:
   push:
-    branches: [main]
+    branches: [main, mundo]
   workflow_dispatch:
 
 permissions:
   contents: write
 
 concurrency:
-  group: windows
+  group: windows-${{ github.ref_name }}
   cancel-in-progress: true
 
 env:
   GODOT_VERSION: "4.7.2"
-  ETIQUETA: windows-latest
+  # main -> release windows-latest; rama mundo (mapa abierto de Madrid, en pruebas) -> release windows-mundo
+  ETIQUETA: ${{ github.ref_name == 'main' && 'windows-latest' || 'windows-mundo' }}
 
 jobs:
   exe:
@@ -68,7 +69,7 @@ jobs:
           cd build/windows && zip -q -9 ../Carreteras-windows.zip Carreteras.exe LEEME.txt
           ls -la . ..
 
-      - name: Publicar en la release "windows-latest"
+      - name: Publicar en la release (windows-latest o windows-mundo)
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
@@ -79,6 +80,10 @@ jobs:
             gh release upload "$ETIQUETA" build/Carreteras-windows.zip --clobber
             gh release edit "$ETIQUETA" --notes "$NOTAS"
           else
-            gh release create "$ETIQUETA" build/Carreteras-windows.zip --target "$GITHUB_SHA" --title "Carreteras para Windows (última versión)" --notes "$NOTAS"
+            if [ "$ETIQUETA" = "windows-latest" ]; then
+              gh release create "$ETIQUETA" build/Carreteras-windows.zip --target "$GITHUB_SHA" --title "Carreteras para Windows (última versión)" --notes "$NOTAS"
+            else
+              gh release create "$ETIQUETA" build/Carreteras-windows.zip --target "$GITHUB_SHA" --prerelease --title "Carreteras para Windows · PRUEBA mapa abierto Comunidad de Madrid (rama mundo)" --notes "$NOTAS"
+            fi
           fi
           gh release view "$ETIQUETA" --json assets --jq '.assets[] | "\(.name) \(.size)"'
