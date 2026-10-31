@@ -1,0 +1,327 @@
+{
+ "_leeme": "SUPUESTOS del modelo de motor y consumo: valores típicos que VW no publica (ninguna ficha abierta: km77, VW, Škoda). Cada uno lleva 'supuesto': true y su razonamiento. Los datos reales (relaciones, grupos, consumo de dueños, WLTP) están en cambios_consumo.json.",
+ "comunes": {
+  "rozamiento_fmep_bar": {
+   "valor": "0,97 + 0,15·(n/1000) + 0,05·(n/1000)²",
+   "supuesto": true,
+   "razon": "Correlación clásica de presión media de rozamiento de un motor de 4 tiempos (Heywood, Internal Combustion Engine Fundamentals, cap. 13). Da el rozamiento del motor (y su freno motor) creciente con las rpm."
+  },
+  "potencia_accesorios_kw": {
+   "valor": 0.6,
+   "supuesto": true,
+   "razon": "Alternador, bomba de agua/aceite, climatizador a medio uso: 0,4–1 kW típico en un turismo."
+  },
+  "consumo_modelo": {
+   "valor": "l/h = k · (P_motor + P_rozamiento(rpm) + P_accesorios)  [kW]; 0 con el pie levantado por encima de ralentí+200 rpm (corte de inyección en retención)",
+   "supuesto": true,
+   "razon": "Recta de Willans: el consumo crece linealmente con la potencia del motor más una pérdida fija por rozamiento que sube con las rpm. k (l/kWh) NO es supuesto: se calibra por versión para que el ciclo WLTC clase 3b simulado con este mismo modelo dé la media real de los dueños en Spritmonitor."
+  },
+  "arranque_parada": {
+   "valor": false,
+   "supuesto": true,
+   "razon": "Sin Start&Stop en la simulación (parado gasta ralentí). La calibración con la media real lo absorbe."
+  },
+  "curva_par": {
+   "valor": "55 % del par máximo al ralentí, sube recto hasta el inicio del par máximo; meseta de par máximo (sin pasar de la potencia máxima); transición recta hasta la potencia máxima; meseta de potencia máxima; del final de la meseta al corte cae hasta el 88 % de la potencia máxima",
+   "supuesto": true,
+   "razon": "Forma típica de un 2.0 turbo. Los extremos (par y potencia máximos y sus rangos de rpm) son los oficiales de coches.json."
+  },
+  "cambio_duracion_s": {
+   "valor": {
+    "suave": 0.25,
+    "a_fondo": 0.15
+   },
+   "supuesto": true,
+   "razon": "Un doble embrague cambia en décimas de segundo; durante el cambio el empuje baja (hasta un 40 % en suave, 50 % a fondo) y se recupera."
+  },
+  "dsg_logica": {
+   "valor": "conducción suave: sube hacia 1.800 rpm (diésel) / 2.000 (gasolina); con más pedal el punto de cambio sube hasta cerca del corte; reduce (kickdown) si la marcha no da la fuerza pedida; con carga no deja caer las vueltas por debajo de 1.100–1.900 rpm (diésel) / 1.150–1.950 (gasolina); con freno o bajando (>3 %) reduce para retener hasta ~2.500 (diésel) / 3.200 rpm (gasolina)",
+   "supuesto": true,
+   "razon": "Comportamiento típico del DSG en modo D. El 1.800 rpm sale de la prueba de prensa (autonocion: sube hacia 1.800 rpm en conducción tranquila; 120 km/h a 1.800 en 7ª)."
+  },
+  "traccion_calibrada": {
+   "valor": "la fuerza máxima en rueda (adherencia/embrague en la salida) se recalibra con el cambio para que el 0-100 simulado siga siendo el oficial",
+   "supuesto": false,
+   "razon": "Calibración, no supuesto: mismo método que ficha.gd pero con marchas y cambios."
+  }
+ },
+ "versiones": {
+  "arteon_tdi150_dsg": {
+   "ralenti_rpm": {
+    "valor": 800,
+    "supuesto": true,
+    "razon": "Ralentí típico de un 2.0 TDI (EA288): 750–850 rpm."
+   },
+   "corte_rpm": {
+    "valor": 5000,
+    "supuesto": true,
+    "razon": "Corte típico del 2.0 TDI ~5.000 rpm; la potencia máxima oficial acaba a 4200."
+   },
+   "rpm_par_max": {
+    "valor": [
+     1600,
+     2750
+    ],
+    "supuesto": false,
+    "razon": "oficial (coches.json / km77)"
+   },
+   "rpm_potencia_max": {
+    "valor": [
+     3000,
+     4200
+    ],
+    "supuesto": false,
+    "razon": "oficial (coches.json / km77)"
+   },
+   "combustible": "diésel",
+   "densidad_combustible_kg_l": {
+    "valor": 0.835,
+    "supuesto": true,
+    "razon": "Densidad típica EN 590 / EN 228 (solo para pasar k a g/kWh en el informe)."
+   }
+  },
+  "arteon_tdi200_dsg": {
+   "ralenti_rpm": {
+    "valor": 800,
+    "supuesto": true,
+    "razon": "Ralentí típico de un 2.0 TDI (EA288): 750–850 rpm."
+   },
+   "corte_rpm": {
+    "valor": 5000,
+    "supuesto": true,
+    "razon": "Corte típico del 2.0 TDI ~5.000 rpm; la potencia máxima oficial acaba a 4100."
+   },
+   "rpm_par_max": {
+    "valor": [
+     1750,
+     3500
+    ],
+    "supuesto": false,
+    "razon": "oficial (coches.json / km77)"
+   },
+   "rpm_potencia_max": {
+    "valor": [
+     3600,
+     4100
+    ],
+    "supuesto": false,
+    "razon": "oficial (coches.json / km77)"
+   },
+   "combustible": "diésel",
+   "densidad_combustible_kg_l": {
+    "valor": 0.835,
+    "supuesto": true,
+    "razon": "Densidad típica EN 590 / EN 228 (solo para pasar k a g/kWh en el informe)."
+   }
+  },
+  "arteon_tdi200_4motion_dsg": {
+   "ralenti_rpm": {
+    "valor": 800,
+    "supuesto": true,
+    "razon": "Ralentí típico de un 2.0 TDI (EA288): 750–850 rpm."
+   },
+   "corte_rpm": {
+    "valor": 5000,
+    "supuesto": true,
+    "razon": "Corte típico del 2.0 TDI ~5.000 rpm; la potencia máxima oficial acaba a 4100."
+   },
+   "rpm_par_max": {
+    "valor": [
+     1750,
+     3500
+    ],
+    "supuesto": false,
+    "razon": "oficial (coches.json / km77)"
+   },
+   "rpm_potencia_max": {
+    "valor": [
+     3600,
+     4100
+    ],
+    "supuesto": true,
+    "razon": "No publicado para el 4Motion: mismo motor que el TDI 200 de tracción delantera (3.600–4.100)."
+   },
+   "combustible": "diésel",
+   "cilindrada_cm3": {
+    "valor": 1968,
+    "supuesto": true,
+    "razon": "No viene en su ficha de coches.json; es el mismo bloque 2.0 que las otras versiones."
+   },
+   "densidad_combustible_kg_l": {
+    "valor": 0.835,
+    "supuesto": true,
+    "razon": "Densidad típica EN 590 / EN 228 (solo para pasar k a g/kWh en el informe)."
+   }
+  },
+  "arteon_tsi190_dsg": {
+   "ralenti_rpm": {
+    "valor": 700,
+    "supuesto": true,
+    "razon": "Ralentí típico de un 2.0 TSI (EA888): 650–750 rpm."
+   },
+   "corte_rpm": {
+    "valor": 6500,
+    "supuesto": true,
+    "razon": "Corte típico del 2.0 TSI ~6.500 rpm; la potencia máxima oficial acaba a 6000."
+   },
+   "rpm_par_max": {
+    "valor": [
+     1500,
+     4100
+    ],
+    "supuesto": false,
+    "razon": "oficial (coches.json / km77)"
+   },
+   "rpm_potencia_max": {
+    "valor": [
+     4200,
+     6000
+    ],
+    "supuesto": false,
+    "razon": "oficial (coches.json / km77)"
+   },
+   "combustible": "gasolina",
+   "densidad_combustible_kg_l": {
+    "valor": 0.745,
+    "supuesto": true,
+    "razon": "Densidad típica EN 590 / EN 228 (solo para pasar k a g/kWh en el informe)."
+   }
+  },
+  "arteon_tsi280_4motion_dsg": {
+   "ralenti_rpm": {
+    "valor": 700,
+    "supuesto": true,
+    "razon": "Ralentí típico de un 2.0 TSI (EA888): 650–750 rpm."
+   },
+   "corte_rpm": {
+    "valor": 6500,
+    "supuesto": true,
+    "razon": "Corte típico del 2.0 TSI ~6.500 rpm; la potencia máxima oficial acaba a 6500."
+   },
+   "rpm_par_max": {
+    "valor": [
+     1700,
+     5600
+    ],
+    "supuesto": false,
+    "razon": "km77 (arteon_cambios.json: 1.700–5.600)"
+   },
+   "rpm_potencia_max": {
+    "valor": [
+     5100,
+     6500
+    ],
+    "supuesto": false,
+    "razon": "km77 (arteon_cambios.json: 5.100–6.500)"
+   },
+   "combustible": "gasolina",
+   "cilindrada_cm3": {
+    "valor": 1984,
+    "supuesto": true,
+    "razon": "No viene en su ficha de coches.json; es el mismo bloque 2.0 que las otras versiones."
+   },
+   "densidad_combustible_kg_l": {
+    "valor": 0.745,
+    "supuesto": true,
+    "razon": "Densidad típica EN 590 / EN 228 (solo para pasar k a g/kWh en el informe)."
+   }
+  },
+  "arteon_r_320_4motion": {
+   "ralenti_rpm": {
+    "valor": 700,
+    "supuesto": true,
+    "razon": "Ralentí típico de un 2.0 TSI (EA888): 650–750 rpm."
+   },
+   "corte_rpm": {
+    "valor": 6500,
+    "supuesto": true,
+    "razon": "Corte típico del 2.0 TSI ~6.500 rpm; la potencia máxima oficial acaba a 6500."
+   },
+   "rpm_par_max": {
+    "valor": [
+     2000,
+     5350
+    ],
+    "supuesto": false,
+    "razon": "oficial (coches.json / km77)"
+   },
+   "rpm_potencia_max": {
+    "valor": [
+     5350,
+     6500
+    ],
+    "supuesto": false,
+    "razon": "oficial (coches.json / km77)"
+   },
+   "combustible": "gasolina",
+   "densidad_combustible_kg_l": {
+    "valor": 0.745,
+    "supuesto": true,
+    "razon": "Densidad típica EN 590 / EN 228 (solo para pasar k a g/kWh en el informe)."
+   }
+  }
+ },
+ "dinamica": {
+  "_leeme": "Supuestos de la dinámica lateral (coche.gd, v4). Valores típicos de una berlina media; VW no los publica. Están como constantes en coche.gd.",
+  "altura_cdg_m": {
+   "valor": 0.55,
+   "supuesto": true,
+   "razon": "Típico de una berlina baja de 1,45 m de alto (0,50–0,58 m)."
+  },
+  "reparto_peso_delante": {
+   "valor": {
+    "traccion_delantera": 0.6,
+    "4motion": 0.58
+   },
+   "supuesto": true,
+   "razon": "Motor transversal delante: 58–62 % típico; el 4Motion lleva el diferencial trasero."
+  },
+  "reparto_par_4motion_delante": {
+   "valor": 0.5,
+   "supuesto": true,
+   "razon": "Haldex de 5ª gen. reparte hasta 50/50 a plena tracción."
+  },
+  "reparto_frenada_delante": {
+   "valor": 0.7,
+   "supuesto": true,
+   "razon": "Típico 65–75 % delante."
+  },
+  "rigidez_deriva_por_carga": {
+   "valor": {
+    "delante": 13.0,
+    "detras": 20.0
+   },
+   "unidad": "1/rad",
+   "supuesto": true,
+   "razon": "Neumático de turismo 12–22 /rad; el eje delantero más blando da un subviraje de serie de ~1,5°/g."
+  },
+  "pacejka_C": {
+   "valor": 1.45,
+   "supuesto": true,
+   "razon": "Forma de la curva: pico de agarre a 7–11° de deriva y ~76 % del agarre al deslizar."
+  },
+  "inercia_guinada": {
+   "valor": "m · lf · lr (índice dinámico 1)",
+   "supuesto": true,
+   "razon": "Las berlinas tienen un índice dinámico k²/(a·b) de 0,9–1,1."
+  },
+  "sensibilidad_a_la_carga": {
+   "valor": {
+    "delante": 0.2,
+    "detras": 0.12
+   },
+   "supuesto": true,
+   "razon": "Con transferencia lateral el eje pierde algo de agarre (el neumático exterior no gana lo que pierde el interior); más delante porque soporta más peso."
+  },
+  "esc": {
+   "valor": "si el eje trasero pasa del 75 % de su deriva de pico y el coche gira más que la referencia, corrige la guiñada (frenando una rueda)",
+   "supuesto": true,
+   "razon": "El Arteon lleva ESC de serie; la lógica es una simplificación."
+  },
+  "mu_asfalto": {
+   "valor": 0.95,
+   "supuesto": true,
+   "razon": "Ya estaba en v3 (asfalto seco)."
+  }
+ }
+}

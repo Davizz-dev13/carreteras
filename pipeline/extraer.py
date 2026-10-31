@@ -25,7 +25,31 @@ PRESETS = {
         "rutas": [("Puerto de Navacerrada (M-601 → CL-601)", ["M-601", "CL-601"]),
                   ("M-601 Navacerrada → Puerto", ["M-601"]),
                   ("CL-601 Puerto → Valsaín", ["CL-601"])],
-    }
+    },
+    # A-308 Iznalloz – Darro (Granada). Solo la A-308 como ruta (las demás vías se dibujan pero no son rutas);
+    # de oeste (Iznalloz) a este (Darro); vías OSM filtradas a carreteras reales asfaltadas (sin caminos/sendas);
+    # árboles solo dentro de los bosques de OSM (landuse=forest / natural=wood), no por franja de altitud.
+    "a308": {
+        "bbox": (37.30, -3.58, 37.43, -3.24),
+        "rutas": [("A-308 Iznalloz → Darro", ["A-308"])],
+        "solo_rutas": True,
+        "orden": "oeste_este",
+        "tipos": osm.TIPOS + "|residential",
+        "arboles_osm": True,
+        "max_mb_archivo": 3.0,
+    },
+    # GR-8101 Caniles – límite de provincia de Almería (Sierra de Baza, Granada). Carretera de la Diputación de
+    # Granada; en Almería sigue como AL-5405 hacia Escúllar (no incluida). Misma receta que a308. Sentido del PK
+    # oficial (catálogo Junta de Andalucía: "De Límite de Provincia de Almería a A-334 (Caniles)", 28,90 km): de sur a norte.
+    "gr8101": {
+        "bbox": (37.25, -2.81, 37.455, -2.69),
+        "rutas": [("GR-8101 límite de Almería → Caniles", ["GR-8101"])],
+        "solo_rutas": True,
+        "orden": "sur_norte",
+        "tipos": osm.TIPOS + "|residential",
+        "arboles_osm": True,
+        "max_mb_archivo": 3.0,
+    },
 }
 PASO_TERRENO = 20.0     # m entre vértices del terreno
 TESELA = 2000.0         # m de lado por tesela de terreno
@@ -89,7 +113,10 @@ def main():
     print(f"      rejilla {arr.shape[1]}x{arr.shape[0]} a {tr.a:.0f} m, altitud {np.nanmin(arr):.0f}–{np.nanmax(arr):.0f} m")
 
     print("[3/6] OpenStreetMap (Overpass) …", flush=True)
-    ways = osm.descargar_ways(bbox, os.path.join(a.cache, "osm"))
+    ways = osm.descargar_ways(bbox, os.path.join(a.cache, "osm"), tipos=preset.get("tipos", osm.TIPOS))
+    if preset.get("tipos"):   # filtro explícito: solo carreteras reales asfaltadas (nunca path/track/footway, p. ej. sendas GR)
+        n0 = len(ways); ways = [w for w in ways if osm.es_carretera(w["tags"])]
+        print(f"      filtro carreteras: {n0} → {len(ways)}")
     print(f"      {len(ways)} vías")
     # rutas automáticas: cada ref de carretera (M-601, CL-601, N-VI …) con > 2 km en la zona
     por_ref = defaultdict(list)
@@ -97,7 +124,7 @@ def main():
         for r in R.refs_de(w["tags"]):
             if re.match(r"^[A-Z]{1,3}-\d", r) and not r.startswith("GR"): por_ref[r].append(w)
     usados = {tuple(sorted(d[1])) for d in defs}
-    if not a.rutas:
+    if not a.rutas and not preset.get("solo_rutas"):
         for ref in sorted(por_ref):
             if (ref,) not in usados: defs.append((ref, [ref]))
 
@@ -111,7 +138,20 @@ def main():
         pts = R.encadenar(sel, utm)
         pts = recortar_a_rect(pts, xmin + 50, ymin + 50, xmax - 50, ymax - 50)
         if len(pts) < 5: continue
-        if pts[0][1] > pts[-1][1]: pts = pts[::-1]          # de sur a norte (lado de Madrid primero)
+        orden = preset.get("orden")
+        if orden == "oeste_este": invertir = pts[0][0] > pts[-1][0]
+        elif orden == "norte_sur": invertir = pts[0][1] < pts[-1][1]
+        else: invertir = pts[0][1] > pts[-1][1]      # "sur_norte" o sin orden (Navacerrada)
+        if invertir:   # de sur a norte (lado de Madrid primero) o de oeste a este según el preset
+            pts = pts[::-1]
+        elif preset.get("orden"):
+            # encadenar() deja en cada punto la vía del tramo que SALE de él; R.procesar() espera la del tramo que
+            # LLEGA (lo que ocurre tras invertir). Sin invertir hay que correrla un tramo o un puente de un solo
+            # segmento (p. ej. el de la A-308 en Iznalloz, 292 m) se marca en el segmento siguiente.
+            # Solo en zonas nuevas con "orden": Navacerrada no se ha regenerado con esta corrección.
+            pts = [(pts[k][0], pts[k][1], pts[max(k - 1, 0)][2]) for k in range(len(pts))]
+        huecos = [k for k in range(len(pts) - 1) if pts[k + 1][2] < 0]
+        if huecos: print(f"      {nombre}: {len(huecos)} uniones fuera de OSM (huecos/rotondas sin ref)")
         r = R.procesar(pts, sel, mdt)
         if r["s"][-1] < 2000 and len(refs) == 1 and nombre == refs[0]:
             continue
@@ -181,6 +221,10 @@ def main():
     Hf = H.ravel()
     Hf[ok] = Hf[ok] * (1 - wgt[ok]) + (pz[idx[ok]] - 0.4) * wgt[ok]
     H = Hf.reshape(H.shape)
+    bosque = None
+    if preset.get("arboles_osm"):
+        bosque = osm.mascara_bosque(bbox, os.path.join(a.cache, "osm"), utm, gxs, gys)
+        print(f"      bosque OSM: {100 * bosque.mean():.1f} % de la zona")
     teselas = []
     nt = int(TESELA / PASO_TERRENO)
     rng = np.random.default_rng(7)
@@ -194,7 +238,10 @@ def main():
             # árboles (pinar): entre 1000 y 2050 m, fuera de la carretera y de pendientes muy fuertes
             gyy, gxx = np.gradient(bloque, PASO_TERRENO)
             cand = rng.random(bloque.shape) < 0.32
-            cand &= (bloque > 1000) & (bloque < 2050 + rng.normal(0, 40, bloque.shape))
+            if bosque is not None:   # bosques reales de OSM
+                cand &= bosque[tj:tj + nt + 1, ti:ti + nt + 1]
+            else:
+                cand &= (bloque > 1000) & (bloque < 2050 + rng.normal(0, 40, bloque.shape))
             cand &= np.hypot(gxx, gyy) < 0.9
             jj, ii = np.nonzero(cand)
             px = gxs[ti] + ii * PASO_TERRENO + rng.uniform(-9, 9, len(ii))
@@ -212,8 +259,24 @@ def main():
     print(f"      {len(teselas)} teselas de {TESELA/1000:.0f} km, {total_arboles} árboles")
 
     print("[6/6] Escribiendo …", flush=True)
-    json.dump({"rutas": rutas_out, "vias": vias_out}, open(os.path.join(salida, "carreteras.json"), "w"),
-              ensure_ascii=False, separators=(",", ":"))
+    max_mb = preset.get("max_mb_archivo")
+    if max_mb:
+        # archivos ≤ max_mb (límite de subida a GitHub): las vías secundarias van en vias_1.json, vias_2.json…
+        partes, actual, tam = [], [], 0
+        for v in vias_out:
+            actual.append(v); tam += len(json.dumps(v, ensure_ascii=False, separators=(",", ":"))) + 1
+            if tam > max_mb * 0.9e6:
+                partes.append(actual); actual, tam = [], 0
+        if actual: partes.append(actual)
+        nombres = []
+        for k, parte in enumerate(partes):
+            nombres.append(f"vias_{k + 1}.json")
+            json.dump({"vias": parte}, open(os.path.join(salida, nombres[-1]), "w"), ensure_ascii=False, separators=(",", ":"))
+        json.dump({"rutas": rutas_out, "vias": [], "vias_archivos": nombres}, open(os.path.join(salida, "carreteras.json"), "w"),
+                  ensure_ascii=False, separators=(",", ":"))
+    else:
+        json.dump({"rutas": rutas_out, "vias": vias_out}, open(os.path.join(salida, "carreteras.json"), "w"),
+                  ensure_ascii=False, separators=(",", ":"))
     zona = {"zona": a.zona, "bbox_wgs84": bbox, "crs": "EPSG:25830 (ETRS89 / UTM 30N)", "origen_utm": [E0, N0],
             "convenio": "X=E-E0, Z=N0-N, Y=altitud (m). Escala 1:1.",
             "mdt": fuente_mdt, "osm": "© colaboradores de OpenStreetMap (ODbL), vía Overpass API",

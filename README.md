@@ -1,4 +1,4 @@
-# Carreteras de España · escala 1:1  (v3)
+# Carreteras de España · escala 1:1  (v4)
 
 **Novedades v2**: sin vibración (ver §6) y coches reales elegibles con su ficha técnica (§7). De momento, todos VW Arteon.
 
@@ -21,7 +21,7 @@ Cómo ejecutarlo en local:
   (abrir el `index.html` con doble clic no funciona: el navegador bloquea la carga del `.wasm` desde disco).
 
 **Controles** (también salen en pantalla, H para la ayuda): W/↑ acelerar · S/↓ frenar y marcha atrás · ← → girar
-(también A D) · P piloto automático · O adelantar · + / − velocidad · K adaptar en curvas · 9 / 0 tráfico ·
+(también A D) · P piloto automático · O adelantar · L límite al adelantar · + / − velocidad · K adaptar en curvas · 9 / 0 tráfico ·
 V cámara · R volver a la carretera · Esc pausa. Pulsa el perfil de altitud o el mapa de abajo para ir a ese punto.
 
 ## 1. Estructura
@@ -114,7 +114,7 @@ adaptar en curvas, tráfico 0–100 %, cámara y **coche** (versión real del Ar
 **Mandos**:
 - W/↑ acelerar · S/↓ frenar (parado: marcha atrás) · ← → girar (A D también funcionan, y Espacio frena, aunque
   ya no salen en la ayuda de pantalla)
-- P piloto automático · O adelantar (con el piloto puesto) · + / − velocidad elegida · K adaptar velocidad en curvas
+- P piloto automático · O adelantar (con el piloto puesto) · L respetar límite al adelantar · + / − velocidad elegida · K adaptar velocidad en curvas
 - 9 / 0 menos / más tráfico · V cámara (persecución / cabina) · R volver a la carretera · Esc pausa · H ayuda
 
 **HUD**: velocidad (km/h), altitud (m), pendiente real (%) en tu sentido de marcha, carretera (M-601 / CL-601 y
@@ -288,12 +288,24 @@ Cuando dos cajas se tocan se aplica un impulso que conserva el momento (coeficie
 entre chapas 0,35), con sub-pasos para que no se atraviesen a velocidad alta. Los coches de tráfico golpeados se
 sueltan de su carril, derrapan, giran y se paran por rozamiento. Se han quitado los avisos rojos de la pantalla.
 
-**Adelantar con O** (con el piloto puesto): el coche espera un hueco seguro y adelanta solo si:
-- no hay línea continua (radio > 350 m),
-- la visibilidad alcanza para la maniobra (calculada con el trazado real),
-- no viene nadie de frente en esa distancia, contando con la aceleración real del coche.
-Si aparece un coche de frente antes de llegar a la altura del adelantado, aborta y vuelve detrás. Si ya está a su
-lado, termina a fondo. El estado sale en el recuadro de arriba a la derecha.
+**Adelantar con O** (con el piloto puesto; v3.1, más agresivo): pulsas O con un coche más lento delante (hasta
+90 m) y espera hueco. Sale solo si, con la aceleración real de tu versión (motor, aire, pendiente y lo que dejan ir
+las curvas), en toda la distancia del adelantamiento:
+- no hay curvas de radio menor de 150 m (`ADEL_RADIO_MIN` en `scripts/juego.gd`; 0 = sin esta regla),
+- no es un tramo con prohibición de adelantar en OSM (`datos/navacerrada/adelantar.json`; hoy OSM no tiene ninguna
+  etiqueta `overtaking` en esta zona, así que está vacío),
+- hay visibilidad (curvas y cambios de rasante del trazado real) con el criterio del punto de compromiso: desde la
+  salida se ve lo justo para abortar, y desde que se pone a la altura del coche, lo que le queda más lo que haría
+  un coche de frente al límite de la vía,
+- no viene ningún coche de frente que llegue antes de terminar (+15 m de margen),
+- no cruza la línea continua pintada y hay hueco para volver delante del grupo (pasa hasta 12 coches pegados).
+Va al menos 15 km/h más rápido que el adelantado, cambia de carril en 1,6 s y vuelve 8 m por delante. Durante el
+adelantamiento recalcula cada 0,2 s lo que le queda; si un coche de frente llegaría antes, aborta (detrás del primero,
+o metiéndose en el hueco de la fila).
+**La línea central es derivada**, no son las marcas reales (OSM no las tiene): discontinua donde el juego deja
+adelantar en algún sentido y continua donde no (`linea_discontinua` en `adelantar.json`, `--captura=lineas_adelantar`).
+**Respetar límite al adelantar** (menú o tecla L, apagado por defecto): si está activo no pasa del límite del tramo
+y, si así no le da, no adelanta. `--preset=antes` repite el comportamiento de la v3 para comparar.
 
 **Dirección con teclado**: el volante se mueve de forma progresiva (unos 0,35 s hasta el tope y 0,25 s para volver
 al centro). El ángulo máximo depende de la velocidad: es el que pide, como mucho, el 85 % del agarre (todo el volante a
@@ -336,6 +348,9 @@ usa el límite genérico de ese tipo de vía y la señal sale más tenue y con `
 godot --headless res://escenas/juego.tscn -- --captura=choque_alcance --ruta=0 --km_ini=19.6 --km_fin=24 --trafico=0
 godot --headless res://escenas/juego.tscn -- --captura=choque_frontal --ruta=0 --km_ini=19.6 --km_fin=24 --trafico=0
 godot --headless res://escenas/juego.tscn -- --captura=adelantar --ruta=0 --km_ini=19.45 --km_fin=24 --trafico=30 --vel=90 --v_lento=45 --pulsar=3 --duracion=60
+godot --headless res://escenas/juego.tscn -- --captura=prueba --auto_o=1 --ruta=0 --km_ini=0 --km_fin=24.3 --trafico=30 --vel=90 --presim=4000   (--preset=antes = v3)
+godot --headless res://escenas/juego.tscn -- --captura=mapa_adelantar --ruta=0 --radios=350,250,200,150,100,0
+godot --headless res://escenas/juego.tscn -- --captura=lineas_adelantar --coche=arteon_tdi150_dsg --salida_json=/tmp/l.json
 godot --headless res://escenas/juego.tscn -- --captura=giro --ruta=0 --km_ini=19.6 --km_fin=24 --trafico=0   (--lado=1 para la derecha)
 godot --headless res://escenas/juego.tscn -- --captura=perfil --ruta=0 --km_ini=0 --km_fin=24.3 --trafico=40
 godot res://escenas/juego.tscn -- --captura=video --cuadros=999999 --medir_fps=300 --ruta=0 --km_ini=13.75 --km_fin=20 --trafico=60
@@ -343,10 +358,11 @@ godot res://escenas/juego.tscn -- --captura=video --cuadros=999999 --medir_fps=3
 Resultados en esta versión:
 - **Alcance** (90 contra 40 km/h): el momento se conserva (error 0,0000 %) y no se atraviesan.
 - **Frontal** (30 + 30 km/h): no se atraviesan; los dos quedan a ~5 km/h.
-- **Adelantamiento**:
-  - con 20–30 % de tráfico adelanta en la recta del km 19,6 en 7,8 s, sin choques;
-  - en la horquilla del km 14,2 no sale (línea continua);
-  - con 50 % de tráfico espera, porque vienen coches de frente cada ~110 m.
+- **Adelantamiento (v3.1)**, ruta de Navacerrada entera con piloto a 90 y O pulsada siempre que hay un lento delante
+  (`--captura=prueba --auto_o=1`, TDI 150): 0 choques en los 6 recorridos (20/30/50 % de tráfico, los dos sentidos);
+  3 adelantamientos en total (la v3 hizo 5, pero con 58 golpes: volvía al carril encima del coche de delante de la
+  fila). En este puerto casi siempre lo impiden las curvas y la visibilidad; `--captura=mapa_adelantar` da el % de
+  ruta donde se puede salir sin tráfico: 8 % con radio mínimo 150 m (v3: 0,8 %).
 - **Giro a 80 km/h con ← mantenido 5 s** (acelerador fijo): antes perdía 46,5 km/h; ahora 3 km/h respecto a ir recto
   (en esa bajada, recto gana 3,6 km/h).
 - **Pulsar el perfil** al 25 / 50 / 90 %: el coche aparece en el km pedido (6,08 / 12,15 / 21,87) y en su carril.
@@ -357,3 +373,21 @@ Resultados en esta versión:
   - v3: 646 llamadas de dibujo y 1,01 M primitivas.
   En esta máquina de pruebas no hay tarjeta gráfica y todo se dibuja por software, así que los FPS medidos aquí
   (2,0 → 1,65) no dicen cómo irá en una GTX 1650 Ti. Lo que cuenta son las llamadas de dibujo y las primitivas.
+
+## 11. Novedades de la v4
+
+- **Cambio DSG de 7** con los desarrollos reales de cada versión (`datos/coches/cambios_consumo.json`): marcha y rpm
+  junto al velocímetro, reducción en cuestas y al adelantar, retención en las bajadas. El 0-100 y la punta siguen
+  siendo los oficiales (`godot --headless res://pruebas/prueba_v4.tscn`).
+- **Consumo**: dos cifras grandes junto al velocímetro: `inst.` (instantáneo, l/100 km; "—" con la inyección cortada)
+  y `global` (media desde que empieza el recorrido). Debajo, en pequeño, los litros gastados y la cifra WLTP en gris
+  solo como referencia. El modelo está calibrado para que un ciclo mixto dé la media real de Spritmonitor de cada
+  versión; lo que marca en un puerto concreto es lo que da el modelo, no una medición. Supuestos en
+  `datos/coches/motor_supuestos.json`.
+- **Física**: dirección con inercia y peso real (modelo de bicicleta dinámico). El piloto respeta las señales de
+  límite salvo al adelantar.
+- **Zonas**: Puerto de Navacerrada y **A-308 Iznalloz–Darro** (Granada, 36,5 km, carril de adelantamiento real de
+  2,2 km en sentido Darro, km 6,5–8,7). Se elige en el menú (Zona) o con `--zona=a308`. Fuentes en
+  `juego/datos/a308/FUENTES.md`.
+- **Coche del jugador**: modelo rehecho desde el original (113k triángulos, sin abolladuras en la chapa) y
+  antialiasing MSAA 4x.

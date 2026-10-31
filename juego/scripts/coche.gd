@@ -42,6 +42,26 @@ var bal := 0.0
 var bal_v := 0.0
 const OMEGA_SUSP := 9.0         # rad/s (≈1,4 Hz, típico de una berlina)
 
+# --- v4: dinámica lateral con neumáticos (modelo de bicicleta dinámico) ---
+# Supuestos (valores típicos de una berlina media, no publicados por VW), ver datos/coches/motor_supuestos.json:
+const H_CDG := 0.55             # m, altura del centro de gravedad
+const REPARTO_FWD := 0.60       # fracción del peso sobre el eje delantero (tracción delantera)
+const REPARTO_4M := 0.58        # ídem 4Motion (algo más de peso detrás por el diferencial trasero)
+const REPARTO_4MOTION := 0.5    # par al eje delantero a plena tracción (Haldex, hasta 50/50)
+const REPARTO_FRENO := 0.7      # frenada al eje delantero
+const C_DEL := 13.0             # rigidez de deriva / carga del eje delantero (1/rad)
+const C_TRA := 20.0             # ídem trasero: el delantero más blando → coche subvirador, como de serie
+const C_PAC := 1.45             # forma de la "fórmula mágica" de Pacejka: pico a ~9° y ~76 % de agarre deslizando
+const IZ_FACTOR := 1.0          # inercia de guiñada = m · lf · lr · factor (índice dinámico ≈ 1)
+const SENS_DEL := 0.20          # pérdida de agarre por transferencia lateral de carga (sensibilidad a la carga)
+const SENS_TRA := 0.12
+const V_DINAMICA := 4.0         # m/s: por debajo, giro cinemático (sin deriva), como un coche maniobrando
+var vy := 0.0                   # m/s, velocidad lateral del coche por la deriva de los neumáticos (+ derecha)
+var r_yaw := 0.0                # rad/s, velocidad de guiñada (+ giro a la derecha)
+var alfa_del := 0.0             # rad, ángulos de deriva (para el HUD/pruebas)
+var alfa_tra := 0.0
+var esc_activo := false         # el control de estabilidad está corrigiendo
+
 # mandos (los rellena juego.gd con teclado o piloto automático)
 var acelerador := 0.0
 var freno := 0.0
@@ -52,9 +72,15 @@ var marcha_atras := false
 var modelo: Node3D
 var carroceria: Node3D          # hijo del modelo que se inclina con aceleraciones (cosmético)
 
+# v4: cambio DSG + mapa del motor (transmision.gd) y consumo calibrado con dueños reales (consumo.gd)
+var caja: Transmision
+var consumo: Consumo
+
 
 func _init(f: Ficha = null) -> void:
 	ficha = f if f != null else Catalogo.ficha_elegida()
+	caja = Transmision.new(ficha)
+	consumo = Consumo.new(caja)
 
 
 func _ready() -> void:
@@ -75,6 +101,9 @@ func colocar(p: Vector3, direccion: Vector3) -> void:
 	position = p
 	v = 0.0
 	giro = 0.0
+	caja.reiniciar()
+	vy = 0.0
+	r_yaw = 0.0
 	v_lat = 0.0
 	giro_ext = 0.0
 	cab_v = 0.0
@@ -86,10 +115,11 @@ func colocar(p: Vector3, direccion: Vector3) -> void:
 	reset_physics_interpolation()   # teletransporte: que no se interpole desde la posición anterior
 
 
-## Fuerza de tracción disponible a la velocidad v (N): límite de adherencia/par a baja velocidad y
-## potencia en rueda a partir de ahí.
+## Fuerza de tracción máxima a la velocidad v (N) con la mejor marcha (lo que da el DSG a fondo / kickdown).
+## v4: sale del par del motor a través de las relaciones reales del cambio (transmision.gd), con la misma
+## envolvente de prestaciones (0-100 oficial) que antes.
 func fuerza_motor(vel: float) -> float:
-	return minf(ficha.f_traccion_max, ficha.potencia_rueda / maxf(absf(vel), 1.0))
+	return caja.fuerza_max(vel)
 
 
 func fuerza_resistente(vel: float) -> float:
@@ -107,9 +137,11 @@ func paso_fisica(dt: float) -> void:
 	var m := ficha.masa
 	# --- fuerzas longitudinales ---
 	var f := 0.0
+	# v4: el pedal pide una fracción de la fuerza máxima; el DSG elige marcha y entrega la fuerza de esa marcha
+	var empuje := caja.paso(dt, v, acelerador, freno, seno, marcha_atras)
 	if acelerador > 0.0:
 		var sentido := -1.0 if marcha_atras else 1.0
-		f += sentido * acelerador * fuerza_motor(v)
+		f += sentido * empuje
 		# limitador electrónico de velocidad máxima (o la máxima real si no lo lleva)
 		if v * sentido > ficha.v_max:
 			f = 0.0
@@ -119,7 +151,12 @@ func paso_fisica(dt: float) -> void:
 	f -= ficha.crr * m * G * signf(v) * (1.0 if en_carretera else 6.0)
 	f -= m * G * seno                       # ¡la gravedad de la pendiente real!
 	var a := f / m
+	# frenada: el pedal pide una deceleración; el freno motor del DSG (retención en la marcha metida) es parte de
+	# ella y los discos ponen el resto. Con los dos pies levantados solo retiene el motor.
 	var a_freno := freno * ficha.f_freno_max / m * (mu / MU_ASFALTO)
+	if freno <= 0.0 and acelerador <= 0.0 and v > 1.0 and not marcha_atras:
+		a_freno = caja.retencion / m
+	consumo.paso(dt, v)
 	var v_ant := v
 	var v_nueva := v + a * dt
 	if absf(v_nueva) <= a_freno * dt:
@@ -129,29 +166,33 @@ func paso_fisica(dt: float) -> void:
 	if absf(v_nueva) < 0.05 and freno > 0.1 and acelerador == 0.0:
 		v_nueva = 0.0
 	v = v_nueva
-	# --- dirección con límite de adherencia ---
+	# --- dirección ---
 	var objetivo := 0.0
 	if giro_directo:
 		objetivo = clampf(volante, -GIRO_MAX, GIRO_MAX)
 		giro = move_toward(giro, objetivo, 1.8 * dt)
 	else:
 		# teclado (v3): dirección progresiva y sensible a la velocidad. El ángulo máximo es el que da, como mucho,
-		# el 85 % del agarre lateral (a = v²·tan(giro)/batalla ≤ 0,85·μ·g): a 20 km/h casi todo el volante,
-		# a 100 km/h unos pocos grados, así que mantener A/D a fondo traza la curva sin derrapar ni perder velocidad.
-		var g_max := minf(GIRO_MAX, atan(0.85 * mu * G * lb / maxf(v * v, 0.01)))
+		# el 85 % del agarre lateral: a 20 km/h casi todo el volante, a 100 km/h unos pocos grados, así que mantener
+		# A/D a fondo traza la curva sin derrapar. v4: con el subviraje real del coche (gradiente K) sumado.
+		var a85 := 0.85 * mu * G
+		var g_max := minf(GIRO_MAX, atan(a85 * lb / maxf(v * v, 0.01)) + gradiente_subviraje() * a85)
 		objetivo = volante * g_max
 		# ≈0,35 s hasta el tope al pulsar y ≈0,25 s para volver al centro al soltar
 		var ritmo := g_max / (0.35 if absf(objetivo) > absf(giro) and signf(objetivo) == signf(giro) or giro == 0.0 else 0.25)
 		giro = move_toward(giro, objetivo, maxf(ritmo, 0.05) * dt)
-	var omega := v * tan(giro) / lb
-	var a_lat := absf(v * omega)
-	var a_max := mu * G
-	derrapando = a_lat > a_max
-	if derrapando:
-		omega = signf(omega) * a_max / maxf(absf(v), 0.1)
-		v -= signf(v) * minf(absf(v), (a_lat - a_max) * 0.12 * dt)   # el neumático que desliza frena un poco
-	rumbo -= omega * dt
+	# el piloto pide la curvatura de su trayectoria (ángulo "geométrico"); se le suma lo que el coche subvira
+	var delta := giro
+	if giro_directo:
+		delta = clampf(giro + gradiente_subviraje() * v * v * tan(giro) / lb, -GIRO_MAX, GIRO_MAX)
+	# reparto de fuerzas longitudinales entre ejes (para el círculo de adherencia de cada eje)
+	var f_frenos := a_freno * m
+	var f_motor := empuje if acelerador > 0.0 else -caja.retencion
+	var fx_del := f_motor * (REPARTO_4MOTION if ficha.es_4x4() else 1.0) + f_frenos * REPARTO_FRENO
+	var fx_tra := f_motor * ((1.0 - REPARTO_4MOTION) if ficha.es_4x4() else 0.0) + f_frenos * (1.0 - REPARTO_FRENO)
+	var omega := _bicicleta(dt, delta, mu, fx_del, fx_tra)
 	w_rumbo = -omega
+
 	# restos de un choque: los neumáticos frenan el deslizamiento lateral y el trompo
 	if absf(giro_ext) > 0.0:
 		rumbo += giro_ext * dt
@@ -160,16 +201,99 @@ func paso_fisica(dt: float) -> void:
 		v_lat = move_toward(v_lat, 0.0, mu * G * dt)
 	a_long = lerpf(a_long, (v - v_ant) / dt, 1.0 - exp(-dt * 6.0))
 	a_lat_actual = lerpf(a_lat_actual, v * omega, 1.0 - exp(-dt * 6.0))
-	# --- avance ---
+	# --- avance --- (v4: más la deriva lateral de los neumáticos, vy)
 	var avance := adelante() * v * dt
 	var fw2 := adelante()
-	avance += Vector3(-fw2.z, 0.0, fw2.x) * v_lat * dt
+	avance += Vector3(-fw2.z, 0.0, fw2.x) * (v_lat + vy) * dt
 	position.x += avance.x
 	position.z += avance.z
 	Catalogo.animar_ruedas(modelo, v * dt, giro)
 	odometro += absf(v) * dt
 	choque_t = maxf(0.0, choque_t - dt)
 	_apoyar(dt)
+
+
+## v4: reparto de peso estático delante
+func reparto() -> float:
+	return REPARTO_4M if ficha.es_4x4() else REPARTO_FWD
+
+
+## Gradiente de subviraje (rad por m/s² de aceleración lateral) que sale de las rigideces de los dos ejes
+func gradiente_subviraje() -> float:
+	return (1.0 / C_DEL - 1.0 / C_TRA) / G
+
+
+## Fuerza lateral de un eje (N): Pacejka simplificado con círculo de adherencia (la fuerza longitudinal fx que
+## ya usa el eje le quita agarre lateral) y pendiente inicial c·Fz.
+static func _fy(alfa: float, fz: float, mu_eje: float, c: float, fx: float) -> float:
+	var dmax := mu_eje * fz
+	var d := sqrt(maxf(dmax * dmax - fx * fx, 0.0225 * dmax * dmax))
+	var b := c * fz / (C_PAC * d)
+	return d * sin(C_PAC * atan(b * alfa))
+
+
+## Modelo de bicicleta dinámico: deriva de los neumáticos, inercia de guiñada y transferencias de carga.
+## Integra vy, r_yaw, el rumbo y la velocidad (resistencia en curva) en 4 subpasos. Devuelve la guiñada (rad/s).
+func _bicicleta(dt: float, delta: float, mu: float, fx_del: float, fx_tra: float) -> float:
+	var lb := ficha.batalla
+	var m := ficha.masa
+	var rep := reparto()
+	var lf := lb * (1.0 - rep)
+	var lr := lb * rep
+	esc_activo = false
+	if v < V_DINAMICA:
+		# maniobra y marcha atrás: las ruedas ruedan sin deriva (como antes)
+		r_yaw = v * tan(delta) / lb
+		vy = r_yaw * lr if v > 0.0 else 0.0
+		alfa_del = 0.0
+		alfa_tra = 0.0
+		rumbo -= r_yaw * dt
+		derrapando = false
+		return r_yaw
+	# cargas por eje con la transferencia longitudinal (acelerar descarga el delantero, frenar lo carga)
+	var dfz := m * a_long * H_CDG / lb
+	var fzf := maxf(m * G * rep - dfz, 0.25 * m * G * rep)
+	var fzr := maxf(m * G * (1.0 - rep) + dfz, 0.25 * m * G * (1.0 - rep))
+	# transferencia lateral: el neumático exterior no gana lo que pierde el interior → el eje agarra algo menos
+	var q := absf(a_lat_actual) / G * 2.0 * H_CDG / ficha.via
+	var mu_f := mu * (1.0 - SENS_DEL * q * q)
+	var mu_r := mu * (1.0 - SENS_TRA * q * q)
+	var iz := m * lf * lr * IZ_FACTOR
+	var pico := tan(PI / (2.0 * C_PAC))           # B·α en el pico de la curva
+	var k := gradiente_subviraje()
+	var n := 4
+	var h := dt / n
+	var cd := cos(delta)
+	var sd := sin(delta)
+	var u := v
+	var w_media := 0.0
+	var desliza := false
+	for i in n:
+		var af := delta - atan2(vy + lf * r_yaw, u)
+		var ar := -atan2(vy - lr * r_yaw, u)
+		var fyf := _fy(af, fzf, mu_f, C_DEL, fx_del)
+		var fyr := _fy(ar, fzr, mu_r, C_TRA, fx_tra)
+		vy += ((fyf * cd + fyr) / m - u * r_yaw) * h
+		r_yaw += (lf * fyf * cd - lr * fyr) / iz * h
+		u += (vy * r_yaw - fyf * sd / m) * h
+		# ESC (de serie en el Arteon): si el eje trasero se va y el coche gira más de lo que pide el volante,
+		# frena una rueda para devolver la guiñada a la de referencia
+		var a_pico_r := pico / (C_TRA / (C_PAC * maxf(mu_r, 0.1)))
+		var r_ref := clampf(u * tan(delta) / (lb + k * u * u), -mu * G / u, mu * G / u)
+		if absf(ar) > 0.75 * a_pico_r and absf(r_yaw) > absf(r_ref) + 0.03:
+			r_yaw = move_toward(r_yaw, r_ref, 2.5 * h)
+			vy = move_toward(vy, r_yaw * lr, 2.0 * h)
+			u -= 1.5 * h
+			esc_activo = true
+		rumbo -= r_yaw * h
+		w_media += r_yaw / n
+		alfa_del = af
+		alfa_tra = ar
+		var a_pico_f := pico / (C_DEL / (C_PAC * maxf(mu_f, 0.1)))
+		desliza = desliza or absf(af) > a_pico_f or absf(ar) > a_pico_r
+	v = u
+	derrapando = desliza
+	return w_media
 
 
 func _altura(p: Vector3) -> float:

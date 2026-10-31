@@ -2,6 +2,8 @@
 extends Node
 
 const ZONA_POR_DEFECTO := "navacerrada"
+## Zonas incluidas: carpeta en res://datos/ → nombre en el menú
+const ZONAS := {"navacerrada": "Puerto de Navacerrada (Madrid/Segovia)", "a308": "A-308 Iznalloz – Darro (Granada)"}
 
 # --- opciones de la partida (las rellena el menú) ---
 var zona := ZONA_POR_DEFECTO
@@ -11,6 +13,7 @@ var km_fin := 0.0          # si km_fin < km_ini se recorre la carretera en senti
 var velocidad := 80.0      # km/h de crucero / piloto automático
 var piloto := true         # el coche se conduce solo por su carril
 var adaptar_curvas := true # el piloto frena antes de las curvas
+var limite_adelantar := false  # al adelantar, no pasar del límite de velocidad del tramo (apagado = más agresivo)
 var trafico := 0.3         # 0..1
 var camara := 0            # 0 persecución, 1 cabina
 
@@ -52,7 +55,24 @@ func dir_datos() -> String:
 	return "res://datos/%s/" % zona
 
 
+## Cambia de zona: vacía lo cargado (la escena que llame a esto se recarga después)
+func cambiar_zona(z: String) -> void:
+	if z == zona and not rutas.is_empty():
+		return
+	zona = z
+	ruta_idx = 0
+	km_ini = 0.0
+	km_fin = 0.0
+	info = {}
+	rutas.clear()
+	vias.clear()
+	terreno.clear()
+	superficie = null
+
+
 func cargar() -> void:
+	if args.has("zona") and args["zona"] != zona and rutas.is_empty():
+		zona = args["zona"]
 	if not rutas.is_empty():
 		return
 	var t0 := Time.get_ticks_msec()
@@ -60,7 +80,15 @@ func cargar() -> void:
 	var car: Dictionary = JSON.parse_string(FileAccess.get_file_as_string(dir_datos() + "carreteras.json"))
 	for d in car["rutas"]:
 		rutas.append(Ruta.desde_json(d))
-	for v in car["vias"]:
+	_lineas_adelantar()
+	_cargar_carriles()
+	# zonas grandes: las vías secundarias van repartidas en varios archivos (≤ 3 MB cada uno)
+	var lista_vias: Array = car["vias"].duplicate()
+	for nombre in car.get("vias_archivos", []):
+		var parte = JSON.parse_string(FileAccess.get_file_as_string(dir_datos() + str(nombre)))
+		if parte is Dictionary:
+			lista_vias.append_array(parte.get("vias", []))
+	for v in lista_vias:
 		var pts := PackedVector3Array()
 		var xs: Array = v["x"]
 		for i in xs.size():
@@ -89,6 +117,21 @@ func cargar() -> void:
 	print("Datos cargados en %d ms: %d rutas, %d vías, %d teselas" % [Time.get_ticks_msec() - t0, rutas.size(), vias.size(), terreno.size()])
 
 
+## Carriles reales por sentido (carriles adicionales 2+1), de adelantar.json → "carriles", si existen
+func _cargar_carriles() -> void:
+	var camino := dir_datos() + "adelantar.json"
+	if not FileAccess.file_exists(camino):
+		return
+	var d = JSON.parse_string(FileAccess.get_file_as_string(camino))
+	if not (d is Dictionary) or not (d.get("rutas", null) is Array):
+		return
+	for r in d["rutas"]:
+		if r is Dictionary and r.has("carriles"):
+			var i := int(r.get("id", -1))
+			if i >= 0 and i < rutas.size():
+				rutas[i].cargar_carriles(r["carriles"])
+
+
 ## Altura del terreno (bilineal) en X, Z
 func altura_terreno(x: float, z: float) -> float:
 	var gx := (x - ter_x0) / ter_paso
@@ -114,3 +157,31 @@ func altura_terreno(x: float, z: float) -> float:
 
 func ruta() -> Ruta:
 	return rutas[clampi(ruta_idx, 0, rutas.size() - 1)]
+
+
+## Línea central derivada (no son las marcas reales): tramos de línea discontinua de datos/…/adelantar.json,
+## calculados con el mismo criterio de adelantamiento del juego (--captura=lineas_adelantar). Sin el archivo,
+## cada ruta se queda sin máscara y se pinta con la regla antigua (continua en curvas de radio < 350 m).
+func _lineas_adelantar() -> void:
+	var camino := dir_datos() + "adelantar.json"
+	if not FileAccess.file_exists(camino):
+		return
+	var d = JSON.parse_string(FileAccess.get_file_as_string(camino))
+	if not (d is Dictionary) or not (d.get("rutas", null) is Array):
+		return
+	for r in d["rutas"]:
+		if not (r is Dictionary) or not r.has("linea_discontinua"):
+			continue
+		var i := int(r.get("id", -1))
+		if i < 0 or i >= rutas.size():
+			continue
+		var ru: Ruta = rutas[i]
+		var m := PackedByteArray()
+		m.resize(ru.n)
+		m.fill(0)
+		for t in r["linea_discontinua"]:
+			var a := clampi(int(float(t[0]) * 1000.0 / ru.paso), 0, ru.n - 1)
+			var b := clampi(int(float(t[1]) * 1000.0 / ru.paso), 0, ru.n - 1)
+			for k in range(a, b + 1):
+				m[k] = 1
+		ru.discontinua = m

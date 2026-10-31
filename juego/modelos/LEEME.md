@@ -10,9 +10,11 @@
   - orientado y escalado a 4,866 m de largo, con el origen en el centro de la batalla, a ras de suelo;
   - las 4 ruedas y las pinzas separadas, cada una con su centro en el eje;
   - piezas unidas por material y materiales PBR rehechos (la pintura se llama `pintura` y el juego la pinta del color elegido);
-  - reducido de triángulos: 1.624.643 → 75.836 (LOD0, jugador) y 28.620 (LOD1, tráfico: cada material reducido aparte y materiales agrupados en 6 + 2 por rueda).
+  - reducido de triángulos: 1.624.643 → 113.518 (LOD0, jugador; v3.1) y 28.620 (LOD1, tráfico: cada material reducido aparte y materiales agrupados en 6 + 2 por rueda);
+  - LOD0 (v3.1): las normales se copian del modelo original (suavizado a 35°, modificador Data Transfer) sobre la malla reducida, para que la chapa no salga abollada; llantas en grafito oscuro como en el original;
+  - el `.gltf` del LOD0 lleva la geometría partida en dos `.bin` de menos de 3 MB (GitHub) y las texturas aparte (`arteon_lod0_tire.png`, `arteon_lod0_interiorTex.png`).
 
-Uso: `blender -b --factory-startup --python convertir_arteon.py -- scene.gltf arteon_lod0.gltf (+ arteon_lod0_0.bin, arteon_lod0_1.bin) arteon_lod1.glb info.json 4.866 2.836`
+Uso: `SOLO_LOD0=1 blender -b --factory-startup --python convertir_arteon.py -- scene.gltf arteon_lod0.glb lod1_no_usado.glb info.json 4.866 2.836` y después se pasa el `.glb` a `.gltf` con la geometría en `.bin` de < 3 MB
 (el `.gltf` original se descarga de Sketchfab). El LOD1 final se hace a partir del LOD0 con `simplificar_lod1.py`:
 `blender -b --python simplificar_lod1.py -- arteon_lod0.gltf (+ arteon_lod0_0.bin, arteon_lod0_1.bin) arteon_lod1.glb 0.36`.
 

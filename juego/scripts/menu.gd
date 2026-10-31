@@ -1,6 +1,7 @@
 ## Menú inicial: carretera, tramo (km inicio → km fin) con su perfil real, velocidad, piloto automático y tráfico.
 extends Control
 
+var lista_zonas := OptionButton.new()
 var lista_rutas := OptionButton.new()
 var perfil := Perfil.new()
 var km_ini := HSlider.new()
@@ -9,6 +10,7 @@ var vel := HSlider.new()
 var traf := HSlider.new()
 var chk_piloto := CheckBox.new()
 var chk_curvas := CheckBox.new()
+var chk_limite_adel := CheckBox.new()
 var camara := OptionButton.new()
 var info := Label.new()
 var lbl_ini := Label.new()
@@ -42,6 +44,19 @@ func _ready() -> void:
 	sub.text = "Trazado real de OpenStreetMap · altitud real del MDT del IGN · zona: %s" % Ajustes.zona
 	sub.modulate = Color(0.75, 0.8, 0.85)
 	col.add_child(sub)
+	# zona (cada una con su terreno y sus carreteras; cambiarla recarga el menú)
+	var fila_z := HBoxContainer.new()
+	fila_z.add_child(_etq("Zona:", 140))
+	var claves := Ajustes.ZONAS.keys()
+	for k in claves:
+		lista_zonas.add_item(Ajustes.ZONAS[k])
+	lista_zonas.selected = maxi(claves.find(Ajustes.zona), 0)
+	lista_zonas.custom_minimum_size.x = 520
+	lista_zonas.item_selected.connect(func(i):
+		Ajustes.cambiar_zona(claves[i])
+		get_tree().reload_current_scene())
+	fila_z.add_child(lista_zonas)
+	col.add_child(fila_z)
 	# carretera
 	var fila := HBoxContainer.new()
 	fila.add_child(_etq("Carretera:", 140))
@@ -95,6 +110,10 @@ func _ready() -> void:
 	chk_curvas.button_pressed = Ajustes.adaptar_curvas
 	opciones.add_child(chk_piloto)
 	opciones.add_child(chk_curvas)
+	chk_limite_adel.text = "Respetar límite al adelantar"
+	chk_limite_adel.tooltip_text = "Si está marcado, al adelantar no pasa del límite de velocidad del tramo (y si así no le da, no adelanta)"
+	chk_limite_adel.button_pressed = Ajustes.limite_adelantar
+	opciones.add_child(chk_limite_adel)
 	camara.add_item("Cámara de persecución")
 	camara.add_item("Cámara de cabina")
 	camara.selected = Ajustes.camara
@@ -113,7 +132,7 @@ func _ready() -> void:
 	col.add_child(fila_b)
 	var mandos := Label.new()
 	mandos.text = ("Mandos en carretera: W/↑ acelerar · S/↓ frenar (parado: marcha atrás) · " +
-		"P piloto automático · O adelantar (con el piloto) · +/− velocidad · K adaptar en curvas · 9/0 menos/más tráfico · " +
+		"P piloto automático · O adelantar (con el piloto) · L respetar límite al adelantar · +/− velocidad · K adaptar en curvas · 9/0 menos/más tráfico · " +
 		"V cámara · R volver a la carretera · Esc pausa (tráfico y velocidad) · H ayuda")
 	mandos.autowrap_mode = TextServer.AUTOWRAP_WORD
 	mandos.modulate = Color(0.65, 0.7, 0.75)
@@ -211,6 +230,7 @@ func _empezar() -> void:
 	Ajustes.trafico = traf.value / 100.0
 	Ajustes.piloto = chk_piloto.button_pressed
 	Ajustes.adaptar_curvas = chk_curvas.button_pressed
+	Ajustes.limite_adelantar = chk_limite_adel.button_pressed
 	Ajustes.camara = camara.selected
 	get_tree().change_scene_to_file("res://escenas/juego.tscn")
 

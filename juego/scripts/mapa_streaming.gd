@@ -211,11 +211,12 @@ func _caja(pts: PackedVector3Array, a: int, b: int) -> Rect2:
 
 
 func _piezas_ruta(r: Ruta) -> void:
-	# línea central: continua en curvas cerradas, discontinua (4,5 m de trazo cada 12 m) en rectas
+	# línea central: continua donde el juego no deja adelantar, discontinua (4,5 m de trazo cada 12 m) donde sí
 	var patron := PackedByteArray()
 	patron.resize(r.n)
 	for i in r.n:
-		var continua := absf(r.curvatura[i]) > 1.0 / 350.0
+		# línea derivada del criterio de adelantamiento del juego (adelantar.json); sin él, regla antigua de radio 350 m
+		var continua := (r.discontinua[i] == 0) if r.discontinua.size() == r.n else absf(r.curvatura[i]) > 1.0 / 350.0
 		patron[i] = 1 if (continua or fmod(i * r.paso, 12.0) < 4.5) else 0
 	var i := 0
 	while i < r.n - 1:
@@ -479,7 +480,34 @@ func _trozo_ruta(pz: Dictionary) -> Node3D:
 	# líneas de borde (continuas, 15 cm) y central (continua en curvas cerradas, discontinua en rectas)
 	_franja(r.pts, r.ancho, a, b, -1.0, 0.075, 0.08, mv, mn, mi)
 	_franja(r.pts, r.ancho, a, b, 1.0, 0.075, 0.08, mv, mn, mi)
-	_franja(r.pts, r.ancho, a, b, 0.0, 0.07, 0.085, mv, mn, mi, pz["patron"])
+	if not r.tiene_carriles():
+		_franja(r.pts, r.ancho, a, b, 0.0, 0.07, 0.085, mv, mn, mi, pz["patron"])
+	else:
+		# carriles reales (2+1): eje desplazado y línea discontinua entre los dos carriles del mismo sentido
+		var eje := PackedVector3Array(); eje.resize(r.n)
+		var sep_i := PackedVector3Array(); sep_i.resize(r.n)
+		var sep_v := PackedVector3Array(); sep_v.resize(r.n)
+		var pat_eje: PackedByteArray = pz["patron"].duplicate()
+		var pat_i := PackedByteArray(); pat_i.resize(r.n)
+		var pat_v := PackedByteArray(); pat_v.resize(r.n)
+		var hay_i := false
+		var hay_v := false
+		for i in range(maxi(a - 1, 0), mini(b + 1, r.n - 1) + 1):
+			var t := r.pts[mini(i + 1, r.n - 1)] - r.pts[maxi(i - 1, 0)]
+			var der := Vector3(-t.z, 0.0, t.x).normalized()
+			eje[i] = r.pts[i] + der * r.lat_eje[i]
+			sep_i[i] = r.pts[i] + der * (r.lat_ida[i] + r.lat_ida_adel[i]) * 0.5
+			sep_v[i] = r.pts[i] + der * (r.lat_vuelta[i] + r.lat_vuelta_adel[i]) * 0.5
+			var discontinua := fmod(i * r.paso, 12.0) < 4.5
+			if r.car_ida[i] != r.car_vuelta[i]:
+				pat_eje[i] = 1     # 2+1: línea continua en el eje (ver adelantar.json, supuesto_2+1)
+			pat_i[i] = 1 if (r.car_ida[i] >= 2 and discontinua) else 0
+			pat_v[i] = 1 if (r.car_vuelta[i] >= 2 and discontinua) else 0
+			hay_i = hay_i or r.car_ida[i] >= 2
+			hay_v = hay_v or r.car_vuelta[i] >= 2
+		_franja(eje, r.ancho, a, b, 0.0, 0.07, 0.085, mv, mn, mi, pat_eje)
+		if hay_i: _franja(sep_i, r.ancho, a, b, 0.0, 0.07, 0.085, mv, mn, mi, pat_i)
+		if hay_v: _franja(sep_v, r.ancho, a, b, 0.0, 0.07, 0.085, mv, mn, mi, pat_v)
 	raiz.add_child(_instancia(_malla([[mv, mn, mi, mundo.mat_marca]]), DIST_MARCAS))
 	return raiz
 

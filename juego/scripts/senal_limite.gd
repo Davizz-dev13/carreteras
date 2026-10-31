@@ -1,5 +1,5 @@
 ## Señal redonda de límite de velocidad (aro rojo, fondo blanco, número negro), junto al velocímetro.
-## Lee res://datos/navacerrada/limites_velocidad.json si existe; si no, no se muestra.
+## Lee res://datos/<zona>/limites_velocidad.json si existe; si no, no se muestra.
 class_name SenalLimite
 extends Control
 
@@ -12,7 +12,7 @@ var por_defecto := false     # límite genérico por tipo de vía (no viene de u
 ## {"0": {"tramos": …}} o directamente una lista de tramos.
 func cargar(ruta_idx: int, nombre_ruta: String) -> void:
 	tramos.clear()
-	var camino := "res://datos/navacerrada/limites_velocidad.json"
+	var camino := Ajustes.dir_datos() + "limites_velocidad.json"
 	if not FileAccess.file_exists(camino):
 		return
 	var d = JSON.parse_string(FileAccess.get_file_as_string(camino))
@@ -41,6 +41,32 @@ func cargar(ruta_idx: int, nombre_ruta: String) -> void:
 			tramos.append({"a": float(t.get("km_ini", 0.0)) * 1000.0, "b": float(t.get("km_fin", 0.0)) * 1000.0,
 				"limite": int(t["limite"]), "sentido": str(t.get("sentido", "ambos")),
 				"legal": str(t.get("fuente", "osm")) != "osm"})
+
+
+## Límite (km/h) que rige en el punto s de la ruta circulando en el sentido dir (0 = sin dato). v4
+func limite_en(s: float, dir: int) -> int:
+	for t in tramos:
+		if s >= minf(t["a"], t["b"]) and s <= maxf(t["a"], t["b"]):
+			var sen: String = t["sentido"]
+			if sen == "ambos" or (sen == "ida" and dir > 0) or (sen == "vuelta" and dir < 0):
+				return t["limite"]
+	return 0
+
+
+## Velocidad máxima (m/s) para el piloto automático: el límite de aquí y, si más adelante baja, la velocidad desde la
+## que se llega a ese límite frenando suave (b m/s²) justo al pasar la señal. INF si no hay límites para esta ruta. v4
+func tope_piloto(s: float, dir: int, b := 1.2, horizonte := 300.0) -> float:
+	if tramos.is_empty():
+		return INF
+	var tope := INF
+	var d := 0.0
+	while d <= horizonte:
+		var l := limite_en(s + dir * d, dir)
+		if l > 0:
+			var vl := l / 3.6
+			tope = minf(tope, sqrt(vl * vl + 2.0 * b * d))
+		d += 10.0
+	return tope
 
 
 func actualizar(s: float, dir: int) -> void:

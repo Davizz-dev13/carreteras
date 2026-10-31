@@ -43,6 +43,7 @@ var l_ayuda := Label.new()
 var mini_perfil := Perfil.new()
 var mini_mapa := MapaRuta.new()
 var senal := SenalLimite.new()
+var hud_motor := HudMotor.new()   # v4: marcha, rpm y consumo junto al velocímetro
 var panel_pausa := PanelContainer.new()
 var panel_fin := PanelContainer.new()
 var l_fin := Label.new()
@@ -56,6 +57,7 @@ func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	_leer_args()
 	Ajustes.cargar()
+	_ajustes_adelantamiento()
 	var cargando := Label.new()
 	cargando.text = "Cargando terreno y carreteras a escala 1:1…"
 	cargando.add_theme_font_size_override("font_size", 26)
@@ -107,13 +109,14 @@ func _leer_args() -> void:
 ## Coloca el coche en el carril derecho del punto actual (o del inicio del tramo)
 func _reiniciar(en_inicio := true) -> void:
 	var s := s_ini if en_inicio else s_coche
-	var lado := dir * ruta.valor(ruta.ancho, s) * 0.25
+	var lado := ruta.lateral_carril(s, dir)
 	coche.colocar(ruta.punto(s) + ruta.derecha(s) * lado, ruta.tangente(s) * dir)
 	s_coche = s
 	reiniciar_camara()
 	if en_inicio:
 		tiempo = 0.0
 		coche.odometro = 0.0
+		coche.consumo.reiniciar()
 		v_max = 0.0
 		choques = 0
 		derrapes = 0
@@ -136,7 +139,7 @@ func _simular(dt: float) -> void:
 	var fw0 := coche.adelante()
 	var prev_jug := {"p": Vector2(coche.position.x, coche.position.z), "f": Vector2(fw0.x, fw0.z)}
 	coche.paso_fisica(dt)
-	var lado_jug := 1 if lat_coche > 0.0 else -1
+	var lado_jug := 1 if lat_coche > ruta.lateral_eje(s_coche) else -1
 	var en_ruta := absf(lat_coche) < ruta.valor(ruta.ancho, s_coche) * 0.5 + 1.5
 	trafico.factor = Ajustes.trafico
 	trafico.actualizar(dt, s_coche, lat_coche, coche.v * dir, lado_jug if en_ruta else 0)
@@ -176,7 +179,7 @@ func _mandos(_dt: float) -> void:
 	if piloto:
 		coche.giro_directo = true
 		coche.volante = _volante_piloto()
-		_control_velocidad(_velocidad_objetivo())
+		_control_velocidad(_tope_limite(_velocidad_objetivo()))
 		return
 	coche.giro_directo = false
 	coche.volante = vol
@@ -197,7 +200,7 @@ func _mandos(_dt: float) -> void:
 func _volante_piloto() -> float:
 	var mira := clampf(absf(coche.v) * 0.75, 7.0, 26.0)
 	var s := s_coche + dir * mira
-	var obj := ruta.punto(s) + ruta.derecha(s) * dir * ruta.valor(ruta.ancho, s) * 0.25 * (1.0 - 2.0 * adel_carril)
+	var obj := ruta.punto(s) + ruta.derecha(s) * ruta.lateral_carril(s, dir, adel_carril)
 	var fw := coche.adelante()
 	var der := Vector3(-fw.z, 0.0, fw.x)
 	var d := obj - coche.position
@@ -211,11 +214,14 @@ func _volante_piloto() -> float:
 ## Velocidad del piloto: la elegida, limitada por curvas (si se adapta) y por el coche de delante (IDM)
 func _velocidad_objetivo() -> float:
 	var v0 := Ajustes.velocidad / 3.6
-	if adel_estado == 3 and adel_abortado and not adel_lider.is_empty():
+	if adel_estado == 3 and adel_abortado and adel_abort_detras and not adel_lider.is_empty():
 		v0 = minf(v0, float(adel_lider["v"]) - 15.0 / 3.6)
 	elif adel_estado == 2 and not adel_lider.is_empty():
-		# para pasar hace falta ir claramente más rápido que el adelantado (+25 km/h como mínimo)
-		v0 = maxf(v0, float(adel_lider["v"]) + 25.0 / 3.6)
+		# para pasar hace falta ir claramente más rápido que el adelantado (+ADEL_DELTA km/h como mínimo)
+		v0 = maxf(v0, float(adel_lider["v"]) + ADEL_DELTA / 3.6)
+		if Ajustes.limite_adelantar:
+			var lim := _limite(s_coche, dir)
+			if lim > 0: v0 = minf(v0, lim / 3.6)
 	if Ajustes.adaptar_curvas:
 		v0 = minf(v0, trafico.vel_curva(s_coche, dir, 4.0, 220.0))
 	return v0
@@ -226,7 +232,7 @@ func _control_velocidad(v0: float) -> void:
 	var v_lider := v0
 	for c in trafico.coches:
 		if c["dir"] != dir: continue
-		if adel_carril > 0.45: continue     # en el carril contrario: los de nuestro sentido van al lado
+		if adel_carril > 0.45 and (adel_estado == 2 or not ADEL_HUECO_VUELTA): continue     # adelantando por el carril contrario: los de nuestro sentido van al lado
 		var d: float = (c["s"] - s_coche) * dir
 		if d > 0.0 and d - trafico.largo < hueco:
 			hueco = d - trafico.largo
@@ -248,6 +254,13 @@ func _control_velocidad(v0: float) -> void:
 	else:
 		coche.acelerador = 0.0
 		coche.freno = clampf(-f / fi.f_freno_max, 0.0, 1.0)
+
+
+## v4: el piloto no pasa del límite de la señal (y frena suave antes de una señal más baja), salvo adelantando
+func _tope_limite(v0: float) -> float:
+	if adel_estado >= 2:
+		return v0
+	return minf(v0, senal.tope_piloto(s_coche, dir))
 
 
 func _fin() -> void:
@@ -281,6 +294,8 @@ func _unhandled_input(ev: InputEvent) -> void:
 			l_ayuda.visible = not l_ayuda.visible
 		KEY_K:
 			Ajustes.adaptar_curvas = not Ajustes.adaptar_curvas
+		KEY_L:
+			Ajustes.limite_adelantar = not Ajustes.limite_adelantar
 		KEY_EQUAL, KEY_KP_ADD, KEY_PLUS:
 			Ajustes.velocidad = minf(Ajustes.velocidad + 5.0, 200.0)
 		KEY_MINUS, KEY_KP_SUBTRACT:
@@ -428,11 +443,12 @@ func _crear_hud() -> void:
 	l_alt.add_theme_font_size_override("font_size", 22)
 	l_pend.add_theme_font_size_override("font_size", 22)
 	abajo.add_child(l_vel)
+	abajo.add_child(hud_motor)
 	abajo.add_child(l_alt)
 	abajo.add_child(l_pend)
 	var caja_v := _caja(Vector2(16, 0), abajo)
 	caja_v.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
-	caja_v.position = Vector2(16, get_viewport().get_visible_rect().size.y - 170)
+	caja_v.position = Vector2(16, get_viewport().get_visible_rect().size.y - 308)
 	l_modo.add_theme_font_size_override("font_size", 17)
 	l_modo.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	var caja_m := _caja(Vector2(get_viewport().get_visible_rect().size.x - 330, 14), l_modo)
@@ -462,13 +478,13 @@ func _crear_hud() -> void:
 	mini_mapa.preparar()
 	# límite de velocidad del tramo (si existe el fichero de límites)
 	senal.size = Vector2(64, 64)
-	senal.position = Vector2(262, vs.y - 214)
+	senal.position = Vector2(278, vs.y - 214)
 	senal.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	senal.cargar(Ajustes.ruta_idx, ruta.nombre)
 	senal.visible = false
 	hud.add_child(senal)
 	l_ayuda.text = ("W/↑ acelerar · S/↓ frenar (parado: marcha atrás)\n" +
-		"P piloto automático · O adelantar · +/− velocidad · K curvas · 9/0 tráfico\n" +
+		"P piloto · O adelantar (L: límite) · +/− velocidad · K curvas · 9/0 tráfico\n" +
 		"V cámara · R volver a la carretera · Esc pausa · H ocultar ayuda")
 	l_ayuda.add_theme_font_size_override("font_size", 13)
 	var caja_a := _caja(Vector2(vs.x - 520, vs.y - 86), l_ayuda)
@@ -489,6 +505,7 @@ func _hud() -> void:
 	l_via.text = "%s\nPK %s km de la ruta · recorrido %s km · faltan %s km" % [
 		nombre, _num(s_coche / 1000.0, 2), _num(coche.odometro / 1000.0, 2), _num(falta if not terminado else 0.0, 2)]
 	l_vel.text = "%d km/h" % roundi(absf(coche.v) * 3.6)
+	hud_motor.actualizar(coche)
 	l_alt.text = "Altitud: %s m" % _miles(roundi(coche.position.y))
 	# pendiente: la real de la ruta en el sentido de marcha (o la del terreno si estás fuera)
 	var g := 0.0
@@ -504,8 +521,9 @@ func _hud() -> void:
 	elif adel_estado == 2: modo += "\nAdelantando…"
 	elif adel_estado == 3: modo += "\nAdelantamiento: volviendo al carril"
 	elif adel_msg_t > 0.0: modo += "\n" + adel_msg
-	l_modo.text = coche.ficha.nombre + " · %d CV\n" % roundi(coche.ficha.potencia_cv) + "%s\nVelocidad elegida: %d km/h\nAdaptar en curvas: %s\nTráfico: %d %%\nCámara: %s" % [
-		modo, roundi(Ajustes.velocidad), "sí" if Ajustes.adaptar_curvas else "no", roundi(Ajustes.trafico * 100.0),
+	l_modo.text = coche.ficha.nombre + " · %d CV\n" % roundi(coche.ficha.potencia_cv) + "%s\nVelocidad elegida: %d km/h\nAdaptar en curvas: %s\nLímite al adelantar: %s\nTráfico: %d %%\nCámara: %s" % [
+		modo, roundi(Ajustes.velocidad), "sí" if Ajustes.adaptar_curvas else "no", "respetar" if Ajustes.limite_adelantar else "no",
+		roundi(Ajustes.trafico * 100.0),
 		"cabina" if Ajustes.camara == 1 else "persecución"]
 	mini_perfil.marcador = s_coche
 	mini_mapa.actualizar(s_coche)
@@ -610,6 +628,12 @@ func _captura() -> void:
 	if Ajustes.args["captura"] == "perfil":
 		_prueba_perfil()
 		return
+	if Ajustes.args["captura"] == "lineas_adelantar":
+		_generar_lineas()
+		return
+	if Ajustes.args["captura"] == "mapa_adelantar":
+		_prueba_mapa_adelantar()
+		return
 	if Ajustes.args["captura"] in ["choque_alcance", "choque_frontal", "adelantar"]:
 		_prueba(Ajustes.args["captura"])
 		return
@@ -620,17 +644,41 @@ func _captura() -> void:
 		trafico.crear_prueba(s_coche + dir * 170.0, -dir, 14.0, false)
 	var presim := float(Ajustes.args.get("presim", "6"))
 	var n := int(presim * 60.0)
+	var auto_o: bool = Ajustes.args.get("auto_o", "") == "1"
+	var motivos_auto := {}
 	for i in n:
+		if auto_o and piloto and adel_estado == 0 and not _lider_lento().is_empty():
+			_pedir_adelantamiento()
+		var est0 := adel_estado
+		var ch0 := choques
 		_simular(1.0 / 60.0)
+		if auto_o and adel_estado == 1 and adel_motivo != "":
+			var km: String = adel_motivo.split(" (")[0]
+			motivos_auto[km] = motivos_auto.get(km, 0.0) + 1.0 / 60.0
+		if auto_o and Ajustes.args.has("traza_adel"):
+			if adel_estado != est0 and adel_estado >= 2:
+				print("  t=%.1f PK %.3f estado %d→%d v=%.0f km/h carril=%.2f grupo=%d motivo=%s" % [tiempo, s_coche / 1000.0, est0, adel_estado, coche.v * 3.6, adel_carril, adel_grupo_n, adel_motivo])
+			if choques != ch0:
+				var txt := ""
+				for oc in trafico.coches:
+					var dd: float = (oc["s"] - s_coche) * dir
+					if absf(dd) < 12.0: txt += " [%s d=%.1f v=%.0f suelto=%s]" % ["mismo" if oc["dir"] == dir else "frente", dd, float(oc["v"]) * 3.6, str(oc.get("suelto", false))]
+				print("  CHOQUE t=%.1f PK %.3f estado=%d carril=%.2f lat=%.2f v=%.0f km/h abortado=%s cerca:%s" % [tiempo, s_coche / 1000.0, adel_estado, adel_carril, lat_coche, coche.v * 3.6, str(adel_abortado), txt])
 		if Ajustes.args.get("traza", "") == "1" and i % 1800 == 0:
 			print("  t=%4.0f s  PK %.2f km  lat %+.2f m  %3.0f km/h  alt %.0f  coches %d  derrapes %d choques %d fin=%s" % [
 				tiempo, s_coche / 1000.0, lat_coche, coche.v * 3.6, coche.position.y, trafico.coches.size(), derrapes, choques, terminado])
+		if Ajustes.args.has("traza_motor"):
+			_traza_motor()
 		if terminado and Ajustes.args["captura"] == "prueba":
 			break
 	coche.reset_physics_interpolation()
 	trafico.reiniciar_interpolacion()
 	mundo.cargar_ventana(coche.position, coche.adelante())
 	reiniciar_camara()
+	if auto_o:
+		print("ADELANTAR_AUTO coche=%s preset=%s radio_min=%s trafico=%d dir=%d limite=%s: completados %d (coches pasados %d) · abortados %d · choques %d · terminado=%s tiempo=%.0f s v_media=%.1f km/h · segundos esperando por motivo %s" % [
+			coche.ficha.id, Ajustes.args.get("preset", "v3.1"), str(ADEL_RADIO_MIN), roundi(Ajustes.trafico * 100.0), dir, str(Ajustes.limite_adelantar),
+			adelantamientos, adel_coches_pasados, adel_abortos, choques, terminado, tiempo, coche.odometro / maxf(tiempo, 0.1) * 3.6, str(motivos_auto)])
 	print("CAPTURA terminado=%s tiempo=%.0f s choques=%d s=%.1f km lat=%.2f v=%.1f km/h alt=%.1f via=%d coches=%d derrapes=%d" % [terminado, tiempo, choques, s_coche / 1000.0, lat_coche,
 		coche.v * 3.6, coche.position.y, coche.id_via, trafico.coches.size(), derrapes])
 	if Ajustes.args["captura"] == "video":
@@ -644,6 +692,26 @@ func _captura() -> void:
 	await RenderingServer.frame_post_draw
 	get_viewport().get_texture().get_image().save_png(Ajustes.args.get("salida", "user://captura.png"))
 	get_tree().quit()
+
+## v4 --traza_motor=1: una línea por km con marcha, rpm y consumo (verificación)
+var _traza_km := -1
+var _traza_l := 0.0
+func _traza_motor() -> void:
+	var km := int(floor(s_coche / 1000.0)) if dir > 0 else int(ceil(s_coche / 1000.0))
+	if _traza_km == -1:
+		_traza_km = km
+		_traza_l = coche.consumo.litros
+		return
+	if km == _traza_km and not terminado:
+		return
+	var cs := coche.consumo
+	print("TRAZA_MOTOR km %.2f | %3.0f km/h | límite %d | %s %4.0f rpm | inst %s | media %.2f l/100 | %.3f l total | %.3f l este km | alt %.0f m | pend %+.1f %% | choques %d | adel %d" % [
+		s_coche / 1000.0, absf(coche.v) * 3.6, senal.limite_en(s_coche, dir), coche.caja.texto_marcha(), coche.caja.rpm,
+		"corte" if cs.l100_inst < 0.0 else "%.1f" % cs.l100_inst, cs.media(), cs.litros, cs.litros - _traza_l,
+		coche.position.y, ruta.valor(ruta.pendiente, s_coche) * dir, choques, adelantamientos])
+	_traza_km = km
+	_traza_l = cs.litros
+
 
 var _tele := PackedStringArray()
 func _telemetria() -> void:
@@ -681,15 +749,83 @@ func _medir_fps() -> void:
 
 # ---------------- adelantamiento a petición (tecla O) ----------------
 ## Solo con el piloto automático y solo cuando el jugador lo pide. Antes de salir comprueba, con la aceleración
-## REAL de esta versión (motor, aire, rodadura y la pendiente real del tramo), cuánto tiempo y cuántos metros
-## necesita para pasar, y que en toda esa zona: no haya línea continua (el juego la pinta en curvas de radio
-## < 350 m), se vea la carretera lo bastante lejos (curvas y cambios de rasante) para un coche que viniera de
-## frente a la velocidad máxima de la vía, y ningún coche real de frente llegue antes de terminar.
-const ADEL_MARGEN := 12.0        # m por delante del último adelantado antes de volver al carril
-const ADEL_T_CAMBIO := 2.2       # s para cambiar de carril
-const ADEL_HUECO_GRUPO := 30.0   # coches pegados al líder (< 30 m) se adelantan de una vez
+## REAL de esta versión (motor, aire, rodadura, la pendiente real del tramo y la velocidad a la que dejan ir las
+## curvas), cuánto tiempo y cuántos metros necesita para pasar, y que en toda esa zona: no sea un tramo con
+## prohibición de adelantar en OSM (datos/navacerrada/adelantar.json), no haya curvas de radio < ADEL_RADIO_MIN,
+## se vea la carretera lo bastante lejos (curvas y cambios de rasante) para un coche que viniera de frente a la
+## velocidad máxima de la vía, y ningún coche real de frente llegue antes de terminar.
+## v3.1 (más agresivo): +15 km/h sobre el adelantado (antes 25), vuelve al carril 8 m por delante (antes 12),
+## cambio de carril en 1,6 s (antes 2,2), 15 m de margen con los coches de frente (antes 30), sale con el lento
+## hasta a 90 m (antes 70) y la regla de curvas baja de radio 350 m a 150 m. --preset=antes repite la v3.
+var ADEL_MARGEN := 8.0          # m por delante del último adelantado antes de volver al carril
+var ADEL_T_CAMBIO := 1.6        # s para cambiar de carril
+const ADEL_HUECO_GRUPO := 30.0  # coches pegados al líder (< 30 m) se adelantan de una vez
+var ADEL_DELTA := 15.0          # km/h mínimos por encima del adelantado
+var ADEL_RADIO_MIN := 150.0     # m: no se adelanta si en la zona del adelantamiento hay curvas más cerradas (0 = sin regla)
+var ADEL_MARGEN_FRENTE := 15.0  # m de margen con un coche de frente al terminar
+var ADEL_DIST_LIDER := 90.0     # m: hasta dónde se busca el coche lento por delante
+var ADEL_USAR_OSM := true       # respetar overtaking=no de OSM
+var ADEL_SIM_CURVAS := true
+var ADEL_USAR_LINEA := true     # no adelantar cruzando la línea continua pintada (derivada, ver Ajustes._lineas_adelantar)
+var ADEL_VIS_COMPROMISO := true # visibilidad por punto de compromiso (v3.1) o desde la salida para todo el pase (v3)     # la simulación del adelantamiento frena para las curvas como el piloto
+var adel_prohibido: Array = []  # [{a, b, sentido}] en metros de la ruta (overtaking=no de OSM)
 var adel_motivo := ""
 var adel_abortado := false
+var adel_abort_detras := true   # abortado antes de llegar al primero de la fila (vuelve detrás de él)
+var adel_abortos := 0
+var adel_coches_pasados := 0
+var adel_grupo_n := 1
+
+
+func _ajustes_adelantamiento() -> void:
+	var a := Ajustes.args
+	if a.get("preset", "") == "antes":
+		ADEL_MARGEN = 12.0
+		ADEL_T_CAMBIO = 2.2
+		ADEL_DELTA = 25.0
+		ADEL_RADIO_MIN = 350.0
+		ADEL_MARGEN_FRENTE = 30.0
+		ADEL_DIST_LIDER = 70.0
+		ADEL_USAR_OSM = false
+		ADEL_SIM_CURVAS = false
+		ADEL_VIS_COMPROMISO = false
+		ADEL_GRUPO_MAX = 4
+		ADEL_USAR_LINEA = false
+		ADEL_HUECO_VUELTA = false
+	if a.has("radio_min"): ADEL_RADIO_MIN = float(a["radio_min"])
+	if a.has("usar_linea"): ADEL_USAR_LINEA = a["usar_linea"] == "1"
+	if a.has("vis_compromiso"): ADEL_VIS_COMPROMISO = a["vis_compromiso"] == "1"
+	if a.has("limite_adel"): Ajustes.limite_adelantar = a["limite_adel"] == "1"
+	adel_prohibido.clear()
+	var camino := Ajustes.dir_datos() + "adelantar.json"
+	if not ADEL_USAR_OSM or not FileAccess.file_exists(camino):
+		return
+	var d = JSON.parse_string(FileAccess.get_file_as_string(camino))
+	if not (d is Dictionary) or not (d.get("rutas", null) is Array):
+		return
+	for r in d["rutas"]:
+		if r is Dictionary and int(r.get("id", -1)) == Ajustes.ruta_idx:
+			for t in r.get("prohibido", []):
+				adel_prohibido.append({"a": float(t["km_ini"]) * 1000.0, "b": float(t["km_fin"]) * 1000.0, "sentido": str(t.get("sentido", "ambos"))})
+
+
+func _prohibido_osm(s: float, d: int) -> bool:
+	for t in adel_prohibido:
+		if s >= t["a"] and s <= t["b"]:
+			var sen: String = t["sentido"]
+			if sen == "ambos" or (sen == "ida" and d > 0) or (sen == "vuelta" and d < 0):
+				return true
+	return false
+
+
+## Límite de velocidad (km/h, de limites_velocidad.json) en s para el sentido d; 0 si no hay dato
+func _limite(s: float, d: int) -> int:
+	for t in senal.tramos:
+		if s >= minf(t["a"], t["b"]) and s <= maxf(t["a"], t["b"]):
+			var sen: String = t["sentido"]
+			if sen == "ambos" or (sen == "ida" and d > 0) or (sen == "vuelta" and d < 0):
+				return t["limite"]
+	return 0
 
 
 func _aviso_adel(msg: String) -> void:
@@ -729,10 +865,10 @@ func _existe(c: Dictionary) -> bool:
 	return false
 
 
-## El coche de nuestro sentido más cercano por delante (hasta 70 m) que va más lento de lo que queremos ir
+## El coche de nuestro sentido más cercano por delante (hasta ADEL_DIST_LIDER) que va más lento de lo que queremos ir
 func _lider_lento() -> Dictionary:
 	var mejor := {}
-	var dmin := 70.0
+	var dmin := ADEL_DIST_LIDER
 	for c in trafico.coches:
 		if c["dir"] != dir or c.get("suelto", false):
 			continue
@@ -745,12 +881,24 @@ func _lider_lento() -> Dictionary:
 	return mejor
 
 
+## El líder y los coches que van detrás de él sin hueco para volver a meterse entre ellos (hasta 4 en total).
+## Hueco para volver: el margen de vuelta + lo que hace falta para frenar de la velocidad de adelantamiento a la del
+## siguiente a 4 m/s² (si no, se meterá encima del de delante del grupo al volver).
+var adel_sin_hueco := false
+var ADEL_GRUPO_MAX := 12         # coches como mucho de una vez (v3: 4)
+var ADEL_HUECO_VUELTA := true    # exigir hueco para volver delante del grupo (v3: no)
 func _grupo(l: Dictionary) -> Array:
 	var g := [l]
 	var ultimo := l
-	for _i in 3:
+	var v_obj := maxf(Ajustes.velocidad / 3.6, float(l["v"]) + ADEL_DELTA / 3.6)
+	adel_sin_hueco = false
+	for _i in ADEL_GRUPO_MAX:
 		var sig := {}
-		var dmin := ADEL_HUECO_GRUPO + trafico.largo
+		var hueco := ADEL_HUECO_GRUPO
+		if ADEL_HUECO_VUELTA:
+			var cierre := maxf(v_obj - float(ultimo["v"]), 0.0)
+			hueco = maxf(hueco, ADEL_MARGEN + trafico.largo + cierre * cierre / (2.0 * 5.0) + 3.0)
+		var dmin := hueco + trafico.largo
 		for c in trafico.coches:
 			if c["dir"] != dir or is_same(c, ultimo):
 				continue
@@ -760,6 +908,9 @@ func _grupo(l: Dictionary) -> Array:
 				sig = c
 		if sig.is_empty():
 			break
+		if g.size() >= ADEL_GRUPO_MAX:
+			adel_sin_hueco = ADEL_HUECO_VUELTA
+			break
 		g.append(sig)
 		ultimo = sig
 	return g
@@ -768,60 +919,150 @@ func _grupo(l: Dictionary) -> Array:
 ## "" si se puede adelantar ya; si no, el motivo
 func _hueco_seguro() -> String:
 	var grupo := _grupo(adel_lider)
+	if adel_sin_hueco:
+		return "fila larga: no hay hueco para volver"
 	var ultimo: Dictionary = grupo[grupo.size() - 1]
-	var v_l: float = adel_lider["v"]
 	var ganar: float = (ultimo["s"] - s_coche) * dir + trafico.largo + ADEL_MARGEN
-	var v := absf(coche.v)
-	var v_obj := maxf(Ajustes.velocidad / 3.6, v_l + 25.0 / 3.6)
+	# la fila va a la velocidad que quiere su coche más lento, que puede ser más de lo que va ahora (p. ej. saliendo
+	# de una curva): se calcula con la mayor de las dos para no quedarse corto
+	var v_fila := 1e9
+	for c in grupo:
+		v_fila = minf(v_fila, float(c.get("v0", c["v"])))
+	var v_l := maxf(float(adel_lider["v"]), v_fila) if ADEL_HUECO_VUELTA else float(adel_lider["v"])
+	var r := _evaluar_pase(s_coche, dir, absf(coche.v), v_l, ganar, true, (adel_lider["s"] - s_coche) * dir, float(adel_lider["v"]))
+	if r["motivo"] == "":
+		adel_ultimo = ultimo
+		adel_grupo_n = grupo.size()
+	return r["motivo"]
+
+
+## Comprueba un adelantamiento que empieza en s0 (sentido d) a v0 m/s, detrás de un coche a v_l m/s,
+## con 'ganar' metros que sacarle. Devuelve {motivo ("" = se puede), recorrido (m), t (s), v_obj (m/s)}.
+func _evaluar_pase(s0: float, d: int, v0: float, v_l: float, ganar: float, con_trafico: bool, gap_lider: float = -1.0, v_l0: float = -1.0) -> Dictionary:
+	var res := {"motivo": "", "recorrido": 0.0, "t": 0.0, "v_obj": 0.0}
+	var v_obj := maxf(Ajustes.velocidad / 3.6, v_l + ADEL_DELTA / 3.6)
+	if Ajustes.limite_adelantar:
+		var lim := 1000
+		var dd := 0.0
+		while dd <= 400.0:
+			var l := _limite(s0 + d * dd, d)
+			if l > 0: lim = mini(lim, l)
+			dd += 20.0
+		v_obj = minf(v_obj, lim / 3.6)
+		if v_obj < v_l + 8.0 / 3.6:
+			res["motivo"] = "límite de velocidad (%d km/h)" % lim
+			return res
+	res["v_obj"] = v_obj
+	var v := v0
 	var t := 0.0
 	var recorrido := 0.0
 	var rel := 0.0
 	var fi := coche.ficha
+	# punto de compromiso: cuando ya está a la altura del líder (antes de eso puede abortar y volver detrás)
+	var rel_altura := (gap_lider if gap_lider >= 0.0 else ganar - ADEL_MARGEN - trafico.largo) - trafico.largo - 1.0
+	var t_c := -1.0
+	var x_c := 0.0
+	var v_c := v0
+	var vl := v_l0 if v_l0 >= 0.0 else v_l      # velocidad actual del adelantado
+	var vl_obj := v_l
+	var n_paso := 0
 	while rel < ganar and t < 40.0:
-		var seno := ruta.valor(ruta.pendiente, s_coche + dir * recorrido) * dir / 100.0
+		# el adelantado también frena en las curvas (con la aceleración lateral del tráfico) y acelera al salir
+		if ADEL_HUECO_VUELTA:
+			if n_paso % 5 == 0:
+				vl_obj = minf(v_l, trafico.vel_curva(s0 + d * (rel_altura + trafico.largo + 1.0 + recorrido - rel), d, Trafico.A_LAT, 100.0))
+			vl = clampf(vl_obj, vl - Trafico.B_COMODA * 0.1, vl + Trafico.A_MAX * 0.1)
+		else:
+			vl = v_l
+		n_paso += 1
+		if t_c < 0.0 and rel >= rel_altura:
+			t_c = t
+			x_c = recorrido
+			v_c = v
+		var sp := s0 + d * recorrido
+		var seno := ruta.valor(ruta.pendiente, sp) * d / 100.0
 		var a := (coche.fuerza_motor(v) - coche.fuerza_resistente(v) - fi.masa * Coche.G * seno) / fi.masa
-		if v >= v_obj:
-			a = minf(a, 0.0)
+		# el piloto no pasa de lo que dejan las curvas (si se adapta), igual que al conducir
+		var v_tope := minf(v_obj, trafico.vel_curva(sp, d, 4.0, 220.0)) if (Ajustes.adaptar_curvas and ADEL_SIM_CURVAS) else v_obj
+		if v >= v_tope:
+			a = minf(a, (v_tope - v) / 0.5)
 		v = maxf(v + a * 0.1, 0.0)
 		recorrido += v * 0.1
-		rel += (v - v_l) * 0.1
+		rel += (v - vl) * 0.1
 		t += 0.1
 	if rel < ganar:
-		return "el coche no da para pasar aquí"
+		res["motivo"] = "el coche no da para pasar aquí"
+		return res
 	t += ADEL_T_CAMBIO
 	recorrido += v * ADEL_T_CAMBIO
-	var d := 0.0
-	while d <= recorrido + 15.0:
-		if absf(ruta.valor(ruta.curvatura, s_coche + dir * d)) > 1.0 / 350.0:
-			return "curva / línea continua"
-		d += 4.0
-	var v_frente := maxf(ruta.valor(ruta.vmax, s_coche + dir * recorrido), 50.0) / 3.6
-	var necesaria := recorrido + v_frente * t + 30.0
-	var vis := _visibilidad(necesaria)
-	if vis < necesaria:
-		return "sin visibilidad (%d de %d m)" % [roundi(vis), roundi(necesaria)]
-	for c in trafico.coches:
-		if c["dir"] == dir:
-			continue
-		var dc: float = (c["s"] - s_coche) * dir
-		if dc > -10.0 and dc < recorrido + absf(float(c["v"])) * t + 30.0:
-			return "viene un coche de frente"
-	adel_ultimo = ultimo
-	return ""
+	res["recorrido"] = recorrido
+	res["t"] = t
+	# carril adicional real (OSM, 2+1) en todo el pase: se adelanta por él sin invadir el sentido contrario
+	if ruta.carril_extra_tramo(s0, s0 + d * (recorrido + 15.0), d):
+		return res
+	var x := 0.0
+	while x <= recorrido + 15.0:
+		var sx := s0 + d * x
+		if ADEL_RADIO_MIN > 0.0 and absf(ruta.valor(ruta.curvatura, sx)) > 1.0 / ADEL_RADIO_MIN:
+			res["motivo"] = "curva cerrada (radio < %d m)" % roundi(ADEL_RADIO_MIN)
+			return res
+		if ADEL_USAR_LINEA and ruta.discontinua.size() == ruta.n and ruta.discontinua[clampi(int(sx / ruta.paso), 0, ruta.n - 1)] == 0:
+			res["motivo"] = "línea continua"
+			return res
+		if not adel_prohibido.is_empty() and _prohibido_osm(sx, d):
+			res["motivo"] = "prohibido adelantar (OSM)"
+			return res
+		x += 4.0
+	var v_frente := maxf(ruta.valor(ruta.vmax, s0 + d * recorrido), 50.0) / 3.6
+	if not ADEL_VIS_COMPROMISO:
+		# v3: desde la salida tiene que verse todo lo que recorre más lo que recorre un coche de frente en todo el tiempo
+		var necesaria := recorrido + v_frente * t + ADEL_MARGEN_FRENTE
+		var vis := _visibilidad(necesaria, s0, d)
+		if vis < necesaria:
+			res["motivo"] = "sin visibilidad (%d de %d m)" % [roundi(vis), roundi(necesaria)]
+			return res
+	else:
+		# v3.1 (criterio del "punto crítico" de los manuales de trazado): mientras no está a la altura del líder puede
+		# abortar, así que desde la salida basta con ver lo que hace falta para abortar si aparece alguien
+		# (la misma regla que usa el aborto: 2,5 s de cierre + 15 m); y desde el punto de compromiso tiene que verse
+		# lo que le queda por recorrer más lo que recorre en ese tiempo un coche de frente al límite de la vía.
+		if t_c < 0.0:
+			t_c = 0.0
+		var nec_salida := minf((v_obj + v_frente) * 2.5 + 15.0, recorrido + v_frente * t + ADEL_MARGEN_FRENTE)
+		var vis0 := _visibilidad(nec_salida, s0, d)
+		if vis0 < nec_salida:
+			res["motivo"] = "sin visibilidad (%d de %d m)" % [roundi(vis0), roundi(nec_salida)]
+			return res
+		var nec_c := (recorrido - x_c) + v_frente * (t - t_c) + ADEL_MARGEN_FRENTE
+		var vis_c := _visibilidad(nec_c, s0 + d * x_c, d)
+		if vis_c < nec_c:
+			res["motivo"] = "sin visibilidad (%d de %d m)" % [roundi(vis_c), roundi(nec_c)]
+			return res
+	if con_trafico:
+		for c in trafico.coches:
+			if c["dir"] == d:
+				continue
+			var dc: float = (c["s"] - s0) * d
+			if dc > -10.0 and dc < recorrido + _v_coche_frente(c) * t + ADEL_MARGEN_FRENTE:
+				res["motivo"] = "viene un coche de frente"
+				return res
+	return res
 
 
 ## Hasta dónde se ve la carretera desde el asiento (m): la visual a 1,1 m no puede salirse de la calzada
 ## en las curvas ni pasar por debajo del asfalto en un cambio de rasante
-func _visibilidad(hasta: float) -> float:
-	var ojo := ruta.punto(s_coche) + Vector3.UP * 1.1
+func _visibilidad(hasta: float, s0: float = NAN, d0: int = 0) -> float:
+	if is_nan(s0): s0 = s_coche
+	if d0 == 0: d0 = dir
+	var ojo := ruta.punto(s0) + Vector3.UP * 1.1
 	var d := 20.0
 	while d <= hasta + 19.0:
-		var obj := ruta.punto(s_coche + dir * d) + Vector3.UP * 1.1
+		var obj := ruta.punto(s0 + d0 * d) + Vector3.UP * 1.1
 		var n := maxi(2, int(d / 10.0))
 		for i in range(1, n):
 			var u := float(i) / n
 			var p := ojo.lerp(obj, u)
-			var sm := s_coche + dir * d * u
+			var sm := s0 + d0 * d * u
 			var c := ruta.punto(sm)
 			if Vector2(p.x - c.x, p.z - c.z).length() > ruta.valor(ruta.ancho, sm) * 0.5 + 4.0 or p.y < c.y + 0.3:
 				return d - 20.0
@@ -836,7 +1077,7 @@ func _adelantamiento(dt: float) -> void:
 		0:
 			adel_carril = move_toward(adel_carril, 0.0, paso)
 		1:
-			if not piloto or not _existe(adel_lider) or (adel_lider["s"] - s_coche) * dir < 0.0 or (adel_lider["s"] - s_coche) * dir > 90.0:
+			if not piloto or not _existe(adel_lider) or (adel_lider["s"] - s_coche) * dir < 0.0 or (adel_lider["s"] - s_coche) * dir > ADEL_DIST_LIDER + 20.0:
 				_cancelar_adelantamiento("Ya no hay coche lento delante")
 				return
 			adel_revisar -= dt
@@ -853,6 +1094,41 @@ func _adelantamiento(dt: float) -> void:
 				return
 			var d_ult: float = (adel_ultimo["s"] - s_coche) * dir
 			var d_lid: float = (adel_lider["s"] - s_coche) * dir
+			# v3.1: se vuelve a comprobar en cada paso si algún coche de frente llega antes de terminar (por si la fila
+			# acelera o el pase se alarga). Si pasa: antes de llegar al primero, aborta detrás de él; si va por la
+			# mitad de la fila, frena y se mete en el hueco de la fila; ya pasado el último, termina.
+			if ADEL_HUECO_VUELTA and d_ult > -(trafico.largo + ADEL_MARGEN):
+				adel_revisar -= dt
+				var conflicto := false
+				if adel_revisar <= 0.0:
+					adel_revisar = 0.2
+					var resto := _sim_resto(absf(coche.v), maxf(float(adel_ultimo["v"]), float(adel_ultimo.get("v0", adel_ultimo["v"]))), d_ult + trafico.largo + ADEL_MARGEN, float(adel_ultimo["v"]), float(adel_ultimo["s"]))
+					var t_rest: float = resto.y
+					var x_rest: float = resto.x
+					# A-308 (2+1): si el carril adicional real cubre todo lo que queda de pase, los de frente van por su
+					# carril y no hay conflicto (evita el bucle empezar/abortar donde termina el carril adicional)
+					var cubre_extra := ruta.carril_extra_tramo(s_coche, s_coche + dir * x_rest, dir)
+					for c in trafico.coches:
+						if not cubre_extra and c["dir"] != dir and (c["s"] - s_coche) * dir > -3.0 and (c["s"] - s_coche) * dir < x_rest + _v_coche_frente(c) * t_rest + 5.0:
+							conflicto = true
+				if Ajustes.args.has("traza_pase") and adel_revisar >= 0.19:
+					var dmin_f := 1e9
+					var vf := 0.0
+					for c in trafico.coches:
+						if c["dir"] != dir and (c["s"] - s_coche) * dir > -3.0 and (c["s"] - s_coche) * dir < dmin_f:
+							dmin_f = (c["s"] - s_coche) * dir
+							vf = _v_coche_frente(c)
+					print("    pase t=%.1f PK %.3f v=%.0f d_ult=%.1f d_lid=%.1f frente a %.0f m (%.0f km/h) conflicto=%s" % [tiempo, s_coche / 1000.0, coche.v * 3.6, d_ult, d_lid, dmin_f, vf * 3.6, str(conflicto)])
+					for c in trafico.coches:
+						if c["dir"] != dir and absf((c["s"] - s_coche) * dir) < 250.0:
+							print("      frente s=%.1f d=%.1f v=%.1f v0=%.1f suelto=%s lat_nodo=%.1f" % [c["s"], (c["s"] - s_coche) * dir, c["v"] * 3.6, c["v0"] * 3.6, str(c.get("suelto", false)), ruta.proyectar(c["nodo"].position, c["s"]).y])
+				if conflicto:
+					adel_abortado = true
+					adel_abort_detras = d_lid > trafico.largo + 1.0
+					adel_abortos += 1
+					adel_estado = 3
+					_aviso_adel("Adelantamiento abortado: viene un coche")
+					return
 			# ¿aparece alguien de frente demasiado cerca? se aborta y se vuelve detrás
 			for c in trafico.coches:
 				if c["dir"] == dir:
@@ -861,19 +1137,32 @@ func _adelantamiento(dt: float) -> void:
 				var cierre := absf(coche.v) + absf(float(c["v"]))
 				# solo se aborta si aún no ha llegado a la altura del adelantado (puede volver detrás de él);
 				# si ya está a su lado, lo más seguro es terminar a fondo
-				if dc > -3.0 and dc < cierre * 2.5 + 15.0 and d_lid > trafico.largo + 1.0:
+				if dc > -3.0 and dc < cierre * 2.5 + 15.0 and d_lid > trafico.largo + 1.0 and not ruta.carril_extra_tramo(s_coche, s_coche + dir * maxf(dc, 0.0), dir):
+					adel_abort_detras = true
 					adel_abortado = true
+					adel_abortos += 1
 					adel_estado = 3
 					_aviso_adel("Adelantamiento abortado: viene un coche")
 					return
 			if d_ult < -(trafico.largo + ADEL_MARGEN):
 				adel_estado = 3
 		3:
-			adel_carril = move_toward(adel_carril, 0.0, paso)
+			var al_lado := false
+			if ADEL_HUECO_VUELTA and adel_abortado:
+				# abortado en mitad de la fila: si el coche de al lado va por delante, espera (frenando) a quedar detrás
+				# de él; si ya lo lleva por detrás, se mete delante. Vuelve al carril el doble de rápido.
+				for c in trafico.coches:
+					var dl: float = (c["s"] - s_coche) * dir
+					if c["dir"] == dir and dl > 0.0 and dl < trafico.largo + 1.5:
+						al_lado = true
+				paso *= 2.0
+			if not al_lado:
+				adel_carril = move_toward(adel_carril, 0.0, paso)
 			if adel_carril <= 0.0:
 				adel_estado = 0
 				if not adel_abortado:
 					adelantamientos += 1
+					adel_coches_pasados += adel_grupo_n
 					_aviso_adel("Adelantamiento completado")
 
 
@@ -947,6 +1236,22 @@ func _prueba(modo: String) -> void:
 				inicio = t
 				print("  sale a adelantar en t=%.1f s, PK %.3f km, radio de curva aquí %.0f m" % [t, s_coche / 1000.0, 1.0 / maxf(absf(ruta.valor(ruta.curvatura, s_coche)), 1e-5)])
 			max_carril = maxf(max_carril, adel_carril)
+			if Ajustes.args.has("salida") and adel_estado == 2 and adel_carril >= 0.95 and _existe(lento) and (lento["s"] - s_coche) * dir < float(Ajustes.args.get("foto_d", "4")):
+				print("  FOTO t=%.1f PK %.3f v=%.0f km/h radio aquí %.0f m" % [t, s_coche / 1000.0, coche.v * 3.6, 1.0 / maxf(absf(ruta.valor(ruta.curvatura, s_coche)), 1e-5)])
+				coche.reset_physics_interpolation()
+				trafico.reiniciar_interpolacion()
+				mundo.cargar_ventana(coche.position, coche.adelante())
+				reiniciar_camara()
+				for _k in 4:
+					_camara(1.0 / 60.0)
+				_hud()
+				pausado = true
+				for _k in 12:
+					await get_tree().process_frame
+				await RenderingServer.frame_post_draw
+				get_viewport().get_texture().get_image().save_png(Ajustes.args["salida"])
+				get_tree().quit()
+				return
 			if Ajustes.args.has("traza") and int(t * 60.0) % 15 == 0 and t > pulsar:
 				var dmin := 1e9
 				for oc in trafico.coches:
@@ -994,7 +1299,7 @@ func _saltar_a(s: float) -> void:
 	_cancelar_adelantamiento("")
 	adel_estado = 0
 	adel_carril = 0.0
-	var lado := dir * ruta.valor(ruta.ancho, s) * 0.25
+	var lado := ruta.lateral_carril(s, dir)
 	coche.colocar(ruta.punto(s) + ruta.derecha(s) * lado, ruta.tangente(s) * dir)
 	coche.v = 0.0
 	s_coche = s
@@ -1048,3 +1353,151 @@ func _prueba_perfil() -> void:
 		await RenderingServer.frame_post_draw
 		get_viewport().get_texture().get_image().save_png(Ajustes.args["salida"])
 	get_tree().quit()
+
+
+## --captura=mapa_adelantar: recorre la ruta cada 10 m en los dos sentidos y dice en qué % se permitiría salir a
+## adelantar a un coche a --v_lento km/h (60) que va 25 m por delante, sin tráfico (solo trazado, visibilidad, OSM).
+## --radios=350,250,200,150,100,0 repite la cuenta con cada radio mínimo.
+func _prueba_mapa_adelantar() -> void:
+	var v_l := float(Ajustes.args.get("v_lento", "60")) / 3.6
+	Ajustes.velocidad = float(Ajustes.args.get("vel", "90"))
+	var radios: Array = []
+	for x in str(Ajustes.args.get("radios", str(ADEL_RADIO_MIN))).split(","):
+		radios.append(float(x))
+	var largo := ruta.longitud()
+	for rm in radios:
+		ADEL_RADIO_MIN = rm
+		var linea := "MAPA radio_min=%s" % ("no" if rm <= 0.0 else str(roundi(rm)))
+		for d in [1, -1]:
+			var si := 0
+			var tot := 0
+			var motivos := {}
+			var zonas := 0
+			var antes := false
+			var dist_med := 0.0
+			var s := 0.0 if d > 0 else largo
+			while (s < largo - 300.0) if d > 0 else (s > 300.0):
+				var r := _evaluar_pase(s, d, v_l, v_l, 25.0 + trafico.largo + ADEL_MARGEN, false, 25.0)
+				tot += 1
+				var ok: bool = r["motivo"] == ""
+				if ok:
+					si += 1
+					dist_med += r["recorrido"]
+					if not antes: zonas += 1
+					if Ajustes.args.has("listar") and not antes:
+						var kmin := 0.0
+						var xx := 0.0
+						while xx < r["recorrido"]:
+							kmin = maxf(kmin, absf(ruta.valor(ruta.curvatura, s + d * xx)))
+							xx += 4.0
+						print("  zona %s km %.2f radio mín en el pase %.0f m" % ["ida" if d > 0 else "vuelta", s / 1000.0, 1.0 / maxf(kmin, 1e-5)])
+				else:
+					var k: String = r["motivo"].split(" (")[0]
+					motivos[k] = motivos.get(k, 0) + 1
+				antes = ok
+				s += 10.0 * d
+			linea += " | %s: %.1f %% (%d zonas, recorrido medio %.0f m) motivos %s" % ["ida" if d > 0 else "vuelta", 100.0 * si / maxf(tot, 1), zonas, dist_med / maxf(si, 1), str(motivos)]
+		print(linea)
+	# distancia y tiempo de un adelantamiento en llano y recto (coche de --v_lento a su misma velocidad)
+	print("PASE_LLANO %s v_lento=%.0f km/h: %s" % [coche.ficha.id, v_l * 3.6, str(_pase_llano(v_l))])
+	get_tree().quit()
+
+
+## Simula el mismo cálculo de _evaluar_pase pero en una recta llana ideal
+func _pase_llano(v_l: float) -> Dictionary:
+	var v_obj := maxf(Ajustes.velocidad / 3.6, v_l + ADEL_DELTA / 3.6)
+	var ganar := 25.0 + trafico.largo + ADEL_MARGEN
+	var v := v_l
+	var t := 0.0
+	var recorrido := 0.0
+	var rel := 0.0
+	var fi := coche.ficha
+	while rel < ganar and t < 40.0:
+		var a := (coche.fuerza_motor(v) - coche.fuerza_resistente(v)) / fi.masa
+		if v >= v_obj: a = minf(a, 0.0)
+		v = maxf(v + a * 0.1, 0.0)
+		recorrido += v * 0.1
+		rel += (v - v_l) * 0.1
+		t += 0.1
+	return {"recorrido_m": roundi(recorrido + v * ADEL_T_CAMBIO), "tiempo_s": snappedf(t + ADEL_T_CAMBIO, 0.1), "v_final_kmh": roundi(v * 3.6), "ganar_m": roundi(ganar)}
+
+## --captura=lineas_adelantar --salida_json=…: para cada ruta, tramos donde la línea central se pinta discontinua:
+## la unión de todas las zonas que recorrería un adelantamiento permitido (sin tráfico) en cualquiera de los dos
+## sentidos, con un lento a 40 y a 60 km/h y el piloto a 90. Se ejecuta con cada versión y se juntan (pipeline).
+func _generar_lineas() -> void:
+	ADEL_USAR_LINEA = false
+	Ajustes.velocidad = 90.0
+	var salida := {}
+	for ri in Ajustes.rutas.size():
+		ruta = Ajustes.rutas[ri]
+		trafico.ruta = ruta
+		var m := PackedByteArray()
+		m.resize(ruta.n)
+		m.fill(0)
+		var largo := ruta.longitud()
+		for vl in [40.0, 60.0]:
+			var v_l: float = vl / 3.6
+			for d in [1, -1]:
+				var s := 0.0 if d > 0 else largo
+				while (s < largo) if d > 0 else (s > 0.0):
+					var r := _evaluar_pase(s, d, v_l, v_l, 25.0 + trafico.largo + ADEL_MARGEN, false, 25.0)
+					if r["motivo"] == "":
+						var x := 0.0
+						while x <= float(r["recorrido"]):
+							m[clampi(int((s + d * x) / ruta.paso), 0, ruta.n - 1)] = 1
+							x += ruta.paso
+					s += 10.0 * d
+		var tramos := []
+		var i := 0
+		while i < ruta.n:
+			if m[i] == 1:
+				var j := i
+				while j + 1 < ruta.n and m[j + 1] == 1:
+					j += 1
+				tramos.append([snappedf(i * ruta.paso / 1000.0, 0.001), snappedf(j * ruta.paso / 1000.0, 0.001)])
+				i = j + 1
+			else:
+				i += 1
+		salida[str(ri)] = tramos
+		print("LINEAS ruta %d: %d tramos discontinuos" % [ri, tramos.size()])
+	var f := FileAccess.open(Ajustes.args["salida_json"], FileAccess.WRITE)
+	f.store_string(JSON.stringify(salida))
+	f.close()
+	get_tree().quit()
+
+## Lo que le queda a un adelantamiento en marcha: (metros, segundos) hasta volver al carril, con la misma física que
+## _evaluar_pase, desde la velocidad actual y con 'falta' metros que ganar al último de la fila
+func _sim_resto(v0: float, v_ult: float, falta: float, v_ult0: float = -1.0, s_ult: float = -1.0) -> Vector2:
+	var v := v0
+	var t := 0.0
+	var x := 0.0
+	var rel := 0.0
+	var v_obj := maxf(Ajustes.velocidad / 3.6, v_ult + ADEL_DELTA / 3.6)
+	var fi := coche.ficha
+	var vl := v_ult0 if v_ult0 >= 0.0 else v_ult
+	var vl_obj := v_ult
+	var n_paso := 0
+	while rel < falta and t < 40.0:
+		if s_ult >= 0.0:
+			if n_paso % 5 == 0:
+				vl_obj = minf(v_ult, trafico.vel_curva(s_ult + dir * (x - rel), dir, Trafico.A_LAT, 100.0))
+			vl = clampf(vl_obj, vl - Trafico.B_COMODA * 0.1, vl + Trafico.A_MAX * 0.1)
+		n_paso += 1
+		var sp := s_coche + dir * x
+		var seno := ruta.valor(ruta.pendiente, sp) * dir / 100.0
+		var a := (coche.fuerza_motor(v) - coche.fuerza_resistente(v) - fi.masa * Coche.G * seno) / fi.masa
+		var v_tope := minf(v_obj, trafico.vel_curva(sp, dir, 4.0, 220.0)) if Ajustes.adaptar_curvas else v_obj
+		if v >= v_tope:
+			a = minf(a, (v_tope - v) / 0.5)
+		v = maxf(v + a * 0.1, 0.0)
+		x += v * 0.1
+		rel += (v - vl) * 0.1
+		t += 0.1
+	return Vector2(x + v * ADEL_T_CAMBIO, t + ADEL_T_CAMBIO)
+
+## Velocidad con la que hay que contar para un coche de frente: la que lleva o la que quiere llevar (sale de una curva
+## despacio y acelera), la mayor; si no, un pase largo se queda corto (v3.1, fallo visto en el A-308 y en el km 8,5)
+func _v_coche_frente(c: Dictionary) -> float:
+	if not ADEL_HUECO_VUELTA:
+		return absf(float(c["v"]))
+	return maxf(absf(float(c["v"])), float(c.get("v0", c["v"])))

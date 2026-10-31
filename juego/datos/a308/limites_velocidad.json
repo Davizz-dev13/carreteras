@@ -1,0 +1,85 @@
+{
+ "rutas": [
+  {
+   "id": 0,
+   "nombre": "A-308 Iznalloz → Darro",
+   "longitud_km": 36.524,
+   "tramos": [
+    {
+     "km_ini": 0.0,
+     "km_fin": 0.996,
+     "limite": 90,
+     "sentido": "ambos",
+     "fuente": "por_defecto_legal"
+    },
+    {
+     "km_ini": 0.996,
+     "km_fin": 1.546,
+     "limite": 60,
+     "sentido": "ambos",
+     "fuente": "osm",
+     "osm_way": 674382457
+    },
+    {
+     "km_ini": 1.546,
+     "km_fin": 6.412,
+     "limite": 90,
+     "sentido": "ambos",
+     "fuente": "por_defecto_legal"
+    },
+    {
+     "km_ini": 6.412,
+     "km_fin": 6.514,
+     "limite": 60,
+     "sentido": "ambos",
+     "fuente": "osm",
+     "osm_way": 395306133
+    },
+    {
+     "km_ini": 6.514,
+     "km_fin": 10.496,
+     "limite": 80,
+     "sentido": "ambos",
+     "fuente": "osm",
+     "osm_way": 674899523
+    },
+    {
+     "km_ini": 10.496,
+     "km_fin": 33.306,
+     "limite": 90,
+     "sentido": "ambos",
+     "fuente": "por_defecto_legal"
+    },
+    {
+     "km_ini": 33.306,
+     "km_fin": 33.672,
+     "limite": 50,
+     "sentido": "ambos",
+     "fuente": "por_defecto_legal"
+    },
+    {
+     "km_ini": 33.672,
+     "km_fin": 36.524,
+     "limite": 90,
+     "sentido": "ambos",
+     "fuente": "por_defecto_legal"
+    }
+   ],
+   "cobertura_osm_pct": {
+    "ida": 12.7,
+    "vuelta": 12.7
+   },
+   "tramos_pequenos_absorbidos": []
+  }
+ ],
+ "notas": "Límites reales de OpenStreetMap (maxspeed, maxspeed:forward/backward) emparejados con cada muestra de la ruta (cada 2 m: la vía OSM de la misma ref más cercana a ≤15 m con la misma orientación; en calzadas separadas, la calzada contraria de la misma ref a ≤45 m da el límite de 'vuelta'; en rotondas sin ref, la carretera más cercana). 'ida' = km creciente (Iznalloz → Darro). Donde OSM no tiene maxspeed: genérico legal, fuente='por_defecto_legal' (NO es una señal real; el juego lo pinta tenue y con *): 90 km/h en carretera convencional fuera de poblado, 50 dentro de poblado (punto dentro de un polígono landuse=residential de OSM). Tramos de menos de 60 m se absorben en el contiguo (lista en 'tramos_pequenos_absorbidos'). No hay señales de velocidad mapeadas como nodo en la zona. Datos © colaboradores de OpenStreetMap, ODbL.",
+ "proyeccion": "WGS84 → ETRS89 / UTM 30N (EPSG:25830), origen E0=464000, N0=4136000; X_juego = E − 464000, Z_juego = 4136000 − N",
+ "consulta_osm_fecha": "2026-10-31T15:14:10Z",
+ "consulta_osm_url": "https://overpass.kumi.systems/api/interpreter",
+ "bbox_wgs84": [
+  37.3,
+  -3.58,
+  37.43,
+  -3.24
+ ]
+}

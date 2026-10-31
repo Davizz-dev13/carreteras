@@ -15,11 +15,20 @@ var vmax := PackedInt32Array()         # km/h (OSM maxspeed o por tipo de vía)
 var puente := PackedByteArray()
 var tunel := PackedByteArray()
 var dibujar := PackedByteArray()       # 0 si ese trozo ya lo dibuja otra ruta
+var discontinua := PackedByteArray()   # 1 = línea central discontinua (se permite adelantar); de datos/…/adelantar.json
 var estadisticas := {}
 var etiquetas := PackedStringArray()   # "CL-601 · Carretera de …"
 var etiqueta := PackedInt32Array()     # índice de etiqueta por muestra
 var n := 0
 var tang := PackedVector3Array()       # tangente unitaria en cada muestra (diferencias centradas)
+# carriles por sentido (adelantar.json → "carriles"; vacío = 1 + 1, como siempre). ida = sentido de km creciente.
+var car_ida := PackedByteArray()
+var car_vuelta := PackedByteArray()
+var lat_eje := PackedFloat32Array()      # desplazamiento lateral (+ = derecha) de la línea que separa los sentidos
+var lat_ida := PackedFloat32Array()      # centro del carril derecho de ida / de vuelta
+var lat_vuelta := PackedFloat32Array()
+var lat_ida_adel := PackedFloat32Array() # carril por el que se adelanta (el adicional si lo hay; si no, el contrario)
+var lat_vuelta_adel := PackedFloat32Array()
 
 
 static func desde_json(d: Dictionary) -> Ruta:
@@ -49,6 +58,99 @@ static func desde_json(d: Dictionary) -> Ruta:
 	for i in r.n:
 		r.tang[i] = (r.pts[mini(i + 1, r.n - 1)] - r.pts[maxi(i - 1, 0)]).normalized()
 	return r
+
+
+## Carga los carriles reales por sentido: tramos [{km_ini, km_fin, ida, vuelta}] (de adelantar.json).
+## Precalcula la posición lateral de cada carril, suavizada (~60 m) para que los cambios sean una cuña, no un salto.
+func cargar_carriles(tramos: Array) -> void:
+	if tramos.is_empty():
+		return
+	car_ida.resize(n); car_ida.fill(1)
+	car_vuelta.resize(n); car_vuelta.fill(1)
+	for t in tramos:
+		var a := clampi(int(float(t["km_ini"]) * 1000.0 / paso), 0, n - 1)
+		var b := clampi(int(float(t["km_fin"]) * 1000.0 / paso), 0, n - 1)
+		for i in range(a, b + 1):
+			car_ida[i] = clampi(int(t["ida"]), 1, 3)
+			car_vuelta[i] = clampi(int(t["vuelta"]), 1, 3)
+	var crudo := [PackedFloat32Array(), PackedFloat32Array(), PackedFloat32Array(), PackedFloat32Array(), PackedFloat32Array()]
+	for arr in crudo:
+		arr.resize(n)
+	for i in n:
+		var ci := car_ida[i]
+		var cv := car_vuelta[i]
+		if ci == 1 and cv == 1:
+			# exactamente lo de siempre (ancho/4)
+			crudo[0][i] = 0.0
+			crudo[1][i] = ancho[i] * 0.25
+			crudo[2][i] = -ancho[i] * 0.25
+			crudo[3][i] = -ancho[i] * 0.25
+			crudo[4][i] = ancho[i] * 0.25
+			continue
+		var w := (ancho[i] - 1.0) / float(ci + cv)
+		var e := (cv - ci) * w * 0.5
+		crudo[0][i] = e
+		crudo[1][i] = e + (ci - 0.5) * w
+		crudo[2][i] = e - (cv - 0.5) * w
+		crudo[3][i] = e + 0.5 * w if ci >= 2 else e - 0.5 * w
+		crudo[4][i] = e - 0.5 * w if cv >= 2 else e + 0.5 * w
+	var salida := []
+	var k := 15   # ±30 m
+	for arr in crudo:
+		var o := PackedFloat32Array()
+		o.resize(n)
+		var acum := 0.0
+		for i in range(-k, n + k + 1):
+			acum += arr[clampi(i, 0, n - 1)]
+			if i - 2 * k - 1 >= -k:
+				acum -= arr[clampi(i - 2 * k - 1, 0, n - 1)]
+			var c := i - k
+			if c >= 0 and c < n:
+				o[c] = acum / float(2 * k + 1)
+		salida.append(o)
+	lat_eje = salida[0]
+	lat_ida = salida[1]
+	lat_vuelta = salida[2]
+	lat_ida_adel = salida[3]
+	lat_vuelta_adel = salida[4]
+
+
+func tiene_carriles() -> bool:
+	return not car_ida.is_empty()
+
+
+## Posición lateral (+ = derecha de la ruta) del carril del sentido d; adel = 0 su carril, 1 el carril de adelantar
+func lateral_carril(s: float, d: int, adel: float = 0.0) -> float:
+	if car_ida.is_empty():
+		return d * valor(ancho, s) * 0.25 * (1.0 - 2.0 * adel)
+	if d > 0:
+		return lerpf(valor(lat_ida, s), valor(lat_ida_adel, s), adel)
+	return lerpf(valor(lat_vuelta, s), valor(lat_vuelta_adel, s), adel)
+
+
+## Línea que separa los dos sentidos (lateral, + = derecha)
+func lateral_eje(s: float) -> float:
+	return 0.0 if lat_eje.is_empty() else valor(lat_eje, s)
+
+
+## ¿Tiene el sentido d un carril adicional (2 o más carriles) en s?
+func carril_extra(s: float, d: int) -> bool:
+	if car_ida.is_empty():
+		return false
+	var i := clampi(int(roundf(s / paso)), 0, n - 1)
+	return (car_ida[i] if d > 0 else car_vuelta[i]) >= 2
+
+
+## ¿Hay carril adicional para el sentido d en todo el tramo de s0 a s1? (comprueba cada 4 m)
+func carril_extra_tramo(s0: float, s1: float, d: int) -> bool:
+	if car_ida.is_empty():
+		return false
+	var x := minf(s0, s1)
+	while x <= maxf(s0, s1):
+		if not carril_extra(x, d):
+			return false
+		x += 4.0
+	return true
 
 
 ## Nombre de la carretera en el punto s (cambia de M-601 a CL-601 en el puerto)

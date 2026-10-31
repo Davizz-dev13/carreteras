@@ -1,0 +1,43 @@
+{
+ "A-308 Iznalloz → Darro": {
+  "longitud_km": 36.525,
+  "alt_min": 788.0,
+  "alt_max": 1103.3,
+  "alt_inicio": 863.7,
+  "alt_fin": 1075.0,
+  "desnivel_subida": 437.9,
+  "desnivel_bajada": 226.6,
+  "pendiente_max_puntual": 7.1,
+  "pendiente_max_100m": 6.3,
+  "km_pendiente_max_100m": 8.05,
+  "pendiente_max_1km": 5.9,
+  "km_pendiente_max_1km": 6.83,
+  "radio_min_m": 27.5,
+  "curvas_radio_menor_30m": 1,
+  "metros_puente": 362.0,
+  "metros_tunel": 0.0,
+  "curvas_por_radio_min (tramos ≥10 m con radio < 400 m)": {
+   "0-50 m": 1,
+   "50-100 m": 12,
+   "100-200 m": 169,
+   "200-400 m": 103
+  },
+  "curvas_total": 285,
+  "pct_longitud_radio_menor_200m": 3.9,
+  "carril_adelantamiento_km": [
+   6.546,
+   8.71
+  ],
+  "carril_adelantamiento_sentido": "ida (hacia Darro)",
+  "pct_ruta_con_carril_adelantamiento": 5.9,
+  "pct_por_sentido": {
+   "ida": 5.9,
+   "vuelta": 0.0
+  },
+  "cobertura_maxspeed_osm_pct": {
+   "ida": 12.7,
+   "vuelta": 12.7
+  },
+  "terreno": "IGN MDT05 (5 m) → malla de 20 m en el juego"
+ }
+}

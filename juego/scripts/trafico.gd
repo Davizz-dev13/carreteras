@@ -51,12 +51,21 @@ func idm(v: float, v0: float, hueco: float, dv: float) -> float:
 
 ## carril: dir = +1 circula en el sentido de la ruta (carril derecho), -1 en sentido contrario
 func carril_lateral(s: float, dir: int) -> float:
-	return dir * ruta.valor(ruta.ancho, s) * 0.25
+	return ruta.lateral_carril(s, dir)
 
 
 func actualizar(dt: float, s_jug: float, lat_jug: float, v_jug: float, dir_jug_carril: int) -> void:
 	if ruta == null:
 		return
+	_actualizar(dt, s_jug, lat_jug, v_jug, dir_jug_carril)
+	_llenado_inicial = false
+
+
+## Solo en la primera actualización se reparte el tráfico por todo el radio; después los coches nuevos aparecen lejos
+## (antes se miraba Engine.get_process_frames() < 5, que en las pruebas sin ventana no avanza y hacía aparecer coches
+## a 60 m del jugador durante toda la prueba)
+var _llenado_inicial := true
+func _actualizar(dt: float, s_jug: float, lat_jug: float, v_jug: float, dir_jug_carril: int) -> void:
 	# --- aparecer / desaparecer ---
 	for i in range(coches.size() - 1, -1, -1):
 		var c: Dictionary = coches[i]
@@ -74,7 +83,7 @@ func actualizar(dt: float, s_jug: float, lat_jug: float, v_jug: float, dir_jug_c
 			intentos += 1
 			# aparecen lejos (fuera de la vista) salvo al empezar la partida
 			var s: float
-			if Engine.get_process_frames() < 5:
+			if _llenado_inicial:
 				s = s_jug + rng.randf_range(-RADIO, RADIO)
 				if absf(s - s_jug) < 60.0: continue
 			else:

@@ -1,8 +1,9 @@
 
 import sys
 sys.path.append('/usr/lib/python3/dist-packages')
-import bpy, bmesh, math, json
+import bpy, bmesh, math, json, os
 import numpy as np
+import numpy.ma
 np.bool = bool
 np.int = int
 np.float = float
@@ -139,7 +140,7 @@ P = {  # base rgb, metallic, roughness, alpha, emission rgb, emission strength
  "chrome": ((0.92,0.92,0.92),1.0,0.1,1,None,0),
  "silver": ((0.78,0.78,0.8),1.0,0.22,1,None,0),
  "alumimium": ((0.8,0.8,0.82),1.0,0.3,1,None,0),
- "rimDark": ((0.62,0.63,0.65),1.0,0.28,1,None,0),
+ "rimDark": ((0.16,0.165,0.17),0.85,0.32,1,None,0),
  "chrome_brushed_brakedisc": ((0.42,0.42,0.42),1.0,0.45,1,None,0),
  "metal_dark": ((0.1,0.1,0.1),0.8,0.55,1,None,0),
  "metal_def": ((0.3,0.3,0.32),0.8,0.5,1,None,0),
@@ -199,7 +200,7 @@ def cat(base):
     if base in ("chrome","silver","alumimium"): return "cromo"
     if base in ("leather","interiorPlastic","interiorB","interiorA","interiorTex","grey"): return "interior"
     return "negro"
-BUD0 = {"pintura": 19000, "luces_cristal": 10000, "cromo": 3500, "negro": 6500, "interior": 8000, "rueda": 3200, "pinza": 300}
+BUD0 = {"pintura": float(os.environ.get("BUD_PINTURA", "42000")), "luces_cristal": 14000, "cromo": 5000, "negro": 9000, "interior": 8000, "rueda": float(os.environ.get("BUD_RUEDA", "5200")), "pinza": 400}
 BUD1 = {"pintura": 4800, "luces_cristal": 1900, "cromo": 600, "negro": 1300, "interior": 0, "rueda": 650, "pinza": 60}
 def prepare(o):
     sel([o]); bpy.ops.object.mode_set(mode='EDIT'); bpy.ops.mesh.select_all(action='SELECT')
@@ -284,6 +285,22 @@ def asignar_lod1(o, forzar=None):
                 GRUPO_LOD1[nm] = GRUPO_LOD1.get(nm, forzar(nm))
             slot.material = mat_lod1(slot.material.name)
 
+def transferir_normales(objs):
+    """Normales del modelo original (1,6 M triángulos, suavizado a 35°) proyectadas sobre la malla reducida:
+    la reducción deja triángulos largos y, con normales recalculadas, la chapa sale abollada."""
+    for o in objs:
+        srcn = o.get("src")
+        if not srcn or srcn not in bpy.data.objects: continue
+        so = bpy.data.objects[srcn]
+        if not so.get("_suave"):
+            so.data.use_auto_smooth = True; so.data.auto_smooth_angle = math.radians(35)
+            for p in so.data.polygons: p.use_smooth = True
+            so["_suave"] = 1
+        o.data.use_auto_smooth = True; o.data.auto_smooth_angle = math.radians(180)
+        m = o.modifiers.new("nt", 'DATA_TRANSFER'); m.object = so; m.use_loop_data = True
+        m.data_types_loops = {'CUSTOM_NORMAL'}; m.loop_mapping = os.environ.get('NT_MAP','POLYINTERP_LNORPROJ')
+        sel([o]); bpy.ops.object.modifier_apply(modifier="nt")
+
 def alive(o):
     try:
         o.name; return True
@@ -297,6 +314,7 @@ def build(BUD, tag, out):
     for n in names:
         src_o = bpy.data.objects[n]
         c = src_o.copy(); c.data = src_o.data.copy(); scn.collection.objects.link(c); c.name = n + "#" + tag; copies.append(c)
+        c["src"] = n
     body = [c for c in copies if not (c.name.startswith("rueda_") or c.name.startswith("pinza_"))]
     whl = [c for c in copies if c not in body]
     if tag == "lod1":
@@ -325,6 +343,8 @@ def build(BUD, tag, out):
             sel([w]); bpy.ops.object.modifier_apply(modifier="dec")
     body = [o for o in body if alive(o)]
     finish(body + whl)
+    if tag == "lod0":
+        transferir_normales(body + whl)
     carro = join(body, "carroceria")
     if tag == "lod1":
         # unir ranuras de material repetidas (tras agrupar quedan ~6 materiales)
@@ -347,13 +367,17 @@ def build(BUD, tag, out):
         w.name = w.name.split("#")[0]; w.data.name = w.name; res[w.name] = ntris(w); exp.append(w)
     res["total"] = sum(ntris(o) for o in exp)
     sel(exp)
-    bpy.ops.export_scene.gltf(filepath=out, export_format='GLB', use_selection=True, export_apply=True,
-        export_texcoords=True, export_normals=True, export_materials='EXPORT', export_colors=False,
-        export_image_format='JPEG' if tag == "lod1" else 'AUTO', export_yup=True)
+    import traceback
+    try:
+        bpy.ops.export_scene.gltf(filepath=out, export_format='GLB', use_selection=True, export_apply=True,
+            export_texcoords=True, export_normals=True, export_materials='EXPORT', export_colors=False,
+            export_image_format='JPEG' if tag == "lod1" else 'AUTO', export_yup=True)
+    except Exception:
+        traceback.print_exc(); raise
     for o in exp: bpy.data.objects.remove(o, do_unlink=True)
     return res
 info["tris_original"] = sum(ntris(o) for o in scn.objects if o.type == 'MESH')
 info["lod0"] = build(BUD0, "lod0", out0)
-info["lod1"] = build(BUD1, "lod1", out1)
+info["lod1"] = build(BUD1, "lod1", out1) if os.environ.get("SOLO_LOD0") != "1" else None  # SOLO_LOD0=1: solo el del jugador
 json.dump(info, open(info_path, "w"), indent=1, default=float)
 print("OK", json.dumps(info, default=float)[:3000])
