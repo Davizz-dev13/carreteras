@@ -16,6 +16,7 @@ window/size/viewport_width=1280
 window/size/viewport_height=720
 window/stretch/mode="canvas_items"
 window/stretch/aspect="expand"
+window/size/mode.windows=3
 
 [physics]
 
@@ -25,6 +26,8 @@ common/physics_ticks_per_second=60
 [rendering]
 renderer/rendering_method="gl_compatibility"
 renderer/rendering_method.mobile="gl_compatibility"
+renderer/rendering_method.windows="forward_plus"
+renderer/rendering_method.web="gl_compatibility"
 anti_aliasing/quality/msaa_3d=2
 lights_and_shadows/directional_shadow/size=4096
 lights_and_shadows/directional_shadow/soft_shadow_filter_quality=3

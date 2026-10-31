@@ -1,0 +1,84 @@
+name: Versión Windows (.exe)
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: windows
+  cancel-in-progress: true
+
+env:
+  GODOT_VERSION: "4.7.2"
+  ETIQUETA: windows-latest
+
+jobs:
+  exe:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Caché de Godot y plantilla Windows
+        id: cache
+        uses: actions/cache@v6
+        with:
+          path: |
+            ~/godot
+            ~/.local/share/godot/export_templates
+          key: godot-${{ env.GODOT_VERSION }}-windows-x86_64
+
+      - name: Descargar Godot y la plantilla de Windows
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: |
+          set -e
+          V=${GODOT_VERSION}
+          mkdir -p ~/godot ~/.local/share/godot/export_templates/${V}.stable
+          cd ~/godot
+          curl -fsSL --retry 3 -o godot.zip https://github.com/godotengine/godot/releases/download/${V}-stable/Godot_v${V}-stable_linux.x86_64.zip
+          unzip -q godot.zip && rm godot.zip
+          curl -fsSL --retry 3 -o plantillas.tpz https://github.com/godotengine/godot/releases/download/${V}-stable/Godot_v${V}-stable_export_templates.tpz
+          unzip -q -j plantillas.tpz templates/windows_release_x86_64.exe templates/version.txt -d ~/.local/share/godot/export_templates/${V}.stable
+          rm plantillas.tpz
+
+      - name: Exportar a Windows
+        run: |
+          set -e
+          GODOT=~/godot/Godot_v${GODOT_VERSION}-stable_linux.x86_64
+          mkdir -p build/windows
+          cd juego
+          $GODOT --headless --import || true
+          $GODOT --headless --export-release "Windows Desktop" ../build/windows/Carreteras.exe
+          cd ..
+          test -s build/windows/Carreteras.exe
+          cat > build/windows/LEEME.txt <<EOF
+          Carreteras de España 1:1 — versión para Windows
+          Generada automáticamente desde el commit ${GITHUB_SHA::7} ($(date -u '+%Y-%m-%d %H:%M') UTC).
+
+          1. Descomprime el zip en una carpeta (por ejemplo, el Escritorio).
+          2. Abre Carreteras.exe.
+          3. Si Windows dice "Windows protegió su PC": pulsa "Más información" y luego "Ejecutar de todas formas".
+             Sale porque el programa no está firmado con un certificado de pago; no es un virus.
+
+          Usa la gráfica dedicada (Vulkan). Se abre a pantalla completa; Alt+F4 para salir.
+          EOF
+          cd build/windows && zip -q -9 ../Carreteras-windows.zip Carreteras.exe LEEME.txt
+          ls -la . ..
+
+      - name: Publicar en la release "windows-latest"
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -e
+          NOTAS="Versión para Windows generada automáticamente desde el commit ${GITHUB_SHA::7} ($(date -u '+%Y-%m-%d %H:%M') UTC). Descarga Carreteras-windows.zip, descomprímelo y abre Carreteras.exe. Si Windows SmartScreen avisa: Más información → Ejecutar de todas formas (el exe no está firmado)."
+          if gh release view "$ETIQUETA" >/dev/null 2>&1; then
+            gh release upload "$ETIQUETA" build/Carreteras-windows.zip --clobber
+            gh release edit "$ETIQUETA" --notes "$NOTAS"
+          else
+            gh release create "$ETIQUETA" build/Carreteras-windows.zip --target "$GITHUB_SHA" --title "Carreteras para Windows (última versión)" --notes "$NOTAS"
+          fi
+          gh release view "$ETIQUETA" --json assets --jq '.assets[] | "\(.name) \(.size)"'
