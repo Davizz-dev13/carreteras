@@ -1,0 +1,602 @@
+{
+ "_leeme": "Coches reales del juego. Cada cifra de fábrica lleva su fuente en 'fuentes' (y notas). Para añadir un coche: añade otro objeto a 'modelos' con sus 'versiones' y su 'modelo_3d'. Cifras del Arteon: TDI 150/200, TSI 190 y R 320: fichas de km77.com de cada versión española del lavado de cara (2020–2024); TSI 280 4Motion: km77 (pre-restyling 2017–2018, España); TDI 200 4Motion: auto-data.net (lavado de cara, otros mercados europeos). Antes: fichas de km77.com de cada versión española (2020–2024), Cx de auto-data.net, gama española según la lista de precios de VW España MY22. Recogido el 2026-10-31.",
+ "modelos": [
+  {
+   "id": "vw_arteon",
+   "marca": "Volkswagen",
+   "modelo": "Arteon",
+   "carroceria": "fastback 5 puertas (lavado de cara 2020–2024)",
+   "cx": 0.265,
+   "cx_fuente": "auto-data.net (Arteon facelift 2020 2.0 TDI 150 SCR DSG): 0,265; km77 lo redondea a 0,27. Misma carrocería en todas las versiones; para R y eHybrid no hay Cx publicado y se usa el de la carrocería.",
+   "area_frontal_m2": null,
+   "area_frontal_nota": "No publicada en ninguna fuente abierta: el juego la estima como 0,84 × ancho × alto (≈2,29 m²).",
+   "ojos": [
+    -0.37,
+    1.13,
+    0.3
+   ],
+   "modelo_3d": {
+    "tipo": "procedural",
+    "perfil": {
+     "nota": "Perfil procedural low-poly hecho para este juego a las medidas reales del Arteon (largo, ancho, alto, batalla, vía de la ficha). Las proporciones de la silueta (voladizos, línea de techo fastback) son aproximadas a ojo sobre fotos laterales; no son cotas de fábrica.",
+     "voladizo_del": 0.93,
+     "radio_rueda": 0.339,
+     "ancho_rueda": 0.245,
+     "secciones": [
+      [
+       0.0,
+       0.25,
+       0.42,
+       0.0,
+       0.84,
+       0,
+       0,
+       0,
+       0
+      ],
+      [
+       0.02,
+       0.13,
+       0.47,
+       0.0,
+       0.92,
+       0,
+       0,
+       0,
+       0
+      ],
+      [
+       0.07,
+       0.11,
+       0.52,
+       0.0,
+       0.97,
+       0,
+       0,
+       0,
+       0
+      ],
+      [
+       0.17,
+       0.11,
+       0.565,
+       0.0,
+       0.995,
+       0,
+       0,
+       0,
+       0
+      ],
+      [
+       0.32,
+       0.11,
+       0.6,
+       0.61,
+       1.0,
+       0.9,
+       0.89,
+       1,
+       1
+      ],
+      [
+       0.385,
+       0.11,
+       0.615,
+       0.8,
+       1.0,
+       0.89,
+       0.8,
+       1,
+       1
+      ],
+      [
+       0.455,
+       0.11,
+       0.625,
+       0.975,
+       1.0,
+       0.885,
+       0.69,
+       1,
+       0
+      ],
+      [
+       0.5,
+       0.11,
+       0.63,
+       1.0,
+       1.0,
+       0.885,
+       0.67,
+       1,
+       0
+      ],
+      [
+       0.6,
+       0.11,
+       0.635,
+       0.995,
+       1.0,
+       0.885,
+       0.67,
+       1,
+       1
+      ],
+      [
+       0.695,
+       0.11,
+       0.645,
+       0.93,
+       1.0,
+       0.88,
+       0.69,
+       1,
+       1
+      ],
+      [
+       0.76,
+       0.115,
+       0.655,
+       0.83,
+       1.0,
+       0.88,
+       0.72,
+       0,
+       1
+      ],
+      [
+       0.85,
+       0.12,
+       0.665,
+       0.715,
+       0.995,
+       0.9,
+       0.8,
+       0,
+       1
+      ],
+      [
+       0.9,
+       0.13,
+       0.67,
+       0.0,
+       0.985,
+       0,
+       0,
+       0,
+       0
+      ],
+      [
+       0.96,
+       0.16,
+       0.665,
+       0.0,
+       0.96,
+       0,
+       0,
+       0,
+       0
+      ],
+      [
+       1.0,
+       0.27,
+       0.635,
+       0.0,
+       0.9,
+       0,
+       0,
+       0,
+       0
+      ]
+     ],
+     "detalles": [
+      [
+       "negro",
+       0,
+       0.37,
+       0.0,
+       1.4,
+       0.12,
+       0.06
+      ],
+      [
+       "luz",
+       0.62,
+       0.4,
+       0.0,
+       0.44,
+       0.065,
+       0.07
+      ],
+      [
+       "luz",
+       0,
+       0.415,
+       0.0,
+       1.05,
+       0.014,
+       0.065
+      ],
+      [
+       "luz",
+       0,
+       0.37,
+       0.0,
+       0.11,
+       0.11,
+       0.08
+      ],
+      [
+       "negro",
+       0,
+       0.25,
+       0.0,
+       1.3,
+       0.1,
+       0.065
+      ],
+      [
+       "piloto",
+       0.65,
+       0.585,
+       1.0,
+       0.46,
+       0.065,
+       0.06
+      ],
+      [
+       "piloto",
+       0,
+       0.6,
+       1.0,
+       0.6,
+       0.018,
+       0.05
+      ],
+      [
+       "negro",
+       0,
+       0.47,
+       1.0,
+       0.52,
+       0.12,
+       0.04
+      ],
+      [
+       "negro",
+       0,
+       0.23,
+       1.0,
+       1.55,
+       0.1,
+       0.065
+      ],
+      [
+       "carroceria",
+       1.04,
+       0.655,
+       0.33,
+       0.14,
+       0.09,
+       0.2
+      ],
+      [
+       "cristal",
+       1.105,
+       0.655,
+       0.33,
+       0.01,
+       0.07,
+       0.16
+      ]
+     ]
+    },
+    "nota": "Para usar un modelo descargado: {\"tipo\": \"gltf\", \"ruta\": \"res://modelos/arteon.glb\"} (licencia CC0/CC-BY con atribución en el README)."
+   },
+   "colores": [
+    {
+     "nombre": "Blanco Puro",
+     "hex": "#F2F2EF",
+     "codigo_vw": "0Q0Q",
+     "hex_aproximado": true
+    },
+    {
+     "nombre": "Gris Ceres",
+     "hex": "#8A8D8F",
+     "codigo_vw": "C2C2",
+     "hex_aproximado": true
+    },
+    {
+     "nombre": "Negro Profundo efecto perla",
+     "hex": "#121315",
+     "codigo_vw": "2T2T",
+     "hex_aproximado": true
+    },
+    {
+     "nombre": "Gris Manganeso metalizado",
+     "hex": "#5A5D61",
+     "codigo_vw": "5V5V",
+     "hex_aproximado": true
+    },
+    {
+     "nombre": "Plata Pirita metalizado",
+     "hex": "#A7A9A6",
+     "codigo_vw": "K2K2",
+     "hex_aproximado": true
+    },
+    {
+     "nombre": "Rojo Intenso metalizado",
+     "hex": "#8B1A22",
+     "codigo_vw": "P8P8",
+     "hex_aproximado": true
+    },
+    {
+     "nombre": "Azul Malibú metalizado",
+     "hex": "#2E4F78",
+     "codigo_vw": "L4L4",
+     "hex_aproximado": true
+    },
+    {
+     "nombre": "Lapiz Blue metalizado",
+     "hex": "#1E3F8F",
+     "codigo_vw": "L9L9",
+     "hex_aproximado": true
+    }
+   ],
+   "fuente_colores": {
+    "url": "https://volkswagenzaragoza.com/wp-content/uploads/2022/09/arteon.pdf",
+    "titulo": "VW España, 'Catálogo Nuevo Arteon' — lista de precios PVP para pedidos desde 01/05/2022 (copia en la web de un concesionario VW)"
+   },
+   "versiones": [
+    {
+     "id": "arteon_tdi150_dsg",
+     "nombre": "Arteon 2.0 TDI 150 CV DSG",
+     "potencia_cv": 150,
+     "potencia_kw": 110,
+     "rpm_potencia": "3000 - 4200 rpm",
+     "par_nm": 360,
+     "rpm_par": "1600 - 2750 rpm",
+     "masa_kg": 1650,
+     "largo_mm": 4866,
+     "ancho_mm": 1871,
+     "alto_mm": 1457,
+     "batalla_mm": 2836,
+     "via_del_mm": 1587,
+     "via_tra_mm": 1577,
+     "traccion": "delantera",
+     "cambio": "DSG 7",
+     "vel_max_kmh": 220,
+     "aceleracion_0_100_s": 9.5,
+     "cx": 0.265,
+     "area_frontal_m2": null,
+     "neumaticos": "245/40 R19 94W",
+     "cilindrada_cm3": 1968,
+     "fuentes": [
+      {
+       "campos": "potencia, rpm, par, masa, dimensiones, vías, tracción, cambio, vel_max, 0-100, neumáticos, cilindrada",
+       "url": "https://www.km77.com/coches/volkswagen/arteon/2021/estandar/estandar/arteon-elegance-20-tdi-110-kw-150-cv-dsg-7-vel/datos",
+       "titulo": "Volkswagen Arteon Elegance 2.0 TDI 110 kW (150 CV) DSG 7 vel. (2020-2024) — ficha técnica km77.com"
+      },
+      {
+       "campos": "cx",
+       "url": "https://www.auto-data.net/en/volkswagen-arteon-facelift-2020-2.0-tdi-150hp-scr-dsg-40771",
+       "titulo": "Volkswagen Arteon (facelift 2020) 2.0 TDI (150 Hp) SCR DSG — auto-data.net"
+      },
+      {
+       "campos": "gama vendida en España (motores y cambios)",
+       "url": "https://volkswagenzaragoza.com/wp-content/uploads/2022/09/arteon.pdf",
+       "titulo": "VW España, 'Catálogo Nuevo Arteon' — lista de precios PVP para pedidos desde 01/05/2022 (copia en la web de un concesionario VW)"
+      }
+     ],
+     "notas": [
+      "Cx 0,265 según auto-data.net (km77 publica el mismo coche redondeado a 0,27). Superficie frontal no publicada (km77: 'No disponible').",
+      "Versión de la ficha: Elegance (km77). Masa 1.650 kg en orden de marcha con conductor (auto-data da 1.575 kg sin conductor: la diferencia son los 75 kg del conductor)."
+     ]
+    },
+    {
+     "id": "arteon_tdi200_dsg",
+     "nombre": "Arteon 2.0 TDI 200 CV DSG",
+     "potencia_cv": 200,
+     "potencia_kw": 147,
+     "rpm_potencia": "3600 - 4100 rpm",
+     "par_nm": 400,
+     "rpm_par": "1750 - 3500 rpm",
+     "masa_kg": 1639,
+     "largo_mm": 4866,
+     "ancho_mm": 1871,
+     "alto_mm": 1457,
+     "batalla_mm": 2836,
+     "via_del_mm": 1587,
+     "via_tra_mm": 1577,
+     "traccion": "delantera",
+     "cambio": "DSG 7",
+     "vel_max_kmh": 237,
+     "aceleracion_0_100_s": 7.9,
+     "cx": 0.265,
+     "area_frontal_m2": null,
+     "neumaticos": "245/40 R19 94W",
+     "cilindrada_cm3": 1968,
+     "fuentes": [
+      {
+       "campos": "potencia, rpm, par, masa, dimensiones, vías, tracción, cambio, vel_max, 0-100, neumáticos, cilindrada",
+       "url": "https://www.km77.com/coches/volkswagen/arteon/2021/estandar/estandar/arteon-r-line-20-tdi-147-kw-200-cv-dsg-7-vel/datos",
+       "titulo": "Volkswagen Arteon R-Line 2.0 TDI 147 kW (200 CV) DSG 7 vel. (2020-2024) — ficha técnica km77.com"
+      },
+      {
+       "campos": "cx (dato de la carrocería; auto-data lo da para el TDI 150, misma carrocería)",
+       "url": "https://www.auto-data.net/en/volkswagen-arteon-facelift-2020-2.0-tdi-150hp-scr-dsg-40771",
+       "titulo": "Volkswagen Arteon (facelift 2020) 2.0 TDI (150 Hp) SCR DSG — auto-data.net"
+      },
+      {
+       "campos": "gama vendida en España (motores y cambios)",
+       "url": "https://volkswagenzaragoza.com/wp-content/uploads/2022/09/arteon.pdf",
+       "titulo": "VW España, 'Catálogo Nuevo Arteon' — lista de precios PVP para pedidos desde 01/05/2022 (copia en la web de un concesionario VW)"
+      }
+     ],
+     "notas": [
+      "En España (lavado de cara 2020–2024) el TDI 200 CV se vendió con tracción delantera, no 4Motion: así lo dan km77 y la lista de precios de VW España MY22. No existe ficha española del TDI 200 4Motion.",
+      "Cx: misma carrocería que el TDI 150; km77 da 0,27 para esta versión.",
+      "Versión de la ficha: R-Line (km77)."
+     ]
+    },
+    {
+     "id": "arteon_tdi200_4motion_dsg",
+     "nombre": "Arteon 2.0 TDI 200 CV 4Motion DSG",
+     "potencia_cv": 200,
+     "potencia_kw": 147,
+     "par_nm": 400,
+     "rpm_par": "1750 - 3500 rpm",
+     "masa_kg": 1724,
+     "largo_mm": 4866,
+     "ancho_mm": 1871,
+     "alto_mm": 1460,
+     "batalla_mm": 2835,
+     "traccion": "4Motion",
+     "cambio": "DSG 7",
+     "vel_max_kmh": 234,
+     "aceleracion_0_100_s": 7.4,
+     "cx": null,
+     "area_frontal_m2": null,
+     "mercado": "Arteon lavado de cara (2020–2023), mercados europeos (p. ej. Alemania); en España esta versión no se vendió con 4Motion",
+     "fuentes": [
+      {
+       "campos": "potencia, par, masa (sin conductor: 1.649 kg), medidas, tracción, cambio, vel_max, 0-100",
+       "url": "https://www.auto-data.net/en/volkswagen-arteon-facelift-2020-2.0-tdi-200hp-4motion-scr-dsg-41421",
+       "titulo": "Volkswagen Arteon (facelift 2020) 2.0 TDI (200 Hp) 4MOTION SCR DSG — auto-data.net"
+      }
+     ],
+     "notas": [
+      "masa_kg = 1.649 kg de auto-data (en vacío, sin conductor) + 75 kg de conductor, para comparar igual que las fichas de km77 (que incluyen conductor).",
+      "Vías no publicadas en esta ficha: se usan las del modelo (1.587 mm)."
+     ],
+     "via_del_mm": 1587
+    },
+    {
+     "id": "arteon_tsi190_dsg",
+     "nombre": "Arteon 2.0 TSI 190 CV DSG",
+     "potencia_cv": 190,
+     "potencia_kw": 140,
+     "rpm_potencia": "4200 - 6000 rpm",
+     "par_nm": 320,
+     "rpm_par": "1500 - 4100 rpm",
+     "masa_kg": 1608,
+     "largo_mm": 4866,
+     "ancho_mm": 1871,
+     "alto_mm": 1457,
+     "batalla_mm": 2836,
+     "via_del_mm": 1587,
+     "via_tra_mm": 1577,
+     "traccion": "delantera",
+     "cambio": "DSG 7",
+     "vel_max_kmh": 237,
+     "aceleracion_0_100_s": 7.7,
+     "cx": 0.265,
+     "area_frontal_m2": null,
+     "neumaticos": "245/40 R19 94W",
+     "cilindrada_cm3": 1984,
+     "fuentes": [
+      {
+       "campos": "potencia, rpm, par, masa, dimensiones, vías, tracción, cambio, vel_max, 0-100, neumáticos, cilindrada",
+       "url": "https://www.km77.com/coches/volkswagen/arteon/2021/estandar/estandar/arteon-r-line-20-tsi-140-kw-190-cv-dsg-7-vel/datos",
+       "titulo": "Volkswagen Arteon R-Line 2.0 TSI 140 kW (190 CV) DSG 7 vel. (2020-2024) — ficha técnica km77.com"
+      },
+      {
+       "campos": "cx (dato de la carrocería; auto-data lo da para el TDI 150, misma carrocería)",
+       "url": "https://www.auto-data.net/en/volkswagen-arteon-facelift-2020-2.0-tdi-150hp-scr-dsg-40771",
+       "titulo": "Volkswagen Arteon (facelift 2020) 2.0 TDI (150 Hp) SCR DSG — auto-data.net"
+      },
+      {
+       "campos": "gama vendida en España (motores y cambios)",
+       "url": "https://volkswagenzaragoza.com/wp-content/uploads/2022/09/arteon.pdf",
+       "titulo": "VW España, 'Catálogo Nuevo Arteon' — lista de precios PVP para pedidos desde 01/05/2022 (copia en la web de un concesionario VW)"
+      }
+     ],
+     "notas": [
+      "Cx: km77 da 0,27 para esta versión.",
+      "Versión de la ficha: R-Line (km77)."
+     ]
+    },
+    {
+     "id": "arteon_tsi280_4motion_dsg",
+     "nombre": "Arteon 2.0 TSI 280 CV 4Motion DSG (pre-restyling)",
+     "potencia_cv": 280,
+     "potencia_kw": 206,
+     "par_nm": 350,
+     "masa_kg": 1716,
+     "largo_mm": 4862,
+     "ancho_mm": 1871,
+     "alto_mm": 1450,
+     "batalla_mm": 2837,
+     "via_del_mm": 1587,
+     "via_tra_mm": 1577,
+     "traccion": "4Motion",
+     "cambio": "DSG 7",
+     "vel_max_kmh": 250,
+     "vel_max_limitada": true,
+     "aceleracion_0_100_s": 5.6,
+     "cx": null,
+     "area_frontal_m2": null,
+     "neumaticos": "245/40 R19 94W",
+     "mercado": "Arteon pre-restyling (2017–2018) vendido en España",
+     "fuentes": [
+      {
+       "campos": "potencia, par, masa, medidas, vías, tracción, cambio, vel_max, 0-100, neumáticos",
+       "url": "https://www.km77.com/coches/volkswagen/arteon/2017/estandar/elegance/arteon-elegance-20-tsi-4motion-206-kw-280-cv-dsg-7-vel/datos",
+       "titulo": "Volkswagen Arteon Elegance 2.0 TSI 4MOTION 206 kW (280 CV) DSG 7 vel. (2017-2018) — ficha técnica km77.com"
+      }
+     ],
+     "notas": [
+      "km77: Peso 1.716 kg (en orden de marcha con conductor), Cx 'No disponible' → se usa el de la carrocería.",
+      "Vel. máx. 250 km/h (limitada electrónicamente)."
+     ]
+    },
+    {
+     "id": "arteon_r_320_4motion",
+     "nombre": "Arteon R 2.0 TSI 320 CV 4Motion DSG",
+     "potencia_cv": 320,
+     "potencia_kw": 235,
+     "rpm_potencia": "5350 - 6500 rpm",
+     "par_nm": 420,
+     "rpm_par": "2000 - 5350 rpm",
+     "masa_kg": 1778,
+     "largo_mm": 4866,
+     "ancho_mm": 1871,
+     "alto_mm": 1460,
+     "batalla_mm": 2838,
+     "via_del_mm": 1587,
+     "via_tra_mm": 1582,
+     "traccion": "4Motion",
+     "cambio": "DSG 7",
+     "vel_max_kmh": 250,
+     "aceleracion_0_100_s": 4.9,
+     "cx": null,
+     "area_frontal_m2": null,
+     "neumaticos": "245/40 R19 94W",
+     "cilindrada_cm3": 1984,
+     "fuentes": [
+      {
+       "campos": "potencia, rpm, par, masa, dimensiones, vías, tracción, cambio, vel_max, 0-100, neumáticos, cilindrada",
+       "url": "https://www.km77.com/coches/volkswagen/arteon/2021/estandar/r/arteon-r-20-tsi-235-kw-320-cv-dsg-7-vel/datos",
+       "titulo": "Volkswagen Arteon R 2.0 TSI 235 kW (320 CV) DSG 7 vel. (2021-2024) — ficha técnica km77.com"
+      },
+      {
+       "campos": "potencia 235 kW/320 PS, 0-100 en 4,9 s, 4Motion (confirmación del fabricante)",
+       "url": "https://www.volkswagen-newsroom.com/en/press-releases/the-new-arteon-r-and-arteon-r-shooting-brake-a-new-fusion-of-gran-turismo-and-sports-car-7005",
+       "titulo": "The new Arteon R and Arteon R Shooting Brake: A new fusion of gran turismo and sports car | Volkswagen Newsroom"
+      },
+      {
+       "campos": "gama vendida en España (motores y cambios)",
+       "url": "https://volkswagenzaragoza.com/wp-content/uploads/2022/09/arteon.pdf",
+       "titulo": "VW España, 'Catálogo Nuevo Arteon' — lista de precios PVP para pedidos desde 01/05/2022 (copia en la web de un concesionario VW)"
+      }
+     ],
+     "notas": [
+      "Cx no publicado para el R en las fuentes abiertas (km77 no lo da) → null.",
+      "Vel. máx. 250 km/h limitada; VW indica opción de 270 km/h.",
+      "Altura 1.460 mm, batalla 2.838 mm y vía trasera 1.582 mm (difieren ligeramente del resto, según km77)."
+     ]
+    }
+   ]
+  }
+ ]
+}

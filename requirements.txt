@@ -1,0 +1,8 @@
+numpy
+scipy
+pyproj
+rasterio
+matplotlib
+requests
+# opcional para toda España desde .osm.pbf:
+# osmium

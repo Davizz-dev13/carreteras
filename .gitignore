@@ -1,0 +1,30 @@
+# Godot
+.godot/
+*.import.bak
+*.translation
+export_credentials.cfg
+
+# Exportaciones (la web la genera GitHub Actions)
+build/
+docs/
+*.exe
+*.pck
+*.wasm
+*.x86_64
+*.apk
+*.zip
+
+# Pipeline: cachés de descarga (MDT en bruto, respuestas de Overpass)
+cache/
+*.tif
+*.tiff
+*.npy
+*.osm.pbf
+__pycache__/
+*.pyc
+venv/
+.venv/
+
+# Sistema
+.DS_Store
+Thumbs.db
