@@ -43,6 +43,9 @@ regenera sola con cada cambio (GitHub Actions, `.github/workflows/windows.yml`, 
   color del suelo con la ortofoto PNOA (`scripts/paisaje.gd`, datos en `datos/<zona>/paisaje/`, generados con
   `python pipeline/paisaje.py --zona <zona>`; qué es real y qué es aproximado: `paisaje.json` de cada zona). La exportación web los
   excluye (`exclude_filter`) y en el navegador el paisaje no se activa. Filtro anisótropo del suelo activado en Windows.
+- **Mapa abierto de la Comunidad de Madrid solo en el .exe**: botón "Comunidad de Madrid entera" en la fila "Mapa abierto:" del
+  menú (`scripts/ma_*.gd`, `escenas/madrid.tscn`, datos en `datos/madrid/`, ~174 MB, generados con `pipeline/mundo/m1…m6`).
+  La exportación web excluye los datos y la escena (`exclude_filter`) y en el navegador el botón no aparece.
 
 ## 1. Estructura
 

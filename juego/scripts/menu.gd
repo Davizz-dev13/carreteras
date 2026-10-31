@@ -126,6 +126,7 @@ func _ready() -> void:
 	opciones.add_child(camara)
 	col.add_child(opciones)
 	col.add_child(Paisaje.fila_menu())   # Gráficos alto/bajo y Estación (paisaje.gd; oculto en la web)
+	col.add_child(MaMundo.fila_menu(self))   # mapa abierto de la Comunidad de Madrid (ma_mundo.gd; oculto en la web)
 	var boton := Button.new()
 	boton.text = "  ¡A conducir!  "
 	boton.add_theme_font_size_override("font_size", 22)
