@@ -388,6 +388,7 @@ Resultados en esta versión:
   límite salvo al adelantar.
 - **Zonas**: Puerto de Navacerrada y **A-308 Iznalloz–Darro** (Granada, 36,5 km, carril de adelantamiento real de
   2,2 km en sentido Darro, km 6,5–8,7). Se elige en el menú (Zona) o con `--zona=a308`. Fuentes en
-  `juego/datos/a308/FUENTES.md`.
+  `juego/datos/a308/FUENTES.md`. **GR-8101 Sierra de Baza** (Granada): 29,5 km del límite de Almería (2.017 m) a
+  Caniles (860 m), 1 carril por sentido, sin carriles de adelantamiento ni límites en OSM (90* genérico); `--zona=gr8101`.
 - **Coche del jugador**: modelo rehecho desde el original (113k triángulos, sin abolladuras en la chapa) y
   antialiasing MSAA 4x.

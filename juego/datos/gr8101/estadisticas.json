@@ -1,0 +1,39 @@
+{
+ "GR-8101 límite de Almería → Caniles": {
+  "longitud_km": 29.485,
+  "alt_min": 860.0,
+  "alt_max": 2017.2,
+  "alt_inicio": 2017.2,
+  "alt_fin": 860.0,
+  "desnivel_subida": 40.8,
+  "desnivel_bajada": 1197.9,
+  "pendiente_max_puntual": 12.8,
+  "pendiente_max_100m": -10.0,
+  "km_pendiente_max_100m": 16.21,
+  "pendiente_max_1km": -7.3,
+  "km_pendiente_max_1km": 11.62,
+  "radio_min_m": 10.4,
+  "curvas_radio_menor_30m": 17,
+  "metros_puente": 0.0,
+  "metros_tunel": 0.0,
+  "curvas_por_radio_m": {
+   "criterio": "tramo continuo del mismo signo con radio < 400 m y >= 15 m de largo, curvatura media en 20 m (quita el ruido de los nodos de OSM); 'sin_suavizar' = curvatura cruda cada 2 m",
+   "suavizado_20m": {
+    "0-30": 2,
+    "30-50": 41,
+    "50-100": 68,
+    "100-200": 60,
+    "200-400": 21
+   },
+   "sin_suavizar": {
+    "0-30": 14,
+    "30-50": 50,
+    "50-100": 96,
+    "100-200": 45,
+    "200-400": 0
+   },
+   "total_suavizado": 192
+  },
+  "pct_linea_discontinua_derivada": 32.8
+ }
+}

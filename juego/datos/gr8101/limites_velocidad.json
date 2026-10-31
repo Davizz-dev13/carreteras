@@ -1,0 +1,33 @@
+{
+ "rutas": [
+  {
+   "id": 0,
+   "nombre": "GR-8101 límite de Almería → Caniles",
+   "longitud_km": 29.484,
+   "tramos": [
+    {
+     "km_ini": 0.0,
+     "km_fin": 29.484,
+     "limite": 90,
+     "sentido": "ambos",
+     "fuente": "por_defecto_legal"
+    }
+   ],
+   "cobertura_osm_pct": {
+    "ida": 0.0,
+    "vuelta": 0.0
+   },
+   "tramos_pequenos_absorbidos": []
+  }
+ ],
+ "notas": "Límites reales de OpenStreetMap (maxspeed, maxspeed:forward/backward) emparejados con cada muestra de la ruta (cada 2 m: la vía OSM de la misma ref más cercana a ≤15 m con la misma orientación; en calzadas separadas, la calzada contraria de la misma ref a ≤45 m da el límite de 'vuelta'; en rotondas sin ref, la carretera más cercana). 'ida' = km creciente (límite de Almería → Caniles). Donde OSM no tiene maxspeed: genérico legal, fuente='por_defecto_legal' (NO es una señal real; el juego lo pinta tenue y con *): 90 km/h en carretera convencional fuera de poblado, 50 dentro de poblado (punto dentro de un polígono landuse=residential de OSM). Tramos de menos de 60 m se absorben en el contiguo (lista en 'tramos_pequenos_absorbidos'). No hay señales de velocidad mapeadas como nodo en la zona. Datos © colaboradores de OpenStreetMap, ODbL.",
+ "proyeccion": "WGS84 → ETRS89 / UTM 30N (EPSG:25830), origen E0=522000, N0=4134000; X_juego = E − 522000, Z_juego = 4134000 − N",
+ "consulta_osm_fecha": "2026-10-31T16:18:41Z",
+ "consulta_osm_url": "https://overpass-api.de/api/interpreter",
+ "bbox_wgs84": [
+  37.25,
+  -2.81,
+  37.455,
+  -2.69
+ ]
+}
