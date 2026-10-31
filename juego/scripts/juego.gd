@@ -151,6 +151,7 @@ func _simular(dt: float) -> void:
 	colisiones.resolver(dt, prev_jug)
 	choques = colisiones.golpes
 	_adelantamiento(dt)
+	_adelantar_auto(dt)
 	if not terminado:
 		tiempo += dt
 		v_max = maxf(v_max, absf(coche.v))
@@ -233,6 +234,10 @@ func _velocidad_objetivo() -> float:
 	elif adel_estado == 2 and not adel_lider.is_empty():
 		# para pasar hace falta ir claramente más rápido que el adelantado (+ADEL_DELTA km/h como mínimo)
 		v0 = maxf(v0, float(adel_lider["v"]) + ADEL_DELTA / 3.6)
+		if adel_parcial:
+			v0 = minf(v0, adel_v_parcial)
+			if _existe(adel_ultimo) and (adel_ultimo["s"] - s_coche) * dir < -(trafico.largo + ADEL_MARGEN):
+				v0 = minf(v0, float(adel_ultimo["v"]))   # ya pasados: iguala la velocidad de la cola para meterse
 		if Ajustes.limite_adelantar:
 			var lim := _limite(s_coche, dir)
 			if lim > 0: v0 = minf(v0, lim / 3.6)
@@ -258,16 +263,71 @@ func _control_velocidad(v0: float) -> void:
 	var lb := coche.ficha.batalla * 0.5
 	var seno := clampf((coche._altura(coche.position + fw * lb) - coche._altura(coche.position - fw * lb)) / (2.0 * lb), -0.5, 0.5)
 	var fi := coche.ficha
+	var retencion := coche.caja.f_retencion(v, coche.caja.marcha)
+	if Ajustes.args.get("eco", "1") != "0":
+		a = _acercamiento(a, v, v0, hueco, v_lider)
 	var f := fi.masa * a + coche.fuerza_resistente(v) + fi.masa * Coche.G * seno
 	coche.marcha_atras = false
+	if adel_estado == 2 and adel_parcial and a < -2.5:
+		a = -2.5                       # igualando la velocidad de la cola para meterse en el hueco: sin frenazo
+		f = fi.masa * a + coche.fuerza_resistente(v) + fi.masa * Coche.G * seno
 	if adel_estado == 2 and v < v0:
 		f = coche.fuerza_motor(v)      # adelantando: a fondo (como en la comprobación de seguridad)
-	if f >= 0.0:
+	if f < 0.0 and -f <= retencion and Ajustes.args.get("eco", "1") != "0":
+		# basta con soltar el gas: retiene el motor (corte de inyección), sin tocar el freno
+		coche.acelerador = 0.0
+		coche.freno = 0.0
+	elif f >= 0.0:
 		coche.acelerador = clampf(f / coche.fuerza_motor(v), 0.0, 1.0)
 		coche.freno = 0.0
 	else:
 		coche.acelerador = 0.0
 		coche.freno = clampf(-f / fi.f_freno_max, 0.0, 1.0)
+
+
+## v5: acercamiento a un coche más lento sin frenazos: el IDM de siempre anticipa desde lejos (suelta gas poco a
+## poco), pero nunca frena más de lo que hace falta para quedarse a su velocidad a la distancia de seguimiento (con un
+## 30 % de margen); y si basta con soltar el gas, rueda con el freno motor (corte de inyección) en vez de frenar.
+## Si se ha echado encima (hace falta más de 3 m/s²) o el de delante frena fuerte, manda el IDM como siempre.
+## Volviendo a la cola tras adelantar a los primeros, la distancia de referencia es la de meterse (S0 + 2 m).
+func _acercamiento(a_idm: float, v: float, v0: float, hueco: float, v_lider: float) -> float:
+	if a_idm >= 0.0 or hueco >= 5000.0:
+		return a_idm
+	var dv := maxf(v - v_lider, 0.0)
+	# en un carril adicional real (2+1) el piloto lo adelantará: no frena antes de tiempo
+	if hueco > _dist_lider() and adel_auto_espera <= 0.0 and Ajustes.args.get("auto_adel", "1") != "0" \
+			and ruta.carril_extra_tramo(s_coche, s_coche + dir * (hueco + 30.0), dir):
+		return minf(_a_libre(v, v0), 0.0)
+	var s_des := Trafico.S0 + 2.0
+	if not (adel_estado == 3 and adel_parcial):
+		s_des += v_lider * Trafico.T_SEG
+	var libre := hueco - s_des
+	var b_req := 0.0
+	var minimo := 0.3
+	if libre > 3.0:
+		b_req = dv * dv / (2.0 * libre)       # deceleración constante que lo deja a su velocidad a la distancia justa
+	else:
+		# más cerca de lo cómodo (p. ej. justo al meterse tras adelantar): abre el hueco poco a poco, sin frenazo
+		var corto := hueco - Trafico.S0 - 1.0
+		if corto <= 0.5:
+			return a_idm
+		b_req = dv * dv / (2.0 * corto)
+		minimo = 1.0
+	if b_req > 3.0 and libre > 3.0:
+		# no le da para quedarse a la distancia de seguimiento sin frenar fuerte (p. ej. al volver de adelantar):
+		# frena lo que haga falta para no acercarse a menos de S0 + 1 m (con margen) y luego abre el hueco poco a poco
+		var corto2 := hueco - Trafico.S0 - 1.0
+		b_req = dv * dv / (2.0 * corto2)
+		if b_req <= 3.0:
+			return minf(_a_libre(v, v0), maxf(a_idm, -maxf(b_req * 1.5, 1.0)))
+	if b_req > 3.0:
+		return a_idm                           # se ha echado encima o el de delante frena fuerte: como siempre
+	return minf(_a_libre(v, v0), maxf(a_idm, -maxf(b_req * 1.3, minimo)))
+
+
+## Término de carretera libre del IDM (lo que pide ir a v0 sin nadie delante), con el mismo factor que el piloto
+func _a_libre(v: float, v0: float) -> float:
+	return clampf(Trafico.A_MAX * 1.6 * (1.0 - pow(v / maxf(v0, 0.1), 4.0)), -8.0, 3.0)
 
 
 ## v4: el piloto no pasa del límite de la señal (y frena suave antes de una señal más baja), salvo adelantando
@@ -698,7 +758,7 @@ func _hud() -> void:
 	elif adel_estado == 2: modo += "\nAdelantando…"
 	elif adel_estado == 3: modo += "\nAdelantamiento: volviendo al carril"
 	elif adel_msg_t > 0.0: modo += "\n" + adel_msg
-	l_modo.text = _nombre_corto(coche.ficha.nombre) + " · %d CV\n" % roundi(coche.ficha.potencia_cv) + "%s\nVelocidad elegida: %d km/h\nAdaptar en curvas: %s\nLímites (piloto): %s\nLímite al adelantar: %s\nTráfico: %d %%\nCámara: %s" % [
+	l_modo.text = _nombre_corto(coche.ficha.nombre) + " · %d CV\n" % roundi(coche.ficha.potencia_cv) + "%s\nVelocidad elegida: %d km/h\nAdaptar en curvas: %s\nLímites (piloto): %s\nAdelantar: automático (O)\nLímite al adelantar: %s\nTráfico: %d %%\nCámara: %s" % [
 		modo, roundi(Ajustes.velocidad), "sí" if Ajustes.adaptar_curvas else "no", "sí" if Ajustes.piloto_limites else "no", "respetar" if Ajustes.limite_adelantar else "no",
 		roundi(Ajustes.trafico * 100.0),
 		"cabina" if Ajustes.camara == 1 else "persecución"]
@@ -1014,10 +1074,38 @@ func _aviso_adel(msg: String) -> void:
 	adel_msg_t = 3.0
 
 
+## v5: con el piloto puesto el adelantamiento es automático: si hay un coche lento delante lo pide solo (con las
+## mismas comprobaciones de seguridad que la tecla O). La O / □ sigue funcionando: pide el adelantamiento o, si está
+## esperando hueco, lo cancela y el piloto no vuelve a pedirlo solo durante ADEL_AUTO_PAUSA s. --auto_adel=0 lo apaga.
+const ADEL_AUTO_PAUSA := 15.0
+const ADEL_DIST_LIDER_2MAS1 := 300.0   # m: en un carril adicional real (2+1) se busca el lento antes y se pasa de lejos
+var adel_auto := false                 # el adelantamiento en curso lo pidió el piloto (avisos más discretos)
+var adel_auto_espera := 0.0
+
+
+func _adelantar_auto(dt: float) -> void:
+	adel_auto_espera = maxf(0.0, adel_auto_espera - dt)
+	if not piloto or terminado or adel_estado != 0 or adel_auto_espera > 0.0 or Ajustes.args.get("auto_adel", "1") == "0":
+		return
+	if _lider_lento().is_empty():
+		return
+	_pedir_adelantamiento()
+	adel_auto = adel_estado == 1
+
+
+## Hasta dónde se busca el coche lento: más lejos si nuestro sentido tiene carril adicional real (2+1) desde aquí
+func _dist_lider() -> float:
+	if ruta.carril_extra(s_coche, dir) and ruta.carril_extra(s_coche + dir * 150.0, dir):
+		return ADEL_DIST_LIDER_2MAS1
+	return ADEL_DIST_LIDER
+
+
 func _pedir_adelantamiento() -> void:
 	if adel_estado == 1:
 		_cancelar_adelantamiento("Adelantamiento cancelado")
+		adel_auto_espera = ADEL_AUTO_PAUSA
 		return
+	adel_auto = false
 	if adel_estado >= 2:
 		return
 	if not piloto:
@@ -1049,7 +1137,7 @@ func _existe(c: Dictionary) -> bool:
 ## El coche de nuestro sentido más cercano por delante (hasta ADEL_DIST_LIDER) que va más lento de lo que queremos ir
 func _lider_lento() -> Dictionary:
 	var mejor := {}
-	var dmin := ADEL_DIST_LIDER
+	var dmin := _dist_lider()
 	for c in trafico.coches:
 		if c["dir"] != dir or c.get("suelto", false):
 			continue
@@ -1078,7 +1166,7 @@ func _grupo(l: Dictionary) -> Array:
 		var hueco := ADEL_HUECO_GRUPO
 		if ADEL_HUECO_VUELTA:
 			var cierre := maxf(v_obj - float(ultimo["v"]), 0.0)
-			hueco = maxf(hueco, ADEL_MARGEN + trafico.largo + cierre * cierre / (2.0 * 5.0) + 3.0)
+			hueco = maxf(hueco, ADEL_MARGEN + trafico.largo + cierre * cierre / (2.0 * ADEL_FRENADA_VUELTA) + 3.0)
 		var dmin := hueco + trafico.largo
 		for c in trafico.coches:
 			if c["dir"] != dir or is_same(c, ultimo):
@@ -1097,10 +1185,61 @@ func _grupo(l: Dictionary) -> Array:
 	return g
 
 
+const ADEL_FRENADA_VUELTA := 2.5  # m/s²: frenada que se admite al volver al carril delante de otro (v3.1: 5, se notaba el frenazo)
+const ADEL_HUECO_CORTO := 16.0   # m libres que hacen falta entre dos coches de la cola para meterse (además del coche)
+var adel_parcial := false        # adelantando solo a los primeros de la cola
+var adel_v_parcial := 0.0        # m/s: velocidad de ese adelantamiento (para poder meterse en el hueco)
+
+
+## En un carril adicional real (2+1): el siguiente coche más lento por delante al que se alcanzaría pronto (si el
+## carril sigue hasta pasarlo), para no volver a la derecha y tener que frenar detrás de él
+func _siguiente_en_2mas1() -> Dictionary:
+	if not ruta.carril_extra(s_coche, dir):
+		return {}
+	var v := absf(coche.v)
+	var mejor := {}
+	var dmin := 1e9
+	for c in trafico.coches:
+		if c["dir"] != dir: continue
+		var d: float = (c["s"] - s_coche) * dir
+		var dv: float = v - float(c["v"])
+		if d <= 0.0 or dv < 2.0 or d > dv * dv / (2.0 * 2.0) + 40.0 or d >= dmin: continue
+		if ruta.carril_extra_tramo(s_coche, s_coche + dir * (d + trafico.largo + ADEL_MARGEN + 30.0), dir):
+			dmin = d
+			mejor = c
+	return mejor
+
+
+## Tras adelantar a parte de la cola: ¿cabe ya en el hueco frenando como mucho 2 m/s²?
+func _vuelta_suave() -> bool:
+	var v := absf(coche.v)
+	for c in trafico.coches:
+		if c["dir"] != dir: continue
+		var g: float = (c["s"] - s_coche) * dir - trafico.largo
+		if g < -trafico.largo or g > 60.0: continue
+		var dv: float = v - float(c["v"])
+		if dv > 0.5 and g - 4.0 < dv * dv / (2.0 * 2.0):
+			return false
+	return true
+
+
+func _frente_cerca() -> bool:
+	if ruta.carril_extra(s_coche, dir):
+		return false
+	for c in trafico.coches:
+		if c["dir"] == dir: continue
+		var dc: float = (c["s"] - s_coche) * dir
+		if dc > -3.0 and dc < (absf(coche.v) + absf(float(c["v"]))) * 3.0 + 20.0:
+			return true
+	return false
+
+
 ## "" si se puede adelantar ya; si no, el motivo
 func _hueco_seguro() -> String:
 	var grupo := _grupo(adel_lider)
-	if adel_sin_hueco:
+	# en un carril adicional real (2+1) no hace falta hueco para volver delante de toda la fila: se va por el carril
+	# de la izquierda de nuestro sentido y se puede volver a la derecha en cualquier hueco o donde acabe el carril
+	if adel_sin_hueco and not ruta.carril_extra(s_coche, dir):
 		return "fila larga: no hay hueco para volver"
 	var ultimo: Dictionary = grupo[grupo.size() - 1]
 	var ganar: float = (ultimo["s"] - s_coche) * dir + trafico.largo + ADEL_MARGEN
@@ -1110,18 +1249,51 @@ func _hueco_seguro() -> String:
 	for c in grupo:
 		v_fila = minf(v_fila, float(c.get("v0", c["v"])))
 	var v_l := maxf(float(adel_lider["v"]), v_fila) if ADEL_HUECO_VUELTA else float(adel_lider["v"])
+	adel_parcial = false
 	var r := _evaluar_pase(s_coche, dir, absf(coche.v), v_l, ganar, true, (adel_lider["s"] - s_coche) * dir, float(adel_lider["v"]))
-	if r["motivo"] == "":
+	if r["motivo"] == "" and not adel_sin_hueco:
 		adel_ultimo = ultimo
 		adel_grupo_n = grupo.size()
+		return ""
+	# v5: con cola, si no da para pasarlos a todos se prueba con menos (de más a menos): adelantar a los n primeros y
+	# meterse en el hueco entre el n y el n+1 (≥ ADEL_HUECO_CORTO libres), sin pasar de +ADEL_DELTA sobre ellos para
+	# poder meterse sin frenazo. Mismas comprobaciones de seguridad (coches de frente, visibilidad, curvas, OSM).
+	for n in range(grupo.size() - 1, 0, -1):
+		var cn: Dictionary = grupo[n - 1]
+		var sig: Dictionary = grupo[n]
+		if (sig["s"] - cn["s"]) * dir - trafico.largo < trafico.largo + ADEL_HUECO_CORTO:
+			continue
+		var v_n := 0.0
+		for k in n:
+			v_n = maxf(v_n, maxf(float(grupo[k]["v"]), float(grupo[k].get("v0", grupo[k]["v"]))))
+		var ganar_n: float = (cn["s"] - s_coche) * dir + trafico.largo + ADEL_MARGEN
+		var rn := _evaluar_pase(s_coche, dir, absf(coche.v), v_n, ganar_n, true, (adel_lider["s"] - s_coche) * dir, float(adel_lider["v"]), v_n + ADEL_DELTA / 3.6)
+		if rn["motivo"] == "":
+			adel_ultimo = cn
+			adel_grupo_n = n
+			adel_parcial = true
+			adel_v_parcial = v_n + ADEL_DELTA / 3.6
+			return ""
+	if r["motivo"] == "":
+		return "fila larga: no hay hueco para volver"
 	return r["motivo"]
 
 
 ## Comprueba un adelantamiento que empieza en s0 (sentido d) a v0 m/s, detrás de un coche a v_l m/s,
 ## con 'ganar' metros que sacarle. Devuelve {motivo ("" = se puede), recorrido (m), t (s), v_obj (m/s)}.
-func _evaluar_pase(s0: float, d: int, v0: float, v_l: float, ganar: float, con_trafico: bool, gap_lider: float = -1.0, v_l0: float = -1.0) -> Dictionary:
+func _evaluar_pase(s0: float, d: int, v0: float, v_l: float, ganar: float, con_trafico: bool, gap_lider: float = -1.0, v_l0: float = -1.0, v_max_pase: float = -1.0) -> Dictionary:
 	var res := {"motivo": "", "recorrido": 0.0, "t": 0.0, "v_obj": 0.0}
 	var v_obj := maxf(Ajustes.velocidad / 3.6, v_l + ADEL_DELTA / 3.6)
+	# v5: con carril adicional real de nuestro sentido (2+1) basta con poder ir más rápido que el de delante
+	# (no se exige sacarle +ADEL_DELTA: cuesta arriba puede no haber margen y no se invade el carril contrario)
+	var extra := ruta.carril_extra(s0, d)
+	if extra:
+		v_obj = Ajustes.velocidad / 3.6
+		if v_obj < v_l + 5.0 / 3.6:
+			res["motivo"] = "no va más rápido que el de delante"
+			return res
+	if v_max_pase > 0.0:
+		v_obj = minf(v_obj, v_max_pase)
 	if Ajustes.limite_adelantar:
 		var lim := 1000
 		var dd := 0.0
@@ -1258,8 +1430,8 @@ func _adelantamiento(dt: float) -> void:
 		0:
 			adel_carril = move_toward(adel_carril, 0.0, paso)
 		1:
-			if not piloto or not _existe(adel_lider) or (adel_lider["s"] - s_coche) * dir < 0.0 or (adel_lider["s"] - s_coche) * dir > ADEL_DIST_LIDER + 20.0:
-				_cancelar_adelantamiento("Ya no hay coche lento delante")
+			if not piloto or not _existe(adel_lider) or (adel_lider["s"] - s_coche) * dir < 0.0 or (adel_lider["s"] - s_coche) * dir > _dist_lider() + 20.0:
+				_cancelar_adelantamiento("" if adel_auto else "Ya no hay coche lento delante")
 				return
 			adel_revisar -= dt
 			if adel_revisar <= 0.0:
@@ -1326,7 +1498,14 @@ func _adelantamiento(dt: float) -> void:
 					_aviso_adel("Adelantamiento abortado: viene un coche")
 					return
 			if d_ult < -(trafico.largo + ADEL_MARGEN):
-				adel_estado = 3
+				# v5: pasados los primeros de la cola, se mete en el hueco solo cuando puede hacerlo sin frenazo
+				# (si aún va muy rápido para el hueco, frena un poco en el carril de adelantar); con alguien de frente, ya
+				var sig_lento := _siguiente_en_2mas1()
+				if not sig_lento.is_empty():
+					adel_ultimo = sig_lento          # 2+1: hay otro más lento justo delante, sigue por el carril de la izquierda
+					adel_grupo_n += 1
+				elif not adel_parcial or _vuelta_suave() or _frente_cerca():
+					adel_estado = 3
 		3:
 			var al_lado := false
 			if ADEL_HUECO_VUELTA and adel_abortado:
@@ -1393,9 +1572,19 @@ func _prueba(modo: String) -> void:
 	if modo == "adelantar":
 		piloto = true
 		Ajustes.velocidad = float(Ajustes.args.get("vel", "90"))
-		var lento := trafico.crear_prueba(s_coche + dir * 45.0, dir, float(Ajustes.args.get("v_lento", "45")) / 3.6, false)
+		var lento := trafico.crear_prueba(s_coche + dir * float(Ajustes.args.get("d_lento", "45")), dir, float(Ajustes.args.get("v_lento", "45")) / 3.6, false)
 		lento["v0"] = float(Ajustes.args.get("v_lento", "45")) / 3.6
 		coche.v = lento["v"]
+		if Ajustes.args.has("v_ini"): coche.v = float(Ajustes.args["v_ini"]) / 3.6
+		# --n_cola=N: N coches más detrás del lento, cada --cola_d m (cola), a la misma velocidad
+		for k in int(Ajustes.args.get("n_cola", "0")):
+			var cc := trafico.crear_prueba(s_coche + dir * (float(Ajustes.args.get("d_lento", "45")) - float(Ajustes.args.get("cola_d", "28")) * (k + 1)), dir, lento["v"], false)
+			cc["v0"] = lento["v0"]
+		var a_min := 0.0
+		var v_prev := coche.v
+		var t_freno := 0.0
+		var t_corte := 0.0
+		coche.consumo.reiniciar()
 		var pulsar := float(Ajustes.args.get("pulsar", "4"))
 		var t := 0.0
 		var espera := 0.0
@@ -1410,6 +1599,19 @@ func _prueba(modo: String) -> void:
 				s_pulsado = s_coche
 			_simular(dt)
 			t += dt
+			if t > 0.5 and (coche.v - v_prev) / dt < a_min:
+				a_min = (coche.v - v_prev) / dt
+				if a_min < -3.0:
+					var txt := ""
+					for oc in trafico.coches:
+						var dd: float = (oc["s"] - s_coche) * dir
+						if oc["dir"] == dir and dd > -10.0 and dd < 60.0: txt += " [d=%.1f v=%.0f]" % [dd, float(oc["v"]) * 3.6]
+					print("  frenazo t=%.1f a=%.1f v=%.0f estado=%d carril=%.2f parcial=%s gas=%.2f freno=%.2f golpes=%d%s" % [t, a_min, coche.v * 3.6, adel_estado, adel_carril, str(adel_parcial), coche.acelerador, coche.freno, colisiones.golpes, txt])
+			v_prev = coche.v
+			if coche.freno > 0.0: t_freno += dt
+			if Ajustes.args.has("traza_acerc") and int(t * 60.0) % 60 == 0:
+				print("  t=%.0f v=%.0f d=%.0f gas=%.2f freno=%.2f pend=%+.1f%%" % [t, coche.v * 3.6, (lento["s"] - s_coche) * dir, coche.acelerador, coche.freno, ruta.valor(ruta.pendiente, s_coche) * dir])
+			if coche.acelerador <= 0.0 and coche.freno <= 0.0: t_corte += dt
 			if adel_estado == 1:
 				espera += dt
 				motivos[adel_motivo] = motivos.get(adel_motivo, 0) + 1
@@ -1447,6 +1649,9 @@ func _prueba(modo: String) -> void:
 		print("PRUEBA adelantar: pulsado en PK %.3f km · completados %d · esperó %.1f s · motivos de espera %s · salió %s · terminó %s · choques %d · coches de tráfico %d · velocidad final %.0f km/h · lento delante a %.0f m (detrás = negativo)" % [
 			s_pulsado / 1000.0, adelantamientos, espera, str(motivos), "t=%.1f s" % inicio if inicio > 0 else "no", "t=%.1f s" % fin if fin > 0 else "no",
 			colisiones.golpes, trafico.coches.size(), absf(coche.v) * 3.6, (lento["s"] - s_coche) * dir if _existe(lento) else 0.0])
+		print("PRUEBA cola: adelantamientos %d · coches pasados %d · abortos %d" % [adelantamientos, adel_coches_pasados, adel_abortos])
+		print("PRUEBA acercamiento: deceleración máx %.2f m/s² · %.1f s con freno · %.1f s sin gas ni freno · %.3f l en %.0f m (%.2f l/100 km)" % [
+			-a_min, t_freno, t_corte, coche.consumo.litros, coche.consumo.metros, coche.consumo.litros / maxf(coche.consumo.metros, 1.0) * 1e5])
 		get_tree().quit()
 
 
