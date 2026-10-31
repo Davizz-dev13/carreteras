@@ -48,7 +48,12 @@ const H_CDG := 0.55             # m, altura del centro de gravedad
 const REPARTO_FWD := 0.60       # fracción del peso sobre el eje delantero (tracción delantera)
 const REPARTO_4M := 0.58        # ídem 4Motion (algo más de peso detrás por el diferencial trasero)
 const REPARTO_4MOTION := 0.5    # par al eje delantero a plena tracción (Haldex, hasta 50/50)
-const REPARTO_FRENO := 0.7      # frenada al eje delantero
+const REPARTO_FRENO := 0.8      # frenada al eje delantero a ~1 g (reparto ideal con la transferencia de carga)
+const EBD_TRA := 0.8            # EBD: el trasero trabaja a ≤80 % de lo que trabaja el delantero (nunca se bloquea antes)
+const ABS_LAT_DEL := 0.35       # ABS: aun frenando a fondo, la rueda delantera no se bloquea y conserva este agarre lateral
+const ABS_LAT_TRA := 0.9        # ABS + CBC: en curva, el trasero suelta presión de freno para conservar casi todo su agarre
+const ASR_LAT := 0.35           # control de tracción: con la rueda patinando conserva este agarre lateral
+const ESC_KP := 6.0             # ESC: ganancia del par de guiñada correctivo (1/s)
 const C_DEL := 13.0             # rigidez de deriva / carga del eje delantero (1/rad)
 const C_TRA := 20.0             # ídem trasero: el delantero más blando → coche subvirador, como de serie
 const C_PAC := 1.45             # forma de la "fórmula mágica" de Pacejka: pico a ~9° y ~76 % de agarre deslizando
@@ -154,6 +159,7 @@ func paso_fisica(dt: float) -> void:
 	# frenada: el pedal pide una deceleración; el freno motor del DSG (retención en la marcha metida) es parte de
 	# ella y los discos ponen el resto. Con los dos pies levantados solo retiene el motor.
 	var a_freno := freno * ficha.f_freno_max / m * (mu / MU_ASFALTO)
+	var a_pedal := a_freno          # deceleración pedida a los discos (el ABS puede soltar parte en curva)
 	if freno <= 0.0 and acelerador <= 0.0 and v > 1.0 and not marcha_atras:
 		a_freno = caja.retencion / m
 	consumo.paso(dt, v)
@@ -175,7 +181,11 @@ func paso_fisica(dt: float) -> void:
 		# teclado (v3): dirección progresiva y sensible a la velocidad. El ángulo máximo es el que da, como mucho,
 		# el 85 % del agarre lateral: a 20 km/h casi todo el volante, a 100 km/h unos pocos grados, así que mantener
 		# A/D a fondo traza la curva sin derrapar. v4: con el subviraje real del coche (gradiente K) sumado.
-		var a85 := 0.85 * mu * G
+		# Frenando, el neumático tiene menos agarre lateral libre (círculo de adherencia), así que el ángulo máximo
+		# baja con lo que se está frenando: con A/D a fondo y freno a fondo el coche gira lo que el ABS deja, sin
+		# saturar las ruedas delanteras.
+		var u_fr := clampf(a_pedal / maxf(mu * G, 0.1), 0.0, 1.0)
+		var a85 := 0.85 * mu * G * maxf(sqrt(maxf(1.0 - u_fr * u_fr, 0.0)), ABS_LAT_DEL + 0.1)
 		var g_max := minf(GIRO_MAX, atan(a85 * lb / maxf(v * v, 0.01)) + gradiente_subviraje() * a85)
 		objetivo = volante * g_max
 		# ≈0,35 s hasta el tope al pulsar y ≈0,25 s para volver al centro al soltar
@@ -185,12 +195,12 @@ func paso_fisica(dt: float) -> void:
 	var delta := giro
 	if giro_directo:
 		delta = clampf(giro + gradiente_subviraje() * v * v * tan(giro) / lb, -GIRO_MAX, GIRO_MAX)
-	# reparto de fuerzas longitudinales entre ejes (para el círculo de adherencia de cada eje)
-	var f_frenos := a_freno * m
+	# fuerzas del motor por eje (tracción o retención) y fracción de frenada pedida (1 = frenada máxima)
 	var f_motor := empuje if acelerador > 0.0 else -caja.retencion
-	var fx_del := f_motor * (REPARTO_4MOTION if ficha.es_4x4() else 1.0) + f_frenos * REPARTO_FRENO
-	var fx_tra := f_motor * ((1.0 - REPARTO_4MOTION) if ficha.es_4x4() else 0.0) + f_frenos * (1.0 - REPARTO_FRENO)
-	var omega := _bicicleta(dt, delta, mu, fx_del, fx_tra)
+	var fx_del := f_motor * (REPARTO_4MOTION if ficha.es_4x4() else 1.0)
+	var fx_tra := f_motor * ((1.0 - REPARTO_4MOTION) if ficha.es_4x4() else 0.0)
+	var b_freno := clampf(a_pedal * m / maxf(ficha.f_freno_max, 1.0), 0.0, 1.0) if freno > 0.0 else 0.0
+	var omega := _bicicleta(dt, delta, mu, fx_del, fx_tra, b_freno, a_pedal if freno > 0.0 else 0.0)
 	w_rumbo = -omega
 
 	# restos de un choque: los neumáticos frenan el deslizamiento lateral y el trompo
@@ -223,18 +233,26 @@ func gradiente_subviraje() -> float:
 	return (1.0 / C_DEL - 1.0 / C_TRA) / G
 
 
-## Fuerza lateral de un eje (N): Pacejka simplificado con círculo de adherencia (la fuerza longitudinal fx que
-## ya usa el eje le quita agarre lateral) y pendiente inicial c·Fz.
-static func _fy(alfa: float, fz: float, mu_eje: float, c: float, fx: float) -> float:
-	var dmax := mu_eje * fz
-	var d := sqrt(maxf(dmax * dmax - fx * fx, 0.0225 * dmax * dmax))
-	var b := c * fz / (C_PAC * d)
+## Fuerza lateral de un eje (N): Pacejka simplificado. d = agarre lateral que le queda al eje después de lo que
+## usa en sentido longitudinal (círculo de adherencia, con el ABS/ASR que no dejan bloquear ni patinar del todo)
+## y pendiente inicial c·Fz.
+static func _fy(alfa: float, fz: float, d: float, c: float) -> float:
+	var b := c * fz / (C_PAC * maxf(d, 1.0))
 	return d * sin(C_PAC * atan(b * alfa))
+
+
+## Agarre lateral disponible (N) de un eje con agarre total dmax que usa la fracción lon en sentido longitudinal;
+## piso = lo que conserva gracias al ABS/ASR (la rueda sigue rodando).
+static func _d_lateral(dmax: float, lon: float, piso: float) -> float:
+	return dmax * maxf(sqrt(maxf(1.0 - lon * lon, 0.0)), piso)
 
 
 ## Modelo de bicicleta dinámico: deriva de los neumáticos, inercia de guiñada y transferencias de carga.
 ## Integra vy, r_yaw, el rumbo y la velocidad (resistencia en curva) en 4 subpasos. Devuelve la guiñada (rad/s).
-func _bicicleta(dt: float, delta: float, mu: float, fx_del: float, fx_tra: float) -> float:
+## Arreglo v4.1 (frenar girando): la frenada se reparte con EBD (el trasero nunca trabaja más que el delantero),
+## el ABS no deja bloquear (el delantero conserva agarre lateral y el trasero suelta presión en curva), y el ESC
+## aplica un par de guiñada real (frenando una rueda delantera) para que la trasera no se vaya.
+func _bicicleta(dt: float, delta: float, mu: float, fx_del: float, fx_tra: float, b_freno: float = 0.0, a_pedal: float = 0.0) -> float:
 	var lb := ficha.batalla
 	var m := ficha.masa
 	var rep := reparto()
@@ -242,9 +260,9 @@ func _bicicleta(dt: float, delta: float, mu: float, fx_del: float, fx_tra: float
 	var lr := lb * rep
 	esc_activo = false
 	if v < V_DINAMICA:
-		# maniobra y marcha atrás: las ruedas ruedan sin deriva (como antes)
+		# maniobra y marcha atrás: las ruedas ruedan sin deriva (como antes); la deriva que quede se apaga suave
 		r_yaw = v * tan(delta) / lb
-		vy = r_yaw * lr if v > 0.0 else 0.0
+		vy = move_toward(vy, r_yaw * lr if v > 0.0 else 0.0, mu * G * dt)
 		alfa_del = 0.0
 		alfa_tra = 0.0
 		rumbo -= r_yaw * dt
@@ -258,6 +276,15 @@ func _bicicleta(dt: float, delta: float, mu: float, fx_del: float, fx_tra: float
 	var q := absf(a_lat_actual) / G * 2.0 * H_CDG / ficha.via
 	var mu_f := mu * (1.0 - SENS_DEL * q * q)
 	var mu_r := mu * (1.0 - SENS_TRA * q * q)
+	var dmax_f := mu_f * fzf
+	var dmax_r := mu_r * fzr
+	# fracción del agarre de cada eje que se usa en sentido longitudinal (frenos con EBD + motor)
+	var bf := b_freno
+	var br := b_freno * EBD_TRA
+	var lon_f := minf(absf(bf - fx_del / maxf(dmax_f, 1.0)), 1.0)
+	var lon_r := minf(absf(br - fx_tra / maxf(dmax_r, 1.0)), 1.0)
+	var d_f := _d_lateral(dmax_f, lon_f, ABS_LAT_DEL if b_freno > 0.0 else ASR_LAT)
+	var d_r := _d_lateral(dmax_r, lon_r, ABS_LAT_TRA if b_freno > 0.0 else ASR_LAT)
 	var iz := m * lf * lr * IZ_FACTOR
 	var pico := tan(PI / (2.0 * C_PAC))           # B·α en el pico de la curva
 	var k := gradiente_subviraje()
@@ -268,23 +295,36 @@ func _bicicleta(dt: float, delta: float, mu: float, fx_del: float, fx_tra: float
 	var u := v
 	var w_media := 0.0
 	var desliza := false
+	# par máximo del ESC: una rueda delantera frenada a tope, con el brazo de media vía
+	var m_esc_max := 0.5 * dmax_f * ficha.via * 0.5
 	for i in n:
 		var af := delta - atan2(vy + lf * r_yaw, u)
 		var ar := -atan2(vy - lr * r_yaw, u)
-		var fyf := _fy(af, fzf, mu_f, C_DEL, fx_del)
-		var fyr := _fy(ar, fzr, mu_r, C_TRA, fx_tra)
+		var fyf := _fy(af, fzf, d_f, C_DEL)
+		var fyr := _fy(ar, fzr, d_r, C_TRA)
 		vy += ((fyf * cd + fyr) / m - u * r_yaw) * h
 		r_yaw += (lf * fyf * cd - lr * fyr) / iz * h
 		u += (vy * r_yaw - fyf * sd / m) * h
-		# ESC (de serie en el Arteon): si el eje trasero se va y el coche gira más de lo que pide el volante,
-		# frena una rueda para devolver la guiñada a la de referencia
+		# ABS: lo que el eje usa de lado ya no lo puede usar frenando; los discos sueltan esa parte de la frenada
+		if a_pedal > 0.0 and b_freno > 0.0:
+			var s_f := clampf(absf(fyf) / maxf(dmax_f, 1.0), 0.0, 1.0)
+			var s_r := clampf(absf(fyr) / maxf(dmax_r, 1.0), 0.0, 1.0)
+			var kb_f := clampf(sqrt(1.0 - s_f * s_f) / maxf(bf, 0.01), 0.0, 1.0)
+			var kb_r := clampf(sqrt(1.0 - s_r * s_r) / maxf(br, 0.01), 0.0, 1.0)
+			var entrega := REPARTO_FRENO * kb_f + (1.0 - REPARTO_FRENO) * kb_r
+			u += a_pedal * (1.0 - entrega) * h
+		# ESC (de serie en el Arteon): compara la guiñada con la que pide el volante (limitada a lo que da el agarre)
+		# y, si el coche gira de más (sobreviraje) o la deriva crece, frena una rueda delantera: par de guiñada real
 		var a_pico_r := pico / (C_TRA / (C_PAC * maxf(mu_r, 0.1)))
-		var r_ref := clampf(u * tan(delta) / (lb + k * u * u), -mu * G / u, mu * G / u)
-		if absf(ar) > 0.75 * a_pico_r and absf(r_yaw) > absf(r_ref) + 0.03:
-			r_yaw = move_toward(r_yaw, r_ref, 2.5 * h)
-			vy = move_toward(vy, r_yaw * lr, 2.0 * h)
-			u -= 1.5 * h
-			esc_activo = true
+		var r_lim := 0.9 * mu * G / maxf(u, 1.0)
+		var r_ref := clampf(u * tan(delta) / (lb + k * u * u), -r_lim, r_lim)
+		var beta := atan2(vy, maxf(u, 1.0))
+		var sobre := (absf(r_yaw) > absf(r_ref) + 0.02 and absf(ar) > 0.5 * a_pico_r) or signf(r_yaw) != signf(r_ref) and absf(r_yaw) > 0.05
+		if sobre or absf(beta) > deg_to_rad(4.0):
+			var m_esc := clampf(ESC_KP * (r_ref - r_yaw) * iz, -m_esc_max, m_esc_max)
+			r_yaw += m_esc / iz * h
+			u -= absf(m_esc) / (ficha.via * 0.5) / m * h      # esa rueda frenada también decelera el coche
+			esc_activo = absf(m_esc) > 0.05 * m_esc_max
 		rumbo -= r_yaw * h
 		w_media += r_yaw / n
 		alfa_del = af

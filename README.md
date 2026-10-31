@@ -385,7 +385,10 @@ Resultados en esta versión:
   versión; lo que marca en un puerto concreto es lo que da el modelo, no una medición. Supuestos en
   `datos/coches/motor_supuestos.json`.
 - **Física**: dirección con inercia y peso real (modelo de bicicleta dinámico). El piloto respeta las señales de
-  límite salvo al adelantar.
+  límite salvo al adelantar. Frenar girando (v4.1): ABS (las ruedas no se bloquean y el delantero sigue
+  dirigiendo), EBD (el eje trasero nunca frena más de lo que aguanta con el peso echado delante) y ESC (frena una
+  rueda delantera si la trasera se va). Con A/D y freno a fondo el coche gira lo que deja el agarre, sin trompos;
+  prueba: `godot --headless res://pruebas/prueba_frenar_girar.tscn`.
 - **Zonas**: Puerto de Navacerrada y **A-308 Iznalloz–Darro** (Granada, 36,5 km, carril de adelantamiento real de
   2,2 km en sentido Darro, km 6,5–8,7). Se elige en el menú (Zona) o con `--zona=a308`. Fuentes en
   `juego/datos/a308/FUENTES.md`. **GR-8101 Sierra de Baza** (Granada): 29,5 km del límite de Almería (2.017 m) a
