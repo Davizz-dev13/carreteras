@@ -1,0 +1,27 @@
+{
+ "zona": "gr8101",
+ "fuente": "© colaboradores de OpenStreetMap (ODbL), vía Overpass API: barrier=guard_rail/jersey_barrier/crash_barrier/concrete_barrier y etiquetas guard_rail:* / barrier:*",
+ "descargado": "2026-10-31 18:48",
+ "criterio": "≤ 15 m del eje, ≤ 35° respecto a la carretera, fuera de la calzada; huecos < 6 m unidos, tramos < 8 m quitados",
+ "margen_borde": 0.7,
+ "lado": "+1 = derecha, -1 = izquierda, en el sentido de PK creciente de la ruta",
+ "rutas": [],
+ "estadisticas": {
+  "barreras_osm_zona": 0,
+  "metros_osm_zona": 0,
+  "barreras_junto_a_rutas": 0,
+  "muestras_descartadas_dentro_calzada": 0,
+  "por_ruta": [
+   {
+    "ruta": 0,
+    "nombre": "GR-8101 límite de Almería → Caniles",
+    "longitud_m": 29484,
+    "tramos": 0,
+    "m_derecha": 0,
+    "m_izquierda": 0,
+    "pct_derecha": 0.0,
+    "pct_izquierda": 0.0
+   }
+  ]
+ }
+}

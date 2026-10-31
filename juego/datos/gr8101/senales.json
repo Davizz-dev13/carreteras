@@ -1,0 +1,15 @@
+{
+"zona": "gr8101",
+"fuente": "© colaboradores de OpenStreetMap (ODbL), vía Overpass API: highway=stop/give_way y traffic_sign=ES:R1/ES:R2",
+"descargado": "2026-10-31 17:52",
+"rumbo": "ángulo en radianes alrededor de Y (Godot) hacia el que mira la cara de la señal",
+"senales": [],
+"estadisticas": {
+"nodos_osm_zona": 22,
+"puestas": 0,
+"por_tipo": {},
+"descartes": {
+"lejos_de_las_rutas": 22
+}
+}
+}

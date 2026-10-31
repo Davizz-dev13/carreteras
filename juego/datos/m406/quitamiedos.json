@@ -1,0 +1,76 @@
+{
+ "zona": "m406",
+ "fuente": "© colaboradores de OpenStreetMap (ODbL), vía Overpass API: barrier=guard_rail/jersey_barrier/crash_barrier/concrete_barrier y etiquetas guard_rail:* / barrier:*",
+ "descargado": "2026-10-31 18:12",
+ "criterio": "≤ 15 m del eje, ≤ 35° respecto a la carretera, fuera de la calzada; huecos < 6 m unidos, tramos < 8 m quitados",
+ "margen_borde": 0.7,
+ "lado": "+1 = derecha, -1 = izquierda, en el sentido de PK creciente de la ruta",
+ "rutas": [
+  {
+   "ruta": 0,
+   "nombre": "M-406 Alcorcón (A-5) → Leganés",
+   "tramos": [
+    {
+     "lado": -1,
+     "s0": 338.0,
+     "s1": 390.0,
+     "off_osm": 10.4
+    },
+    {
+     "lado": 1,
+     "s0": 3634.0,
+     "s1": 3666.0,
+     "off_osm": 10.7
+    }
+   ],
+   "osm_ids": [
+    359833562,
+    359883184,
+    359883185
+   ]
+  },
+  {
+   "ruta": 1,
+   "nombre": "M-406 Leganés → A-4",
+   "tramos": [
+    {
+     "lado": -1,
+     "s0": 1862.0,
+     "s1": 1954.0,
+     "off_osm": 13.0
+    }
+   ],
+   "osm_ids": [
+    1396686816
+   ]
+  }
+ ],
+ "estadisticas": {
+  "barreras_osm_zona": 88,
+  "metros_osm_zona": 35977,
+  "barreras_junto_a_rutas": 4,
+  "muestras_descartadas_dentro_calzada": 470,
+  "por_ruta": [
+   {
+    "ruta": 0,
+    "nombre": "M-406 Alcorcón (A-5) → Leganés",
+    "longitud_m": 10588,
+    "tramos": 2,
+    "m_derecha": 32,
+    "m_izquierda": 52,
+    "pct_derecha": 0.3,
+    "pct_izquierda": 0.49
+   },
+   {
+    "ruta": 1,
+    "nombre": "M-406 Leganés → A-4",
+    "longitud_m": 3162,
+    "tramos": 1,
+    "m_derecha": 0,
+    "m_izquierda": 92,
+    "pct_derecha": 0.0,
+    "pct_izquierda": 2.91
+   }
+  ]
+ }
+}

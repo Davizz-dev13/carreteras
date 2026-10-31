@@ -28,7 +28,7 @@ const PRESUPUESTO_US := 3000         # µs de construcción por fotograma
 const REPASO := 30.0                 # m recorridos entre repasos de la ventana
 const SALTO := 300.0                 # un salto mayor es un teletransporte (R, reiniciar): se reconstruye ya
 
-enum { T_TERRENO, T_RUTA, T_VIA, T_ARBOLES }
+enum { T_TERRENO, T_RUTA, T_VIA, T_ARBOLES, T_EXTRA }   # T_EXTRA: quitamiedos y señales de OSM (quitamiedos.gd, senales_osm.gd)
 
 var mundo: Node3D
 var piezas: Array = []          # [{t, c: Vector2, r, v (0|1), nodo, ...}]
@@ -57,6 +57,7 @@ func preparar(m: Node3D) -> void:
 		_piezas_ruta(r)
 	for v in Ajustes.vias:
 		_piezas_via(v)
+	_piezas_extra()
 	print("Streaming: %d piezas descritas, terreno lejano listo en %d ms" % [piezas.size(), Time.get_ticks_msec() - t0])
 
 
@@ -138,7 +139,7 @@ func _construir_cola(_p2: Vector2, presupuesto: int) -> void:
 		_hecha[k] = 1
 		var up := Time.get_ticks_usec() - t1
 		est["us_max_pieza"] = maxi(est["us_max_pieza"], up)
-		var tipo: String = ["max_terreno", "max_ruta", "max_via", "max_pinos"][int(pz["t"])]
+		var tipo: String = ["max_terreno", "max_ruta", "max_via", "max_pinos", "max_extra"][int(pz["t"])]
 		est[tipo] = maxi(est.get(tipo, 0), up)
 		est["us_piezas"] += up
 		est["construidas"] += 1
@@ -162,6 +163,7 @@ func _construir(pz: Dictionary) -> void:
 		T_RUTA: n = _trozo_ruta(pz)
 		T_VIA: n = _trozo_via(pz)
 		T_ARBOLES: n = _pinos(pz)
+		T_EXTRA: n = SenalesOsm.construir(pz) if pz.has("senal") else Quitamiedos.construir(pz)
 	if n == null:
 		n = Node3D.new()      # pieza vacía (p. ej. sin árboles): se marca como hecha igual
 	pz["nodo"] = n
@@ -233,6 +235,18 @@ func _piezas_ruta(r: Ruta) -> void:
 			_pieza(T_RUTA, 0, c.position.x - 10, c.position.y - 10, c.end.x + 10, c.end.y + 10, {"ruta": r, "a": a, "b": b, "patron": patron})
 			a = b
 		i = j
+
+
+## Objetos junto a la carretera sacados de OSM (quitamiedos y señales reales): cada módulo describe sus piezas con una caja
+## y sabe construirlas; aquí solo entran en la ventana de streaming como un trozo de carretera más.
+func _piezas_extra() -> void:
+	for d in Quitamiedos.piezas(Ajustes.dir_datos(), Ajustes.rutas):
+		var c: Rect2 = d["caja"]
+		_pieza(T_EXTRA, 0, c.position.x, c.position.y, c.end.x, c.end.y, d)
+	for d in SenalesOsm.piezas(Ajustes.dir_datos()):
+		var c: Rect2 = d["caja"]
+		d["senal"] = true
+		_pieza(T_EXTRA, 0, c.position.x, c.position.y, c.end.x, c.end.y, d)
 
 
 func _piezas_via(v: Dictionary) -> void:

@@ -1,0 +1,133 @@
+{
+ "zona": "navacerrada",
+ "fuente": "© colaboradores de OpenStreetMap (ODbL), vía Overpass API: barrier=guard_rail/jersey_barrier/crash_barrier/concrete_barrier y etiquetas guard_rail:* / barrier:*",
+ "descargado": "2026-10-31 17:37",
+ "criterio": "≤ 15 m del eje, ≤ 35° respecto a la carretera, fuera de la calzada; huecos < 6 m unidos, tramos < 8 m quitados",
+ "margen_borde": 0.7,
+ "lado": "+1 = derecha, -1 = izquierda, en el sentido de PK creciente de la ruta",
+ "rutas": [
+  {
+   "ruta": 9,
+   "nombre": "SG-615",
+   "tramos": [
+    {
+     "lado": -1,
+     "s0": 704.0,
+     "s1": 1360.0,
+     "off_osm": 4.6
+    }
+   ],
+   "osm_ids": [
+    1472432001
+   ]
+  }
+ ],
+ "estadisticas": {
+  "barreras_osm_zona": 1,
+  "metros_osm_zona": 673,
+  "barreras_junto_a_rutas": 1,
+  "muestras_descartadas_dentro_calzada": 0,
+  "por_ruta": [
+   {
+    "ruta": 0,
+    "nombre": "Puerto de Navacerrada (M-601 → CL-601)",
+    "longitud_m": 24304,
+    "tramos": 0,
+    "m_derecha": 0,
+    "m_izquierda": 0,
+    "pct_derecha": 0.0,
+    "pct_izquierda": 0.0
+   },
+   {
+    "ruta": 1,
+    "nombre": "M-601 Navacerrada → Puerto",
+    "longitud_m": 10240,
+    "tramos": 0,
+    "m_derecha": 0,
+    "m_izquierda": 0,
+    "pct_derecha": 0.0,
+    "pct_izquierda": 0.0
+   },
+   {
+    "ruta": 2,
+    "nombre": "CL-601 Puerto → Valsaín",
+    "longitud_m": 14062,
+    "tramos": 0,
+    "m_derecha": 0,
+    "m_izquierda": 0,
+    "pct_derecha": 0.0,
+    "pct_izquierda": 0.0
+   },
+   {
+    "ruta": 3,
+    "nombre": "M-607",
+    "longitud_m": 5578,
+    "tramos": 0,
+    "m_derecha": 0,
+    "m_izquierda": 0,
+    "pct_derecha": 0.0,
+    "pct_izquierda": 0.0
+   },
+   {
+    "ruta": 4,
+    "nombre": "M-614",
+    "longitud_m": 4578,
+    "tramos": 0,
+    "m_derecha": 0,
+    "m_izquierda": 0,
+    "pct_derecha": 0.0,
+    "pct_izquierda": 0.0
+   },
+   {
+    "ruta": 5,
+    "nombre": "M-617",
+    "longitud_m": 2144,
+    "tramos": 0,
+    "m_derecha": 0,
+    "m_izquierda": 0,
+    "pct_derecha": 0.0,
+    "pct_izquierda": 0.0
+   },
+   {
+    "ruta": 6,
+    "nombre": "M-622",
+    "longitud_m": 7394,
+    "tramos": 0,
+    "m_derecha": 0,
+    "m_izquierda": 0,
+    "pct_derecha": 0.0,
+    "pct_izquierda": 0.0
+   },
+   {
+    "ruta": 7,
+    "nombre": "M-714",
+    "longitud_m": 2872,
+    "tramos": 0,
+    "m_derecha": 0,
+    "m_izquierda": 0,
+    "pct_derecha": 0.0,
+    "pct_izquierda": 0.0
+   },
+   {
+    "ruta": 8,
+    "nombre": "M-966",
+    "longitud_m": 2740,
+    "tramos": 0,
+    "m_derecha": 0,
+    "m_izquierda": 0,
+    "pct_derecha": 0.0,
+    "pct_izquierda": 0.0
+   },
+   {
+    "ruta": 9,
+    "nombre": "SG-615",
+    "longitud_m": 6830,
+    "tramos": 1,
+    "m_derecha": 0,
+    "m_izquierda": 656,
+    "pct_derecha": 0.0,
+    "pct_izquierda": 9.6
+   }
+  ]
+ }
+}
