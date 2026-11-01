@@ -162,12 +162,15 @@ func glorieta(k: int, sentido: int, preferencia := 0) -> Array:
 	if entrada == null:
 		return []
 	var nodo0 := nodo_final(k, sentido)
+	var nodo_previo := nodo_final(k, -sentido)   # de donde viene el tramo de entrada
 	var pasos: Array = [[entrada[0], entrada[1]]]
 	var opciones: Array = []          # [pasos hasta la salida incluida, nodo de la salida, misma vía]
 	var centro := Vector3.ZERO
 	var n_pts := 0
 	var actual: Array = [entrada[0], entrada[1]]
+	var nodos_anillo := {}
 	for vuelta in 40:
+		nodos_anillo[nodo_final(actual[0], actual[1])] = true
 		for q in datos.geometria(actual[0]):
 			centro += q
 			n_pts += 1
@@ -209,6 +212,15 @@ func glorieta(k: int, sentido: int, preferencia := 0) -> Array:
 			v = -absf(barrido - PI) + (1.5 if op[2] else 0.0)
 		if barrido > deg_to_rad(310.0):
 			v -= 10.0                 # media vuelta
+		# salida que vuelve al nodo del que venía la entrada (glorieta con dos accesos paralelos desde el mismo punto,
+		# p. ej. un ramal y la vía de doble sentido de la N-320): también es media vuelta. Antes el piloto salía por ahí,
+		# volvía a entrar por el ramal y daba vueltas sin fin
+		# ... y la que vuelve al propio anillo (una vía que cruza la glorieta por dentro, como la N-320 en su enlace
+		# con la M-113: salía por ella, volvía al nodo de entrada y repetía la glorieta)
+		var ult: Array = (op[0] as Array)[(op[0] as Array).size() - 1]
+		var fin_salida := nodo_final(ult[0], ult[1])
+		if fin_salida == nodo_previo or fin_salida == nodo0 or nodos_anillo.has(fin_salida):
+			v -= 10.0
 		if v > nota:
 			nota = v
 			mejor = op

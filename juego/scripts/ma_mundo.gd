@@ -278,6 +278,7 @@ func construir_tesela(t: Vector2i, lod: int) -> Dictionary:
 	var uv := PackedVector3Array(); var un := PackedVector3Array(); var ui := PackedInt32Array()
 	var bv := PackedVector3Array(); var bn := PackedVector3Array(); var bi := PackedInt32Array()
 	var pedidas_bionda := []
+	var ramales := []
 	for pz in d["piezas"]:
 		var k: int = pz[0]
 		var a: int = pz[1]
@@ -290,29 +291,56 @@ func construir_tesela(t: Vector2i, lod: int) -> Dictionary:
 		var ancho := float(tr["ancho"])
 		for i in range(a, b):
 			sa.append(pts[i]); sb.append(pts[i + 1]); shw.append(ancho * 0.5); sk.append(k)
+		# ramales (enlaces): se dibujan después, recortados contra las calzadas principales de la tesela
+		if int(tr["enlace"]) == 1 and int(tr["tunel"]) == 0 and int(tr["rot"]) == 0:
+			ramales.append([k, a, b])
+			continue
 		var tunel := int(tr["tunel"]) == 1
 		var puente := int(tr["puente"]) == 1
 		var via_rapida := int(tr["c"]) <= 1
+		var rec := datos.bordes(k)
 		if via_rapida:
-			_franja(pts, a, b, ancho * 0.5, 0.0, 0.05, vv, nv, iv, not puente and not tunel, tv, tn, ti)
+			_franja(pts, a, b, ancho * 0.5, 0.0, 0.05, vv, nv, iv, not puente and not tunel, tv, tn, ti, 0.0, rec)
 		else:
-			_franja(pts, a, b, ancho * 0.5, 0.0, 0.05, v, n, ix, not puente and not tunel, tv, tn, ti)
+			_franja(pts, a, b, ancho * 0.5, 0.0, 0.05, v, n, ix, not puente and not tunel, tv, tn, ti, 0.0, rec)
 		if tunel:
-			_boveda(pts, a, b, ancho * 0.5 + 0.8, uv, un, ui)
+			_boveda(pts, a, b, ancho * 0.5 + 0.8, uv, un, ui, d)
 		if lod == 0:
-			_marcas(tr, pts, a, b, ancho, mv, mn, mi)
+			_marcas(tr, pts, a, b, ancho, mv, mn, mi, rec)
 			# biondas (quitamiedos) en autopistas y autovías: arcén derecho y mediana (APROXIMACIÓN: OSM casi nunca
 			# dice dónde hay; en las vías rápidas españolas van casi siempre en la mediana y en terraplenes/puentes)
 			if via_rapida and not tunel and int(tr["enlace"]) == 0:
-				pedidas_bionda.append([pts, a, b, ancho * 0.5 + 0.7, k])
+				pedidas_bionda.append([pts, a, b, ancho * 0.5 + 0.7, k, rec])
 				if int(tr["s"]) != 0:
 					pedidas_bionda.append([pts, a, b, -(ancho * 0.5 + 0.7), k])
 	# biondas: se cortan donde otra calzada (enlace, ramal, vía paralela) llega a menos de 0,6 m de la valla, para no
 	# cruzar las salidas y entradas; las mismas líneas son las paredes del choque (biondas.gd)
 	var celdas_sup := MaSuperficie.indice(sa, sb, shw)
+	# ramales: su asfalto y sus marcas no se dibujan encima de la calzada principal de la que salen o a la que entran
+	# (OSM los engancha en el eje de la principal: antes se veía un segundo asfalto cruzando los carriles en diagonal,
+	# con parpadeo y con la línea de borde del ramal pintada encima de los carriles); el borde interior del ramal se
+	# recorta en el borde de la principal, así sale una cuña que se abre como en una salida real
+	for rm in ramales:
+		var k: int = rm[0]
+		var tr: Dictionary = datos.tramos[k]
+		var pts := datos.geometria(k)
+		var ancho := float(tr["ancho"])
+		var puente := int(tr["puente"]) == 1
+		if int(tr["c"]) <= 1:   # mismo asfalto que su vía rápida
+			_franja_ramal(pts, rm[1], rm[2], ancho * 0.5, k, sa, sb, shw, sk, celdas_sup, vv, nv, iv, not puente, tv, tn, ti)
+		else:
+			_franja_ramal(pts, rm[1], rm[2], ancho * 0.5, k, sa, sb, shw, sk, celdas_sup, v, n, ix, not puente, tv, tn, ti)
+		if lod == 0:
+			_marcas_ramal(tr, pts, rm[1], rm[2], ancho, k, sa, sb, shw, sk, celdas_sup, mv, mn, mi)
+			# los ramales en puente llevan pretil/bionda a los dos lados (siempre lo tienen); se corta igual que las demás
+			# donde llega otra calzada (la principal de la que sale el ramal)
+			if puente and int(tr["c"]) <= 1:
+				pedidas_bionda.append([pts, rm[1], rm[2], ancho * 0.5 + 0.6, k])
+				pedidas_bionda.append([pts, rm[1], rm[2], -(ancho * 0.5 + 0.6), k])
 	var choque := Biondas.new()
 	for pb in pedidas_bionda:
-		_bionda(pb[0], pb[1], pb[2], pb[3], bv, bn, bi, _continuaciones(int(pb[4])), int(pb[4]), sa, sb, shw, sk, celdas_sup, choque)
+		_bionda(pb[0], pb[1], pb[2], pb[3], bv, bn, bi, _continuaciones(int(pb[4])), int(pb[4]), sa, sb, shw, sk, celdas_sup, choque,
+				pb[5] if pb.size() > 5 else [])
 	var mallas := [[v, n, ix, mat_asfalto], [vv, nv, iv, mat_asfalto_v], [tv, tn, ti, mat_talud], [uv, un, ui, mat_tunel], [bv, bn, bi, mat_bionda]]
 	var m := _malla(mallas)
 	if m.get_surface_count() > 0:
@@ -601,17 +629,152 @@ static func color_terreno(h: float, inclinacion: float) -> Color:
 	return c.lerp(roca, clampf((inclinacion - 0.15) / 0.25, 0.0, 1.0))
 
 
+
+# ------------------------------------------------------------------ ramales (enlaces) recortados
+## Calzada principal (no enlace, misma altura ± 1,5 m) bajo el punto p: Vector4(centro.x, centro.z, semiancho, -1 si no hay)
+## y la normal de esa calzada hacia p en `nrm`. Solo cuenta si p se proyecta dentro de un segmento (no en la
+## prolongación de un extremo: así un ramal que sigue a una principal punta con punta no se recorta).
+func _principal_bajo(p: Vector3, k_propio: int, sa: PackedVector3Array, sb: PackedVector3Array, shw: PackedFloat32Array,
+		sk: PackedInt32Array, celdas: Dictionary, margen: float) -> Array:
+	var lista = celdas.get(Vector2i(floori(p.x / MaSuperficie.CELDA_MA), floori(p.z / MaSuperficie.CELDA_MA)))
+	if lista == null:
+		return []
+	var mejor := []
+	var dmin := 1e9
+	for s in lista:
+		var ks := sk[s]
+		if ks == k_propio or int(datos.tramos[ks]["enlace"]) == 1:
+			continue
+		var q0 := sa[s]
+		var q1 := sb[s]
+		var ab := Vector2(q1.x - q0.x, q1.z - q0.z)
+		var l2 := ab.length_squared()
+		if l2 < 1e-6:
+			continue
+		var u := ((p.x - q0.x) * ab.x + (p.z - q0.z) * ab.y) / l2
+		if u < 0.0 or u > 1.0:
+			continue
+		var cx := q0.x + ab.x * u
+		var cz := q0.z + ab.y * u
+		var dd := Vector2(p.x - cx, p.z - cz).length()
+		if dd > shw[s] + margen or absf(q0.y + (q1.y - q0.y) * u - p.y) > 1.5:
+			continue
+		if dd < dmin:
+			dmin = dd
+			var nr := Vector2(-ab.y, ab.x).normalized()
+			if nr.dot(Vector2(p.x - cx, p.z - cz)) < 0.0:
+				nr = -nr
+			mejor = [Vector2(cx, cz), nr, shw[s]]
+	return mejor
+
+
+## Asfalto del ramal: en cada sección, la parte que cae dentro de la calzada principal no se dibuja (el borde interior
+## se lleva al borde de la principal; si la sección entera está dentro, queda de ancho cero)
+func _franja_ramal(pts: PackedVector3Array, a: int, b: int, hw: float, k: int, sa: PackedVector3Array, sb: PackedVector3Array,
+		shw: PackedFloat32Array, sk: PackedInt32Array, celdas: Dictionary,
+		verts: PackedVector3Array, nor: PackedVector3Array, idx: PackedInt32Array, talud: bool,
+		tv: PackedVector3Array, tn: PackedVector3Array, ti: PackedInt32Array) -> void:
+	var n := pts.size()
+	const ELEV := 0.05
+	for i in range(a, b + 1):
+		var t := pts[mini(i + 1, n - 1)] - pts[maxi(i - 1, 0)]
+		var der := Vector3(-t.z, 0.0, t.x).normalized()
+		var izq_p := pts[i] - der * hw
+		var der_p := pts[i] + der * hw
+		var pr := _principal_bajo(pts[i], k, sa, sb, shw, sk, celdas, hw + 0.5)
+		var borde_izq_libre := true
+		var borde_der_libre := true
+		if not pr.is_empty():
+			var c: Vector2 = pr[0]
+			var nr: Vector2 = pr[1]
+			var hm: float = pr[2]
+			var dl := nr.dot(Vector2(izq_p.x - c.x, izq_p.z - c.y))
+			var dr := nr.dot(Vector2(der_p.x - c.x, der_p.z - c.y))
+			if dl < hm and dr < hm:
+				izq_p = der_p   # toda la sección dentro de la principal
+				borde_izq_libre = false
+				borde_der_libre = false
+			elif dl < hm:
+				izq_p = izq_p.lerp(der_p, clampf((hm - dl) / maxf(dr - dl, 0.01), 0.0, 1.0))
+				borde_izq_libre = false
+			elif dr < hm:
+				der_p = der_p.lerp(izq_p, clampf((hm - dr) / maxf(dl - dr, 0.01), 0.0, 1.0))
+				borde_der_libre = false
+		verts.append(izq_p + Vector3.UP * ELEV)
+		verts.append(der_p + Vector3.UP * ELEV)
+		nor.append(Vector3.UP)
+		nor.append(Vector3.UP)
+		if i > a:
+			var q := verts.size() - 4
+			idx.append_array([q, q + 2, q + 1, q + 1, q + 2, q + 3])
+		if talud:
+			var bl := verts[verts.size() - 2]
+			var br := verts[verts.size() - 1]
+			var caida := Vector3(0.0, -2.4, 0.0)
+			var fuera := der * 2.0
+			# junto a la principal no hay talud (quedaría metido bajo su asfalto, o asomando en la mediana)
+			var bl2 := bl - fuera + caida if borde_izq_libre else bl
+			var br2 := br + fuera + caida if borde_der_libre else br
+			tv.append_array([bl2, bl, br, br2])
+			tn.append_array([(Vector3.UP - der).normalized(), (Vector3.UP - der).normalized(),
+					(Vector3.UP + der).normalized(), (Vector3.UP + der).normalized()])
+			if i > a:
+				var q2 := tv.size() - 8
+				ti.append_array([q2, q2 + 4, q2 + 1, q2 + 1, q2 + 4, q2 + 5, q2 + 2, q2 + 6, q2 + 3, q2 + 3, q2 + 6, q2 + 7])
+
+
+## Marcas del ramal: las líneas (bordes y separación de carriles) solo donde quedan fuera de la calzada principal
+func _marcas_ramal(tr: Dictionary, pts: PackedVector3Array, a: int, b: int, ancho: float, k: int, sa: PackedVector3Array,
+		sb: PackedVector3Array, shw: PackedFloat32Array, sk: PackedInt32Array, celdas: Dictionary,
+		mv: PackedVector3Array, mn: PackedVector3Array, mi: PackedInt32Array) -> void:
+	var hw := ancho * 0.5
+	var lineas := [[-(hw - 0.3), 0.075, 0.08, 0.0], [hw - 0.3, 0.075, 0.08, 0.0]]
+	var sentido := int(tr["s"])
+	var carriles := int(tr["carriles"])
+	if sentido == 0:
+		lineas.append([0.0, 0.07, 0.085, 0.0])
+	elif carriles >= 2:
+		var util := ancho - 1.0
+		for c in range(1, carriles):
+			lineas.append([-util * 0.5 + util * c / carriles, 0.07, 0.085, 12.0])
+	var n := pts.size()
+	for ln in lineas:
+		var lat: float = ln[0]
+		var ini := -1
+		for i in range(a, b + 2):
+			var fuera := false
+			if i <= b:
+				var t := pts[mini(i + 1, n - 1)] - pts[maxi(i - 1, 0)]
+				var der := Vector3(-t.z, 0.0, t.x).normalized()
+				var p := pts[i] + der * lat
+				var pr := _principal_bajo(p, k, sa, sb, shw, sk, celdas, 0.3)
+				fuera = pr.is_empty() or (pr[1] as Vector2).dot(Vector2(p.x - (pr[0] as Vector2).x, p.z - (pr[0] as Vector2).y)) > (pr[2] as float) + 0.2
+			if fuera and ini < 0:
+				ini = i
+			elif not fuera and ini >= 0:
+				if i - 1 > ini:
+					_franja(pts, ini, i - 1, ln[1], lat, ln[2], mv, mn, mi, false, PackedVector3Array(), PackedVector3Array(), PackedInt32Array(), ln[3])
+				ini = -1
+
 # ------------------------------------------------------------------ calzadas
 ## Franja a lo largo de la polilínea entre a y b (centro desplazado `desplaz` m a la derecha), con talud opcional
 static func _franja(pts: PackedVector3Array, a: int, b: int, hw: float, desplaz: float, elev: float,
 		verts: PackedVector3Array, nor: PackedVector3Array, idx: PackedInt32Array, talud := false,
-		tv := PackedVector3Array(), tn := PackedVector3Array(), ti := PackedInt32Array(), patron := 0.0) -> void:
+		tv := PackedVector3Array(), tn := PackedVector3Array(), ti := PackedInt32Array(), patron := 0.0,
+		bor := []) -> void:
 	var n := pts.size()
 	var s := 0.0
 	for i in range(a, b + 1):
 		var t := pts[mini(i + 1, n - 1)] - pts[maxi(i - 1, 0)]
 		var der := Vector3(-t.z, 0.0, t.x).normalized()
-		var centro := pts[i] + der * desplaz
+		# bor: bordes que se abren o se meten cerca de un nodo (ma_datos.bordes): el asfalto (desplaz 0) mueve cada
+		# borde; una línea a la derecha del eje se mueve con el borde derecho y una a la izquierda con el izquierdo
+		var ei := 0.0
+		var ed := 0.0
+		if not bor.is_empty():
+			ei = (bor[0] as PackedFloat32Array)[i]
+			ed = (bor[1] as PackedFloat32Array)[i]
+		var centro := pts[i] + der * (desplaz + (ed if desplaz > 0.0 else 0.0) - (ei if desplaz < 0.0 else 0.0))
 		if i > a:
 			s += pts[i].distance_to(pts[i - 1])
 		var hueco := patron > 0.0 and fmod(s, patron) > patron * 0.4
@@ -619,8 +782,8 @@ static func _franja(pts: PackedVector3Array, a: int, b: int, hw: float, desplaz:
 			verts.append(centro + Vector3.UP * elev)
 			verts.append(centro + Vector3.UP * elev)
 		else:
-			verts.append(centro - der * hw + Vector3.UP * elev)
-			verts.append(centro + der * hw + Vector3.UP * elev)
+			verts.append(centro - der * (hw + (ei if desplaz == 0.0 else 0.0)) + Vector3.UP * elev)
+			verts.append(centro + der * (hw + (ed if desplaz == 0.0 else 0.0)) + Vector3.UP * elev)
 		nor.append(Vector3.UP)
 		nor.append(Vector3.UP)
 		if i > a:
@@ -642,10 +805,10 @@ static func _franja(pts: PackedVector3Array, a: int, b: int, hw: float, desplaz:
 ## Marcas viales (APROXIMACIÓN: OSM no dice dónde es continua la línea): bordes continuos; eje discontinuo en las de
 ## doble sentido (continuo en enlaces y glorietas); separación de carriles discontinua en las de un sentido.
 static func _marcas(tr: Dictionary, pts: PackedVector3Array, a: int, b: int, ancho: float,
-		mv: PackedVector3Array, mn: PackedVector3Array, mi: PackedInt32Array) -> void:
+		mv: PackedVector3Array, mn: PackedVector3Array, mi: PackedInt32Array, rec := []) -> void:
 	var hw := ancho * 0.5
-	_franja(pts, a, b, 0.075, -(hw - 0.3), 0.08, mv, mn, mi)
-	_franja(pts, a, b, 0.075, hw - 0.3, 0.08, mv, mn, mi)
+	_franja(pts, a, b, 0.075, -(hw - 0.3), 0.08, mv, mn, mi, false, PackedVector3Array(), PackedVector3Array(), PackedInt32Array(), 0.0, rec)
+	_franja(pts, a, b, 0.075, hw - 0.3, 0.08, mv, mn, mi, false, PackedVector3Array(), PackedVector3Array(), PackedInt32Array(), 0.0, rec)
 	var sentido := int(tr["s"])
 	var carriles := int(tr["carriles"])
 	if sentido == 0:
@@ -664,7 +827,7 @@ static func _marcas(tr: Dictionary, pts: PackedVector3Array, a: int, b: int, anc
 ## de 3 m de altura; cada trozo que queda es también pared de choque (`choque`).
 static func _bionda(pts: PackedVector3Array, a: int, b: int, lat: float, v: PackedVector3Array, n: PackedVector3Array, ix: PackedInt32Array,
 		ignorar: Dictionary, k_propio: int, sa: PackedVector3Array, sb: PackedVector3Array, shw: PackedFloat32Array, sk: PackedInt32Array,
-		celdas: Dictionary, choque: Biondas) -> void:
+		celdas: Dictionary, choque: Biondas, rec := []) -> void:
 	var np := pts.size()
 	var ant := Vector3.ZERO
 	var ant_libre := false
@@ -672,7 +835,16 @@ static func _bionda(pts: PackedVector3Array, a: int, b: int, lat: float, v: Pack
 		var t := pts[mini(i + 1, np - 1)] - pts[maxi(i - 1, 0)]
 		var der := Vector3(-t.z, 0.0, t.x).normalized()
 		var p := pts[i] + der * lat
-		var libre := not _otra_calzada(p, k_propio, ignorar, sa, sb, shw, sk, celdas)
+		var metido := false
+		if not rec.is_empty():
+			# borde que se abre (cuña entre dos ramas): la bionda va con él; borde que se mete (carril que empieza o
+			# acaba): ahí no se pone, porque el coche y el piloto usan la calzada entera
+			var e: float = (rec[1] as PackedFloat32Array)[i] if lat > 0.0 else (rec[0] as PackedFloat32Array)[i]
+			if e < -0.3:
+				metido = true
+			else:
+				p += der * signf(lat) * maxf(e, 0.0)
+		var libre := not metido and not _otra_calzada(p, k_propio, ignorar, sa, sb, shw, sk, celdas)
 		if libre:
 			v.append_array([p + Vector3.UP * 0.45, p + Vector3.UP * 0.8])
 			n.append_array([-der * signf(lat), -der * signf(lat)])
@@ -722,19 +894,25 @@ func _continuaciones(k: int) -> Dictionary:
 	return out
 
 
-## Bóveda de túnel (paredes y techo a 5,5 m) para que el túnel se vea por dentro
-static func _boveda(pts: PackedVector3Array, a: int, b: int, hw: float, v: PackedVector3Array, n: PackedVector3Array, ix: PackedInt32Array) -> void:
+## Bóveda de túnel (paredes y techo a 5,5 m) para que el túnel se vea por dentro. Solo donde el túnel va de verdad bajo
+## tierra (terreno al menos 4 m por encima de la calzada): en los pasos inferiores cortos que OSM marca como túnel (bajo un
+## enlace o un puente ancho) la bóveda quedaba como una caja oscura al aire en medio de la trinchera.
+static func _boveda(pts: PackedVector3Array, a: int, b: int, hw: float, v: PackedVector3Array, n: PackedVector3Array, ix: PackedInt32Array,
+		ter: Dictionary = {}) -> void:
 	var np := pts.size()
+	var ant := false
 	for i in range(a, b + 1):
 		var t := pts[mini(i + 1, np - 1)] - pts[maxi(i - 1, 0)]
 		var der := Vector3(-t.z, 0.0, t.x).normalized()
 		var p := pts[i]
+		var bajo_tierra := ter.is_empty() or MaSuperficie.terreno(ter, p.x, p.z) > p.y + 4.0
 		v.append_array([p - der * hw, p - der * hw + Vector3.UP * 5.5, p + der * hw + Vector3.UP * 5.5, p + der * hw])
 		n.append_array([der, -Vector3.UP, -Vector3.UP, -der])
-		if i > a:
+		if i > a and bajo_tierra and ant:
 			var k := v.size() - 8
 			for s in 3:
 				ix.append_array([k + s, k + s + 4, k + s + 1, k + s + 1, k + s + 4, k + s + 5])
+		ant = bajo_tierra
 
 
 static func _malla(superficies: Array) -> ArrayMesh:
