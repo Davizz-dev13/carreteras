@@ -10,3 +10,8 @@ Genera `juego/datos/madrid/` (teselas de 2 km en paquetes de 8 km). En orden:
 6. `m6_edificios.py` — huellas de edificios de OSM con su altura → edi_I_J.bin
 
 Fuentes: © OpenStreetMap contributors (ODbL); IGN MDT05/MDT25 y PNOA (CC BY 4.0 scne.es).
+
+Franja exterior (1-11-2026): para que no se corten las vías que salen de la Comunidad y vuelven a entrar (A-4/R-4 por
+Seseña, etc.) la red, el terreno, la ortofoto, los árboles y los edificios incluyen también una franja de 10 km fuera de la
+Comunidad (`comunidad_madrid_10km.poly`), sacada de los extractos de Geofabrik de Castilla-La Mancha y Castilla y León
+unidos al de Madrid y recortados con ese polígono (`m1_red.py red.osm.pbf red.pkl comunidad_madrid_10km.poly`).

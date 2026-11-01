@@ -10,7 +10,12 @@ pbf, out = sys.argv[1], sys.argv[2]
 M = json.load(open(os.path.join(out, "mundo.json")))
 E0, N0 = M["origen_utm"]; TES = M["tesela"]; PAQ = M["paquete"]
 T = Transformer.from_crs(4326, 25830, always_xy=True)
-teselas = set(tuple(map(int, k.split(","))) for k in M.get("teselas_lista", [])) if M.get("teselas_lista") else None
+# solo las teselas que existen (las de los paquetes de terreno): con la franja exterior el .pbf trae edificios más allá
+teselas = set()
+for nombre in M["paquetes"].values():
+    b = open(os.path.join(out, nombre), "rb").read()
+    for i in range(struct.unpack_from("<I", b, 4)[0]):
+        teselas.add(struct.unpack_from("<ii", b, 8 + i * 16))
 t00 = time.time()
 def log(*a): print(f"[{time.time()-t00:6.0f} s]", *a, flush=True)
 TIPO = {"house": 65, "detached": 65, "semidetached_house": 65, "terrace": 70, "residential": 120, "apartments": 150,
@@ -18,7 +23,7 @@ TIPO = {"house": 65, "detached": 65, "semidetached_house": 65, "terrace": 70, "r
         "roof": 40, "church": 140, "school": 90, "hangar": 100, "farm_auxiliary": 50, "barn": 60, "office": 150}
 fab = osmium.geom.WKBFactory()
 porteselas = collections.defaultdict(list)
-n = 0; desc = 0
+n = 0; desc = 0; fuera = 0
 for a in osmium.FileProcessor(pbf).with_areas().with_filter(osmium.filter.KeyFilter("building")):
     if not a.is_area(): continue
     t = dict(a.tags)
@@ -49,10 +54,11 @@ for a in osmium.FileProcessor(pbf).with_areas().with_filter(osmium.filter.KeyFil
         if len(pts) < 3 or len(pts) > 200: continue
         cx, cz = pts.mean(axis=0)
         ti, tj = int(np.floor(cx / TES)), int(np.floor(cz / TES))
+        if (ti, tj) not in teselas: fuera += 1; continue
         porteselas[(ti, tj)].append((h, pts))
         n += 1
     if n and n % 200000 == 0: log(f"{n} edificios")
-log(f"{n} edificios en {len(porteselas)} teselas ({desc} descartados)")
+log(f"{n} edificios en {len(porteselas)} teselas ({desc} descartados, {fuera} fuera de las teselas)")
 paqs = collections.defaultdict(list)
 for (ti, tj), lista in porteselas.items():
     x0, z0 = ti * TES, tj * TES

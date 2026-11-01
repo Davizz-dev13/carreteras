@@ -2,7 +2,9 @@
 WMS www.ign.es/wms-inspire/pnoa-ma (OI.OrthoimageCoverage), CC BY 4.0 scne.es.
  · teselas con carretera: 384 px por tesela de 2 km (5,2 m/píxel); sin carretera: 192 px (10,4 m/píxel)
  · horizonte: toda la caja en una imagen de ~4096 px (≈ 36 m/píxel)
-Uso: python m4_orto.py salida_dir cache_dir"""
+Con un tercer argumento (la salida anterior) se reutiliza tal cual la ortofoto de cada tesela que ya existía con la misma
+resolución, y solo se descargan los paquetes con teselas nuevas (p. ej. al añadir la franja de 10 km fuera de la Comunidad).
+Uso: python m4_orto.py salida_dir cache_dir [salida_anterior]"""
 import os, sys, io, json, gzip, struct, time, concurrent.futures as cf
 import requests
 from PIL import Image, ImageEnhance
@@ -41,8 +43,8 @@ def wms(x0, z0, x1, z1, w, h):
                 raise RuntimeError(err)
     return img
 
-def teselas_del_paquete(nombre):
-    b = open(os.path.join(out, nombre), "rb").read()
+def teselas_del_paquete(nombre, d=None):
+    b = open(os.path.join(d or out, nombre), "rb").read()
     n = struct.unpack_from("<I", b, 4)[0]
     r = []
     for i in range(n):
@@ -56,7 +58,9 @@ def paquete(clave, nombre):
     pi, pj = map(int, clave.split(","))
     lista = teselas_del_paquete(nombre)
     f = os.path.join(cache, f"orto_{pi}_{pj}.jpg")
-    if os.path.exists(f):
+    if all(VIEJA.get((ti, tj), (None,))[0] == fina for (ti, tj, fina) in lista):
+        img = None      # todas las teselas ya estaban: no se descarga nada
+    elif os.path.exists(f):
         img = Image.open(f).convert("RGB")
     else:
         lado = PAQ * FINA
@@ -64,6 +68,8 @@ def paquete(clave, nombre):
         img.save(f, quality=92)
     blobs = []
     for (ti, tj, fina) in lista:
+        if VIEJA.get((ti, tj), (None,))[0] == fina:
+            blobs.append(((ti, tj), VIEJA[(ti, tj)][1])); continue
         li, lj = ti - pi * PAQ, tj - pj * PAQ
         t = img.crop((li * FINA, lj * FINA, (li + 1) * FINA, (lj + 1) * FINA))
         if not fina:
@@ -79,6 +85,18 @@ def paquete(clave, nombre):
     open(os.path.join(out, nombre_o), "wb").write(cab + dirx + datos)
     return clave, nombre_o, len(cab) + len(dirx) + len(datos)
 
+VIEJA = {}     # (ti, tj) -> (fina, jpeg) de la salida anterior
+if len(sys.argv) > 3:
+    Mv = json.load(open(os.path.join(sys.argv[3], "mundo.json")))
+    fina_v = {}
+    for nombre in Mv["paquetes"].values():
+        for (ti, tj, fina) in teselas_del_paquete(nombre, sys.argv[3]): fina_v[(ti, tj)] = fina
+    for nombre in Mv["ortofoto"]["paquetes"].values():
+        b = open(os.path.join(sys.argv[3], nombre), "rb").read(); n = struct.unpack_from("<I", b, 4)[0]
+        for i in range(n):
+            ti, tj, off, tam = struct.unpack_from("<iiII", b, 8 + i * 16)
+            VIEJA[(ti, tj)] = (fina_v.get((ti, tj)), b[off:off + tam])
+    log(f"ortofoto anterior: {len(VIEJA)} teselas reutilizables")
 paq = M["paquetes"]
 ort = {}; total = 0; hechos = 0
 with cf.ThreadPoolExecutor(2) as ex:
@@ -96,10 +114,11 @@ else:
     w = 4096; h = int(round(w * (z1 - z0) / (x1 - x0) / 4) * 4)
     img = wms(x0, z0, x1, z1, w, h); img.save(f)
 q = 85
-while True:
+while True:     # ≤ 2,9 MB (ningún archivo del repo pasa de 3 MB): baja la calidad hasta 70 y luego la resolución
     img.save(os.path.join(out, "horizonte_orto.jpg"), "JPEG", quality=q, optimize=True)
-    if os.path.getsize(os.path.join(out, "horizonte_orto.jpg")) <= 2_900_000 or q <= 60: break
-    q -= 5
+    if os.path.getsize(os.path.join(out, "horizonte_orto.jpg")) <= 2_900_000: break
+    if q > 70: q -= 5
+    else: img = img.resize((int(img.width * 0.9) // 4 * 4, int(img.height * 0.9) // 4 * 4), Image.LANCZOS)
 log(f"horizonte {img.size} calidad {q}: {os.path.getsize(os.path.join(out, 'horizonte_orto.jpg'))/1e6:.2f} MB")
 M["ortofoto"] = {"paquetes": ort, "px_fina": FINA, "px_gruesa": GRUESA, "horizonte": "horizonte_orto.jpg", "marco_horizonte": [x0, z0, x1, z1],
                  "fuente": "IGN PNOA máxima actualidad (WMS www.ign.es/wms-inspire/pnoa-ma, OI.OrthoimageCoverage) — CC BY 4.0 scne.es"}
