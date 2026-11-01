@@ -15,6 +15,7 @@ const PASO_LEJANO := 5          # muestras de 20 m por vértice del terreno leja
 const SUB := 25                 # celdas de 20 m por pieza de terreno fino (= 500 m)
 const TROZO := 100              # muestras de 2 m por trozo de carretera (= 200 m)
 const DIST_ARBOLES := 1600.0
+const DIST_ARBOLES_LOD := 450.0     # Gráficos alto: malla de árbol sencilla desde aquí (distancia al centro de la pieza de 500 m)
 const DIST_MARCAS := 450.0
 const DIST_CALZADA := 6000.0
 
@@ -38,6 +39,8 @@ var _v := PackedByteArray()
 var _hecha := PackedByteArray()
 var cola: Array = []            # índices de piezas por construir, de la más cercana al coche a la más lejana
 var malla_pino: ArrayMesh
+var mallas_arbol: Array = []       # Gráficos alto: [pino, pino lejos, frondosa, frondosa lejos] (aspecto.gd)
+var dir_arboles := "arboles/"     # Gráficos alto: "paisaje/arboles/" (WorldCover, aspecto)
 var _arboles_tesela := {}       # Vector2i -> Array[PackedFloat32Array] (16 sub-piezas)
 var _ultima := Vector3(INF, 0, INF)
 var _adelante := Vector2(0, -1)
@@ -188,6 +191,13 @@ func _pieza(t: int, v: int, xmin: float, zmin: float, xmax: float, zmax: float, 
 
 
 func _piezas_terreno() -> void:
+	# Gráficos alto (aspecto): árboles donde WorldCover dice que hay bosque (paisaje/arboles, solo escritorio)
+	var wc := {}
+	if mundo.marcas_norma and FileAccess.file_exists(Ajustes.dir_datos() + "paisaje/arboles/fuente.json"):
+		var fj = JSON.parse_string(FileAccess.get_file_as_string(Ajustes.dir_datos() + "paisaje/arboles/fuente.json"))
+		if fj is Dictionary and fj.has("teselas"):
+			wc = fj["teselas"]
+			dir_arboles = "paisaje/arboles/"
 	var p := Ajustes.ter_paso
 	var lado := SUB * p
 	for t in Ajustes.info["terreno"]["teselas"]:
@@ -200,7 +210,7 @@ func _piezas_terreno() -> void:
 				var xa := x0 + si * lado
 				var za := z0 + sj * lado
 				_pieza(T_TERRENO, 1, xa, za, xa + lado, za + lado, {"clave": clave, "si": si, "sj": sj, "x0": x0, "z0": z0, "n": int(t["n"]), "m": int(t["m"])})
-				if int(t["arboles"]) > 0:
+				if int(wc.get(t["nombre"], 0) if not wc.is_empty() else t["arboles"]) > 0:
 					_pieza(T_ARBOLES, 1, xa, za, xa + lado, za + lado, {"clave": clave, "sub": sj * subs + si, "nombre": t["nombre"], "x0": x0, "z0": z0, "subs": subs})
 
 
@@ -223,6 +233,10 @@ func _piezas_ruta(r: Ruta) -> void:
 		patron[i] = 1 if (continua or fmod(i * r.paso, 12.0) < 4.5) else 0
 	# donde la ruta va por debajo de otra calzada (boca de un cruce, tramo compartido) no se pintan sus líneas:
 	# quedarían encima del asfalto de la otra
+	var continua := PackedByteArray()
+	continua.resize(r.n)
+	for i in r.n:
+		continua[i] = 1 if ((r.discontinua[i] == 0) if r.discontinua.size() == r.n else absf(r.curvatura[i]) > 1.0 / 350.0) else 0
 	var borde := PackedByteArray()
 	borde.resize(r.n)
 	borde.fill(1)
@@ -243,7 +257,7 @@ func _piezas_ruta(r: Ruta) -> void:
 		while a < j:
 			var b := mini(a + TROZO, j)
 			var c := _caja(r.pts, a, b)
-			_pieza(T_RUTA, 0, c.position.x - 10, c.position.y - 10, c.end.x + 10, c.end.y + 10, {"ruta": r, "a": a, "b": b, "patron": patron, "borde": borde})
+			_pieza(T_RUTA, 0, c.position.x - 10, c.position.y - 10, c.end.x + 10, c.end.y + 10, {"ruta": r, "a": a, "b": b, "patron": patron, "borde": borde, "continua": continua})
 			a = b
 		i = j
 
@@ -503,7 +517,10 @@ func _terreno_fino(pz: Dictionary) -> Node3D:
 ## Franja a lo largo de una polilínea entre las muestras a y b; añade a los arrays dados (para juntar varias en 1 malla)
 func _franja(pts: PackedVector3Array, anchos: PackedFloat32Array, a: int, b: int, desplaz: float, semiancho_fijo: float,
 		elev: float, verts: PackedVector3Array, nor: PackedVector3Array, idx: PackedInt32Array, patron := PackedByteArray(),
-		talud := false, sin_talud := PackedByteArray(), tv := PackedVector3Array(), tn := PackedVector3Array(), ti := PackedInt32Array()) -> void:
+		talud := false, sin_talud := PackedByteArray(), tv := PackedVector3Array(), tn := PackedVector3Array(), ti := PackedInt32Array(),
+		uvs: Variant = null, tuv: Variant = null) -> void:
+	# uvs (asfalto): x = m al eje (+ derecha), y = semiancho, para las rodadas y el borde del shader del asfalto;
+	# tuv (talud): y = 0 junto al asfalto, 1 abajo (la franja de grava del arcén en el shader del terreno)
 	for i in range(a, b + 1):
 		var t := pts[mini(i + 1, pts.size() - 1)] - pts[maxi(i - 1, 0)]
 		var der := Vector3(-t.z, 0.0, t.x).normalized()
@@ -519,6 +536,9 @@ func _franja(pts: PackedVector3Array, anchos: PackedFloat32Array, a: int, b: int
 			verts.append(centro + der * hw + Vector3.UP * elev)
 		nor.append(Vector3.UP)
 		nor.append(Vector3.UP)
+		if uvs != null:
+			(uvs as PackedVector2Array).append(Vector2(-hw, hw))
+			(uvs as PackedVector2Array).append(Vector2(hw, hw))
 		if i > a:
 			var k := verts.size() - 4
 			idx.append_array([k, k + 2, k + 1, k + 1, k + 2, k + 3])
@@ -529,6 +549,8 @@ func _franja(pts: PackedVector3Array, anchos: PackedFloat32Array, a: int, b: int
 			var caida := Vector3.ZERO if (not sin_talud.is_empty() and sin_talud[i] == 1) else Vector3(0.0, -2.4, 0.0)
 			var fuera := der * (2.0 if caida != Vector3.ZERO else 0.0)
 			tv.append_array([bl - fuera + caida, bl, br, br + fuera + caida])
+			if tuv != null:
+				(tuv as PackedVector2Array).append_array([Vector2(0, 1), Vector2(0, 0), Vector2(1, 0), Vector2(1, 1)])
 			tn.append_array([(Vector3.UP - der).normalized(), (Vector3.UP - der).normalized(),
 					(Vector3.UP + der).normalized(), (Vector3.UP + der).normalized()])
 			if i > a:
@@ -547,6 +569,8 @@ func _malla(superficies: Array) -> ArrayMesh:
 		arr[Mesh.ARRAY_VERTEX] = s[0]
 		arr[Mesh.ARRAY_NORMAL] = s[1]
 		arr[Mesh.ARRAY_INDEX] = s[2]
+		if s.size() > 4 and (s[4] as PackedVector2Array).size() == (s[0] as PackedVector3Array).size():
+			arr[Mesh.ARRAY_TEX_UV] = s[4]
 		malla.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arr)
 		malla.surface_set_material(malla.get_surface_count() - 1, s[3])
 	return malla
@@ -567,10 +591,109 @@ func _trozo_ruta(pz: Dictionary) -> Node3D:
 	var b: int = pz["b"]
 	var v := PackedVector3Array(); var n := PackedVector3Array(); var ix := PackedInt32Array()
 	var tv := PackedVector3Array(); var tn := PackedVector3Array(); var ti := PackedInt32Array()
-	_franja(r.pts, r.ancho, a, b, 0.0, 0.0, 0.05, v, n, ix, PackedByteArray(), true, r.puente, tv, tn, ti)
+	var uv := PackedVector2Array(); var tuv := PackedVector2Array()
+	_franja(r.pts, r.ancho, a, b, 0.0, 0.0, 0.05, v, n, ix, PackedByteArray(), true, r.puente, tv, tn, ti, uv, tuv)
 	var raiz := Node3D.new()
-	raiz.add_child(_instancia(_malla([[v, n, ix, mundo.mat_asfalto], [tv, tn, ti, mundo.mat_talud]]), DIST_CALZADA))
+	raiz.add_child(_instancia(_malla([[v, n, ix, mundo.mat_asfalto, uv], [tv, tn, ti, mundo.mat_talud, tuv]]), DIST_CALZADA))
 	var mv := PackedVector3Array(); var mn := PackedVector3Array(); var mi := PackedInt32Array()
+	if not mundo.marcas_norma:
+		_marcas_antiguas(pz, mv, mn, mi)
+	else:
+		_marcas_norma(pz, mv, mn, mi)
+	raiz.add_child(_instancia(_malla([[mv, mn, mi, mundo.mat_marca]]), DIST_MARCAS))
+	return raiz
+
+
+## Marcas viales según la norma 8.2-IC (Gráficos alto): trazos con sus extremos exactos (antes cada trazo acababa
+## en punta, cortado en las muestras de la ruta cada 2 m) y con la medida de la norma para carreteras convencionales:
+## eje y separación de carriles M-1.2 (3,5 m de trazo y 9 m de vano), 15 cm; bordes continuos M-2.6 de 15 cm.
+## Dónde es continua o discontinua no cambia (el mismo criterio de adelantamiento del juego, adelantar.json).
+func _marcas_norma(pz: Dictionary, mv: PackedVector3Array, mn: PackedVector3Array, mi: PackedInt32Array) -> void:
+	var r: Ruta = pz["ruta"]
+	var a: int = pz["a"]
+	var b: int = pz["b"]
+	var borde: PackedByteArray = pz["borde"]
+	var cont: PackedByteArray = pz["continua"]
+	var todo := PackedByteArray(); todo.resize(r.n); todo.fill(1)
+	_linea(r.pts, r.ancho, a, b, -1.0, 0.075, 0.08, mv, mn, mi, borde, todo, r.paso)
+	_linea(r.pts, r.ancho, a, b, 1.0, 0.075, 0.08, mv, mn, mi, borde, todo, r.paso)
+	if not r.tiene_carriles():
+		_linea(r.pts, r.ancho, a, b, 0.0, 0.075, 0.085, mv, mn, mi, borde, cont, r.paso)
+		return
+	var eje := PackedVector3Array(); eje.resize(r.n)
+	var sep_i := PackedVector3Array(); sep_i.resize(r.n)
+	var sep_v := PackedVector3Array(); sep_v.resize(r.n)
+	var cont_eje := cont.duplicate()
+	var perm_i := PackedByteArray(); perm_i.resize(r.n)
+	var perm_v := PackedByteArray(); perm_v.resize(r.n)
+	var nada := PackedByteArray(); nada.resize(r.n)
+	var hay_i := false
+	var hay_v := false
+	for i in range(maxi(a - 1, 0), mini(b + 1, r.n - 1) + 1):
+		var t := r.pts[mini(i + 1, r.n - 1)] - r.pts[maxi(i - 1, 0)]
+		var der := Vector3(-t.z, 0.0, t.x).normalized()
+		eje[i] = r.pts[i] + der * r.lat_eje[i]
+		sep_i[i] = r.pts[i] + der * (r.lat_ida[i] + r.lat_ida_adel[i]) * 0.5
+		sep_v[i] = r.pts[i] + der * (r.lat_vuelta[i] + r.lat_vuelta_adel[i]) * 0.5
+		if r.car_ida[i] != r.car_vuelta[i]:
+			cont_eje[i] = 1     # 2+1: línea continua en el eje (ver adelantar.json, supuesto_2+1)
+		perm_i[i] = 1 if (r.car_ida[i] >= 2 and borde[i] == 1) else 0
+		perm_v[i] = 1 if (r.car_vuelta[i] >= 2 and borde[i] == 1) else 0
+		hay_i = hay_i or r.car_ida[i] >= 2
+		hay_v = hay_v or r.car_vuelta[i] >= 2
+	_linea(eje, r.ancho, a, b, 0.0, 0.075, 0.085, mv, mn, mi, borde, cont_eje, r.paso)
+	if hay_i: _linea(sep_i, r.ancho, a, b, 0.0, 0.075, 0.085, mv, mn, mi, perm_i, nada, r.paso)
+	if hay_v: _linea(sep_v, r.ancho, a, b, 0.0, 0.075, 0.085, mv, mn, mi, perm_v, nada, r.paso)
+
+
+## Una línea a lo largo de pts (lado -1/+1: a 25 cm del borde izquierdo/derecho; 0: sobre pts), solo donde `permitido`;
+## continua donde `continua`, si no a trazos de `trazo` m cada `trazo + vano` m medidos sobre la ruta (s = i · paso,
+## así el ritmo sigue igual entre piezas). Cada trozo pintado lleva sus extremos exactos (cuadriláteros por segmento).
+func _linea(pts: PackedVector3Array, anchos: PackedFloat32Array, a: int, b: int, lado: float, hw: float, elev: float,
+		mv: PackedVector3Array, mn: PackedVector3Array, mi: PackedInt32Array, permitido: PackedByteArray,
+		continua: PackedByteArray, paso: float, trazo := 3.5, vano := 9.0) -> void:
+	var periodo := trazo + vano
+	var np := pts.size()
+	for i in range(a, mini(b, np - 1)):
+		if permitido[i] == 0 or permitido[i + 1] == 0:
+			continue
+		var s0 := i * paso
+		var s1 := s0 + paso
+		var trozos: Array = []
+		if continua[i] == 1:
+			trozos.append(Vector2(0.0, 1.0))
+		else:
+			var k := floorf(s0 / periodo)
+			while k * periodo < s1:
+				var d0 := maxf(s0, k * periodo)
+				var d1 := minf(s1, k * periodo + trazo)
+				if d1 > d0 + 0.01:
+					trozos.append(Vector2((d0 - s0) / paso, (d1 - s0) / paso))
+				k += 1.0
+		if trozos.is_empty():
+			continue
+		var t0 := pts[mini(i + 1, np - 1)] - pts[maxi(i - 1, 0)]
+		var t1 := pts[mini(i + 2, np - 1)] - pts[i]
+		var der0 := Vector3(-t0.z, 0.0, t0.x).normalized()
+		var der1 := Vector3(-t1.z, 0.0, t1.x).normalized()
+		for tr in trozos:
+			var q := mv.size()
+			for f in [tr.x, tr.y]:
+				var der := der0.lerp(der1, f).normalized()
+				var p := pts[i].lerp(pts[i + 1], f)
+				var an := lerpf(anchos[i], anchos[i + 1], f)
+				var c := p + der * signf(lado) * (an * 0.5 - 0.25) + Vector3.UP * elev
+				mv.append(c - der * hw)
+				mv.append(c + der * hw)
+				mn.append(Vector3.UP)
+				mn.append(Vector3.UP)
+			mi.append_array([q, q + 2, q + 1, q + 1, q + 2, q + 3])
+
+
+func _marcas_antiguas(pz: Dictionary, mv: PackedVector3Array, mn: PackedVector3Array, mi: PackedInt32Array) -> void:
+	var r: Ruta = pz["ruta"]
+	var a: int = pz["a"]
+	var b: int = pz["b"]
 	# líneas de borde (continuas, 15 cm) y central (continua en curvas cerradas, discontinua en rectas)
 	_franja(r.pts, r.ancho, a, b, -1.0, 0.075, 0.08, mv, mn, mi, pz["borde"])
 	_franja(r.pts, r.ancho, a, b, 1.0, 0.075, 0.08, mv, mn, mi, pz["borde"])
@@ -602,8 +725,6 @@ func _trozo_ruta(pz: Dictionary) -> Node3D:
 		_franja(eje, r.ancho, a, b, 0.0, 0.07, 0.085, mv, mn, mi, pat_eje)
 		if hay_i: _franja(sep_i, r.ancho, a, b, 0.0, 0.07, 0.085, mv, mn, mi, pat_i)
 		if hay_v: _franja(sep_v, r.ancho, a, b, 0.0, 0.07, 0.085, mv, mn, mi, pat_v)
-	raiz.add_child(_instancia(_malla([[mv, mn, mi, mundo.mat_marca]]), DIST_MARCAS))
-	return raiz
 
 
 func _trozo_via(pz: Dictionary) -> Node3D:
@@ -611,8 +732,9 @@ func _trozo_via(pz: Dictionary) -> Node3D:
 		return _trozo_parches(pz)
 	var v := PackedVector3Array(); var n := PackedVector3Array(); var ix := PackedInt32Array()
 	var tv := PackedVector3Array(); var tn := PackedVector3Array(); var ti := PackedInt32Array()
-	_franja(pz["pts"], pz["anchos"], pz["a"], pz["b"], 0.0, 0.0, 0.04, v, n, ix, PackedByteArray(), true, pz["sin_talud"], tv, tn, ti)
-	return _instancia(_malla([[v, n, ix, mundo.mat_asfalto2], [tv, tn, ti, mundo.mat_talud]]), DIST_CALZADA)
+	var uv := PackedVector2Array(); var tuv := PackedVector2Array()
+	_franja(pz["pts"], pz["anchos"], pz["a"], pz["b"], 0.0, 0.0, 0.04, v, n, ix, PackedByteArray(), true, pz["sin_talud"], tv, tn, ti, uv, tuv)
+	return _instancia(_malla([[v, n, ix, mundo.mat_asfalto2, uv], [tv, tn, ti, mundo.mat_talud, tuv]]), DIST_CALZADA)
 
 
 # ---------------------------------------------------------------- pinos
@@ -653,7 +775,7 @@ func _arboles_de(pz: Dictionary) -> Array:
 	var inicio := PackedInt32Array()
 	inicio.resize(subs * subs + 1)
 	inicio.fill(0)
-	var f := FileAccess.open(Ajustes.dir_datos() + "arboles/%s.bin" % pz["nombre"], FileAccess.READ)
+	var f := FileAccess.open(Ajustes.dir_datos() + dir_arboles + "%s.bin" % pz["nombre"], FileAccess.READ)
 	if f != null:
 		var d := f.get_buffer(f.get_length()).to_float32_array()
 		var n := d.size() / 4
@@ -689,6 +811,8 @@ func _pinos(pz: Dictionary) -> Node3D:
 		return null
 	var rng := RandomNumberGenerator.new()
 	rng.seed = hash(Vector3i(pz["clave"].x, pz["clave"].y, pz["sub"]))   # mismo bosque cada vez que se reconstruye
+	if mundo.marcas_norma:
+		return _arboles_aspecto(d, i0, cuenta, rng)
 	var mm := MultiMesh.new()
 	mm.transform_format = MultiMesh.TRANSFORM_3D
 	mm.mesh = malla_pino
@@ -705,3 +829,44 @@ func _pinos(pz: Dictionary) -> Node3D:
 	mi.visibility_range_end = DIST_ARBOLES
 	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	return mi
+
+
+## Gráficos alto (aspecto.gd): pinos y frondosas (por altitud), con tono por árbol y 2 niveles de detalle por pieza
+## de 500 m: de cerca la malla con tronco y copa de 2 masas, desde DIST_ARBOLES_LOD una copa sencilla.
+func _arboles_aspecto(d: PackedFloat32Array, i0: int, cuenta: int, rng: RandomNumberGenerator) -> Node3D:
+	if mallas_arbol.is_empty():
+		mallas_arbol = [Aspecto.malla_arbol(true, 0), Aspecto.malla_arbol(true, 1), Aspecto.malla_arbol(false, 0), Aspecto.malla_arbol(false, 1)]
+	var xf := [[], []]       # transformaciones por especie (0 pino, 1 frondosa)
+	var cols := [[], []]
+	for i in cuenta:
+		var x := d[(i0 + i) * 3]
+		var z := d[(i0 + i) * 3 + 1]
+		var esc := d[(i0 + i) * 3 + 2]
+		var y := Ajustes.altura_terreno(x, z) - 0.3
+		var e := 0 if Aspecto.es_conifera(x, z, y) else 1
+		var bas := Basis(Vector3.UP, rng.randf() * TAU).scaled(Vector3(esc, esc * rng.randf_range(0.85, 1.2), esc))
+		xf[e].append(Transform3D(bas, Vector3(x, y, z)))
+		cols[e].append(Aspecto.tono_arbol(x, z))
+	var raiz := Node3D.new()
+	for e in 2:
+		if xf[e].is_empty():
+			continue
+		for lod in 2:
+			var mm := MultiMesh.new()
+			mm.transform_format = MultiMesh.TRANSFORM_3D
+			mm.use_colors = true
+			mm.mesh = mallas_arbol[e * 2 + lod]
+			mm.instance_count = xf[e].size()
+			for k in xf[e].size():
+				mm.set_instance_transform(k, xf[e][k])
+				mm.set_instance_color(k, cols[e][k])
+			var mi := MultiMeshInstance3D.new()
+			mi.multimesh = mm
+			if lod == 0:
+				mi.visibility_range_end = DIST_ARBOLES_LOD
+			else:
+				mi.visibility_range_begin = DIST_ARBOLES_LOD
+				mi.visibility_range_end = DIST_ARBOLES
+			mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+			raiz.add_child(mi)
+	return raiz

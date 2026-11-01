@@ -107,6 +107,8 @@ static func material_terreno(previo: Material) -> Material:
 	sm.set_shader_parameter("cota_nieve", float(m.get("cota_nieve", 1800)))
 	sm.set_shader_parameter("mix_orto", 0.0 if Ajustes.args.get("orto_cerca", "0") == "1" else 1.0)
 	sm.set_shader_parameter("depurar", int(Ajustes.args.get("paisaje_depurar", "0")))
+	if Ajustes.args.get("aspecto", "1") == "1":
+		sm.set_shader_parameter("cerca_orto", 1.0)
 	return sm
 
 

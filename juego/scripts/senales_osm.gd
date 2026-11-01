@@ -83,6 +83,9 @@ static func _preparar() -> void:
 	_mat.alpha_scissor_threshold = 0.5
 	_mat.roughness = 0.6
 	_mat.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+	if not OS.has_feature("web"):
+		# placas más nítidas vistas de lado (filtrado anisótropo: coste de GPU despreciable en escritorio)
+		_mat.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS_ANISOTROPIC
 	var gris := Vector2(0.75, 0.25)       # zona gris del atlas (trasera del STOP): poste
 	for ti in TIPOS.size():
 		var v0 := float(ti) * 0.5          # fila del atlas

@@ -77,3 +77,7 @@ Revisado en el juego (capturas) y contra la ortofoto PNOA (WMS pnoa-ma del IGN).
   cambio máximo 2,45 m.
 
 Datos © colaboradores de OpenStreetMap (ODbL) · MDT05 © IGN/CNIG (CC BY 4.0).
+
+
+## Árboles de Gráficos alto (solo escritorio)
+- paisaje/arboles/: 21132 árboles donde ESA WorldCover 10 m 2021 v200 marca cubierta arbórea (10.2 % de la zona). © ESA WorldCover project / Contains modified Copernicus Sentinel data (2021), CC BY 4.0. Densidad APROXIMADA (35 % de los píxeles de 10 m con árboles a menos de 300 m de la ruta, 8 % más lejos; nunca a menos de 6 m de una calzada). Especie por altitud (aproximación). Generado con pipeline/arboles_worldcover.py. La web y Gráficos bajo siguen con arboles/ (bosques de OSM).

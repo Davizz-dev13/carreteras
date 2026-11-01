@@ -40,3 +40,7 @@ regenerado; sus rutas invertidas ya estaban bien, las no invertidas tienen el mi
   (pipeline/senales_fuera_calzada.py).
 - Quitamiedos: OSM no tiene ninguno etiquetado junto a la A-308 y no hay foto a pie de carretera para confirmarlos:
   no se dibuja ninguno (regla: solo donde existen de verdad).
+
+
+## Árboles de Gráficos alto (solo escritorio)
+- paisaje/arboles/: 167026 árboles donde ESA WorldCover 10 m 2021 v200 marca cubierta arbórea (38.1 % de la zona). © ESA WorldCover project / Contains modified Copernicus Sentinel data (2021), CC BY 4.0. Densidad APROXIMADA (35 % de los píxeles de 10 m con árboles a menos de 300 m de la ruta, 8 % más lejos; nunca a menos de 6 m de una calzada). Especie por altitud (aproximación). Generado con pipeline/arboles_worldcover.py. La web y Gráficos bajo siguen con arboles/ (bosques de OSM).

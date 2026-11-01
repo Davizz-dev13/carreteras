@@ -16,6 +16,8 @@ uniform float oclusion = 0.65;   // menos luz ambiente (azul) del cielo sobre el
 uniform float cerca_ini = 150.0;
 uniform float cerca_fin = 500.0;
 uniform float lejos = 0.0;     // 1 = horizonte (sin grano)
+uniform float talud = 0.0;     // 1 (aspecto.gd): talud/arcén de tierra; UV.y = 0 en el borde del asfalto, 1 abajo
+uniform sampler2D grano : filter_linear_mipmap, repeat_enable;
 
 varying vec3 pw;
 
@@ -44,7 +46,18 @@ void fragment() {
 		c *= mix(1.0, (0.82 + 0.36 * d1) * (0.8 + 0.4 * d2), cerca);
 		c *= mix(vec3(1.0), mix(vec3(0.78, 0.8, 0.74), vec3(1.15, 1.12, 1.0), d3), muy_cerca);
 	}
-	ALBEDO = ajustar(c);
+	c = ajustar(c);
+	if (talud > 0.5) {
+		// talud y arcén de tierra: la ortofoto junto a la carretera es la propia carretera (gris), así que aquí no se usa:
+		// tierra y hierba seca con grano, más oscuro hacia abajo, y una franja de grava junto al asfalto (bermas)
+		float g = texture(grano, pw.xz * (1.0 / 0.9)).r;
+		float m = texture(detalle, pw.xz * (1.0 / 9.0) + vec2(0.4, 0.1)).r;
+		vec3 tierra = mix(vec3(0.30, 0.25, 0.18), vec3(0.33, 0.31, 0.19), smoothstep(0.35, 0.65, m)) * (0.8 + 0.4 * g);
+		vec3 grava = vec3(0.34, 0.31, 0.26) * (0.78 + 0.44 * g) * (0.9 + 0.2 * texture(detalle, pw.xz * (1.0 / 7.0)).r);
+		c = mix(grava, tierra * mix(1.0, 0.8, UV.y), smoothstep(0.05, 0.22, UV.y));
+	}
+
+	ALBEDO = c;
 	ROUGHNESS = 1.0;
 	SPECULAR = 0.0;   // sin reflejo del cielo (sin esto el suelo sale blanco azulado)
 	AO = oclusion;

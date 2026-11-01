@@ -70,3 +70,7 @@ Revisado en el juego (capturas) y contra la ortofoto PNOA (0,1 m, WMS pnoa-ma de
   (km 27,7–28,1, taludes casi verticales a los dos lados según la Diputación) no pueden tener el relieve fino real;
   las calles del pueblo quedan sobre un faldón de tierra. El tramo urbano de Caniles sigue a 90* (genérico): OSM no
   tiene límite y no hay foto de la señal.
+
+
+## Árboles de Gráficos alto (solo escritorio)
+- paisaje/arboles/: 143879 árboles donde ESA WorldCover 10 m 2021 v200 marca cubierta arbórea (49.3 % de la zona). © ESA WorldCover project / Contains modified Copernicus Sentinel data (2021), CC BY 4.0. Densidad APROXIMADA (35 % de los píxeles de 10 m con árboles a menos de 300 m de la ruta, 8 % más lejos; nunca a menos de 6 m de una calzada). Especie por altitud (aproximación). Generado con pipeline/arboles_worldcover.py. La web y Gráficos bajo siguen con arboles/ (bosques de OSM).

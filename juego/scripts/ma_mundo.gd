@@ -16,10 +16,10 @@ const FALDON := 8.0              # m de faldón vertical en el borde de cada tes
 var datos: MaDatos
 var sup := MaSuperficie.new()
 var mat_terreno := StandardMaterial3D.new()
-var mat_asfalto := StandardMaterial3D.new()
-var mat_asfalto_v := StandardMaterial3D.new()   # autopistas y autovías: un poco más oscuro (aglomerado reciente)
-var mat_marca := StandardMaterial3D.new()
-var mat_talud := StandardMaterial3D.new()
+var mat_asfalto: Variant = StandardMaterial3D.new()
+var mat_asfalto_v: Variant = StandardMaterial3D.new()   # autopistas y autovías: un poco más oscuro (aglomerado reciente)
+var mat_marca: Variant = StandardMaterial3D.new()
+var mat_talud: Variant = StandardMaterial3D.new()
 var mat_tunel := StandardMaterial3D.new()
 var mat_edificio := StandardMaterial3D.new()
 var mat_bionda := StandardMaterial3D.new()
@@ -29,6 +29,9 @@ var ruido: NoiseTexture2D
 var con_orto := true
 var malla_conifera: ArrayMesh
 var malla_frondosa: ArrayMesh
+var mallas_arbol: Array = []       # aspecto (aspecto.gd): [pino, pino lejos, frondosa, frondosa lejos]
+static var norma := false          # aspecto: trazos de las marcas con sus extremos exactos y medidas de la 8.2-IC
+const DIST_ARBOLES_LOD := 450.0
 const DIST_ARBOLES := 1300.0
 var activas := {}                # Vector2i -> {nodo, lod}
 var biondas := {}                # Vector2i -> Biondas (paredes de los quitamiedos de la tesela, para el choque)
@@ -99,6 +102,18 @@ func preparar(d: MaDatos) -> void:
 	ruido = _ruido()
 	malla_conifera = _malla_arbol(true)
 	malla_frondosa = _malla_arbol(false)
+	norma = Ajustes.args.get("aspecto", "1") == "1"
+	if norma:
+		# asfalto, marcas, arcenes y árboles con detalle (aspecto.gd): mismos shaders que las zonas
+		# biondas: gris de acero galvanizado algo más claro que antes; sin metal (con metal reflejaban el cielo y se
+		# veían como una cinta azul)
+		mat_bionda.albedo_color = Color(0.40, 0.41, 0.42)
+		mat_bionda.roughness = 0.7
+		mat_bionda.metallic_specular = 0.25
+		mat_asfalto = Aspecto.asfalto(Color(0.19, 0.19, 0.18))
+		mat_asfalto_v = Aspecto.asfalto(Color(0.155, 0.155, 0.15))
+		mat_marca = Aspecto.marca()
+		mallas_arbol = [Aspecto.malla_arbol(true, 0), Aspecto.malla_arbol(true, 1), Aspecto.malla_arbol(false, 0), Aspecto.malla_arbol(false, 1)]
 	con_orto = Ajustes.args.get("orto", "1") == "1" and datos.info.has("ortofoto")
 	_cielo()
 	_horizonte()
@@ -210,6 +225,12 @@ func _instalar(t: Vector2i, lod: int, r: Dictionary) -> void:
 		sm.set_shader_parameter("detalle", ruido)
 		sm.set_shader_parameter("marco", r["marco"])
 		(r["ter_mi"] as MeshInstance3D).material_override = sm
+		if norma and r.get("via_mi") != null and int(r.get("talud_idx", -1)) >= 0:
+			# talud y arcén de tierra con la ortofoto de la tesela y la franja de grava (aspecto.gd)
+			var st := sm.duplicate() as ShaderMaterial
+			st.set_shader_parameter("talud", 1.0)
+			st.set_shader_parameter("grano", Aspecto.grano())
+			(r["via_mi"] as MeshInstance3D).set_surface_override_material(int(r["talud_idx"]), st)
 	add_child(nodo)
 	activas[t] = {"nodo": nodo, "lod": lod}
 	sup.poner(t, r["sup"])
@@ -274,6 +295,7 @@ func construir_tesela(t: Vector2i, lod: int) -> Dictionary:
 	var v := PackedVector3Array(); var n := PackedVector3Array(); var ix := PackedInt32Array()
 	var vv := PackedVector3Array(); var nv := PackedVector3Array(); var iv := PackedInt32Array()
 	var tv := PackedVector3Array(); var tn := PackedVector3Array(); var ti := PackedInt32Array()
+	var u_v := PackedVector2Array(); var u_vv := PackedVector2Array(); var u_tv := PackedVector2Array()   # UV (aspecto)
 	var mv := PackedVector3Array(); var mn := PackedVector3Array(); var mi := PackedInt32Array()
 	var uv := PackedVector3Array(); var un := PackedVector3Array(); var ui := PackedInt32Array()
 	var bv := PackedVector3Array(); var bn := PackedVector3Array(); var bi := PackedInt32Array()
@@ -300,9 +322,9 @@ func construir_tesela(t: Vector2i, lod: int) -> Dictionary:
 		var via_rapida := int(tr["c"]) <= 1
 		var rec := datos.bordes(k)
 		if via_rapida:
-			_franja(pts, a, b, ancho * 0.5, 0.0, 0.05, vv, nv, iv, not puente and not tunel, tv, tn, ti, 0.0, rec)
+			_franja(pts, a, b, ancho * 0.5, 0.0, 0.05, vv, nv, iv, not puente and not tunel, tv, tn, ti, 0.0, rec, u_vv, u_tv)
 		else:
-			_franja(pts, a, b, ancho * 0.5, 0.0, 0.05, v, n, ix, not puente and not tunel, tv, tn, ti, 0.0, rec)
+			_franja(pts, a, b, ancho * 0.5, 0.0, 0.05, v, n, ix, not puente and not tunel, tv, tn, ti, 0.0, rec, u_v, u_tv)
 		if tunel:
 			_boveda(pts, a, b, ancho * 0.5 + 0.8, uv, un, ui, d)
 		if lod == 0:
@@ -327,9 +349,9 @@ func construir_tesela(t: Vector2i, lod: int) -> Dictionary:
 		var ancho := float(tr["ancho"])
 		var puente := int(tr["puente"]) == 1
 		if int(tr["c"]) <= 1:   # mismo asfalto que su vía rápida
-			_franja_ramal(pts, rm[1], rm[2], ancho * 0.5, k, sa, sb, shw, sk, celdas_sup, vv, nv, iv, not puente, tv, tn, ti)
+			_franja_ramal(pts, rm[1], rm[2], ancho * 0.5, k, sa, sb, shw, sk, celdas_sup, vv, nv, iv, not puente, tv, tn, ti, u_vv, u_tv)
 		else:
-			_franja_ramal(pts, rm[1], rm[2], ancho * 0.5, k, sa, sb, shw, sk, celdas_sup, v, n, ix, not puente, tv, tn, ti)
+			_franja_ramal(pts, rm[1], rm[2], ancho * 0.5, k, sa, sb, shw, sk, celdas_sup, v, n, ix, not puente, tv, tn, ti, u_v, u_tv)
 		if lod == 0:
 			_marcas_ramal(tr, pts, rm[1], rm[2], ancho, k, sa, sb, shw, sk, celdas_sup, mv, mn, mi)
 			# los ramales en puente llevan pretil/bionda a los dos lados (siempre lo tienen); se corta igual que las demás
@@ -344,10 +366,22 @@ func construir_tesela(t: Vector2i, lod: int) -> Dictionary:
 	for pb in pedidas_bionda:
 		_bionda(pb[0], pb[1], pb[2], pb[3], bv, bn, bi, _continuaciones(int(pb[4])), int(pb[4]), sa, sb, shw, sk, celdas_sup, choque,
 				pb[5] if pb.size() > 5 else [])
-	var mallas := [[v, n, ix, mat_asfalto], [vv, nv, iv, mat_asfalto_v], [tv, tn, ti, mat_talud], [uv, un, ui, mat_tunel], [bv, bn, bi, mat_bionda]]
+	# los discos de los nodos van después de las franjas en las mismas listas: sin UV (sin rodadas ni borde sucio)
+	while u_v.size() < v.size(): u_v.append(Vector2.ZERO)
+	while u_vv.size() < vv.size(): u_vv.append(Vector2.ZERO)
+	var mallas := [[v, n, ix, mat_asfalto, u_v], [vv, nv, iv, mat_asfalto_v, u_vv], [tv, tn, ti, mat_talud, u_tv], [uv, un, ui, mat_tunel], [bv, bn, bi, mat_bionda]]
+	var talud_idx := -1
+	var cuenta_sup := 0
+	for s in mallas:
+		if not (s[2] as PackedInt32Array).is_empty():
+			if s[3] == mat_talud:
+				talud_idx = cuenta_sup
+			cuenta_sup += 1
 	var m := _malla(mallas)
+	var via_mi: MeshInstance3D = null
 	if m.get_surface_count() > 0:
-		raiz.add_child(_instancia(m, 0.0))
+		via_mi = _instancia(m, 0.0)
+		raiz.add_child(via_mi)
 	if not mi.is_empty():
 		raiz.add_child(_instancia(_malla([[mv, mn, mi, mat_marca]]), 0.0))   # sin distancia: Godot la mide al centro de la tesela (medido: marcas invisibles)
 	var ter := {"n": d["n"], "paso": d["paso"], "x0": d["x0"], "z0": d["z0"], "h": d["h"]}
@@ -357,6 +391,7 @@ func construir_tesela(t: Vector2i, lod: int) -> Dictionary:
 		_edificios(t, ter, raiz, 0.0 if lod == 0 else 25.0)
 	var supd := {"a": sa, "b": sb, "hw": shw, "k": sk, "celdas": celdas_sup, "ter": ter}
 	return {"nodo": raiz, "sup": supd, "biondas": choque, "ms": (Time.get_ticks_usec() - t0) / 1000.0, "orto": orto, "ter_mi": ter_mi,
+			"via_mi": via_mi, "talud_idx": talud_idx,
 			"marco": Vector4(float(d["x0"]), float(d["z0"]), float(d["x0"]) + datos.tesela, float(d["z0"]) + datos.tesela)}
 
 
@@ -731,6 +766,32 @@ func _arboles(t: Vector2i, ter: Dictionary, raiz: Node3D) -> void:
 		var lista: PackedInt32Array = grupos[g]
 		if lista.is_empty():
 			continue
+		if norma:
+			# aspecto: malla nueva con tono por árbol y 2 niveles de detalle (aspecto.gd)
+			for lod in 2:
+				var mm2 := MultiMesh.new()
+				mm2.transform_format = MultiMesh.TRANSFORM_3D
+				mm2.use_colors = true
+				mm2.mesh = mallas_arbol[(0 if g % 2 == 0 else 2) + lod]
+				mm2.instance_count = lista.size()
+				for j in lista.size():
+					var i := lista[j]
+					var e := 0.7 + b[i * 6 + 5] / 255.0 * 0.6
+					var ang := float(b[i * 6 + 5] * 37 % 360)
+					var y := MaSuperficie.terreno(ter, xs[i], zs[i]) - 0.3
+					var bas := Basis(Vector3.UP, deg_to_rad(ang)).scaled(Vector3(e, e * (0.9 + (i % 7) * 0.05), e))
+					mm2.set_instance_transform(j, Transform3D(bas, Vector3(xs[i], y, zs[i])))
+					mm2.set_instance_color(j, Aspecto.tono_arbol(xs[i], zs[i]))
+				var mi2 := MultiMeshInstance3D.new()
+				mi2.multimesh = mm2
+				if lod == 0:
+					mi2.visibility_range_end = DIST_ARBOLES_LOD
+				else:
+					mi2.visibility_range_begin = DIST_ARBOLES_LOD
+					mi2.visibility_range_end = DIST_ARBOLES
+				mi2.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+				raiz.add_child(mi2)
+			continue
 		var mm := MultiMesh.new()
 		mm.transform_format = MultiMesh.TRANSFORM_3D
 		mm.mesh = malla_conifera if g % 2 == 0 else malla_frondosa
@@ -949,7 +1010,7 @@ func _principal_bajo(p: Vector3, k_propio: int, sa: PackedVector3Array, sb: Pack
 func _franja_ramal(pts: PackedVector3Array, a: int, b: int, hw: float, k: int, sa: PackedVector3Array, sb: PackedVector3Array,
 		shw: PackedFloat32Array, sk: PackedInt32Array, celdas: Dictionary,
 		verts: PackedVector3Array, nor: PackedVector3Array, idx: PackedInt32Array, talud: bool,
-		tv: PackedVector3Array, tn: PackedVector3Array, ti: PackedInt32Array) -> void:
+		tv: PackedVector3Array, tn: PackedVector3Array, ti: PackedInt32Array, uvs: Variant = null, tuv: Variant = null) -> void:
 	var n := pts.size()
 	const ELEV := 0.05
 	for i in range(a, b + 1):
@@ -992,6 +1053,9 @@ func _franja_ramal(pts: PackedVector3Array, a: int, b: int, hw: float, k: int, s
 		verts.append(der_p + Vector3.UP * elev)
 		nor.append(Vector3.UP)
 		nor.append(Vector3.UP)
+		if uvs != null:
+			(uvs as PackedVector2Array).append(Vector2((izq_p - pts[i]).dot(der), hw))
+			(uvs as PackedVector2Array).append(Vector2((der_p - pts[i]).dot(der), hw))
 		if i > a:
 			var q := verts.size() - 4
 			idx.append_array([q, q + 2, q + 1, q + 1, q + 2, q + 3])
@@ -1004,6 +1068,8 @@ func _franja_ramal(pts: PackedVector3Array, a: int, b: int, hw: float, k: int, s
 			var bl2 := bl - fuera + caida if borde_izq_libre else bl
 			var br2 := br + fuera + caida if borde_der_libre else br
 			tv.append_array([bl2, bl, br, br2])
+			if tuv != null:
+				(tuv as PackedVector2Array).append_array([Vector2(0, 1), Vector2(0, 0), Vector2(1, 0), Vector2(1, 1)])
 			tn.append_array([(Vector3.UP - der).normalized(), (Vector3.UP - der).normalized(),
 					(Vector3.UP + der).normalized(), (Vector3.UP + der).normalized()])
 			if i > a:
@@ -1024,7 +1090,7 @@ func _marcas_ramal(tr: Dictionary, pts: PackedVector3Array, a: int, b: int, anch
 	elif carriles >= 2:
 		var util := ancho - 1.0
 		for c in range(1, carriles):
-			lineas.append([-util * 0.5 + util * c / carriles, 0.07, 0.085, 12.0])
+			lineas.append([-util * 0.5 + util * c / carriles, 0.07, 0.085, ((17.0 if int(tr["c"]) <= 1 else 12.5) if norma else 12.0)])
 	var n := pts.size()
 	for ln in lineas:
 		var lat: float = ln[0]
@@ -1049,7 +1115,10 @@ func _marcas_ramal(tr: Dictionary, pts: PackedVector3Array, a: int, b: int, anch
 static func _franja(pts: PackedVector3Array, a: int, b: int, hw: float, desplaz: float, elev: float,
 		verts: PackedVector3Array, nor: PackedVector3Array, idx: PackedInt32Array, talud := false,
 		tv := PackedVector3Array(), tn := PackedVector3Array(), ti := PackedInt32Array(), patron := 0.0,
-		bor := []) -> void:
+		bor := [], uvs: Variant = null, tuv: Variant = null) -> void:
+	if patron > 0.0 and norma:
+		_trazos(pts, a, b, hw, desplaz, elev, verts, nor, idx, 5.0 if patron >= 16.0 else 3.5, patron - (5.0 if patron >= 16.0 else 3.5), bor)
+		return
 	var n := pts.size()
 	var s := 0.0
 	for i in range(a, b + 1):
@@ -1074,6 +1143,9 @@ static func _franja(pts: PackedVector3Array, a: int, b: int, hw: float, desplaz:
 			verts.append(centro + der * (hw + (ed if desplaz == 0.0 else 0.0)) + Vector3.UP * elev)
 		nor.append(Vector3.UP)
 		nor.append(Vector3.UP)
+		if uvs != null:
+			(uvs as PackedVector2Array).append(Vector2(-(hw + ei), hw))
+			(uvs as PackedVector2Array).append(Vector2(hw + ed, hw))
 		if i > a:
 			var k := verts.size() - 4
 			idx.append_array([k, k + 2, k + 1, k + 1, k + 2, k + 3])
@@ -1083,11 +1155,58 @@ static func _franja(pts: PackedVector3Array, a: int, b: int, hw: float, desplaz:
 			var caida := Vector3(0.0, -2.4, 0.0)
 			var fuera := der * 2.0
 			tv.append_array([bl - fuera + caida, bl, br, br + fuera + caida])
+			if tuv != null:
+				(tuv as PackedVector2Array).append_array([Vector2(0, 1), Vector2(0, 0), Vector2(1, 0), Vector2(1, 1)])
 			tn.append_array([(Vector3.UP - der).normalized(), (Vector3.UP - der).normalized(),
 					(Vector3.UP + der).normalized(), (Vector3.UP + der).normalized()])
 			if i > a:
 				var q := tv.size() - 8
 				ti.append_array([q, q + 4, q + 1, q + 1, q + 4, q + 5, q + 2, q + 6, q + 3, q + 3, q + 6, q + 7])
+
+
+## Línea a trazos con los extremos exactos (aspecto): `trazo` m pintados cada `trazo + vano` m medidos sobre la polilínea
+## desde la muestra a (antes cada trazo acababa en punta, cortado en las muestras). Mismo centro que _franja.
+static func _trazos(pts: PackedVector3Array, a: int, b: int, hw: float, desplaz: float, elev: float,
+		verts: PackedVector3Array, nor: PackedVector3Array, idx: PackedInt32Array, trazo: float, vano: float, bor := []) -> void:
+	var n := pts.size()
+	var periodo := trazo + vano
+	var cen := PackedVector3Array(); var drs := PackedVector3Array(); var ss := PackedFloat32Array()
+	var s := 0.0
+	for i in range(a, b + 1):
+		var t := pts[mini(i + 1, n - 1)] - pts[maxi(i - 1, 0)]
+		var der := Vector3(-t.z, 0.0, t.x).normalized()
+		var ei := 0.0
+		var ed := 0.0
+		if not bor.is_empty():
+			ei = (bor[0] as PackedFloat32Array)[i]
+			ed = (bor[1] as PackedFloat32Array)[i]
+		if i > a:
+			s += pts[i].distance_to(pts[i - 1])
+		cen.append(pts[i] + der * (desplaz + (ed if desplaz > 0.0 else 0.0) - (ei if desplaz < 0.0 else 0.0)) + Vector3.UP * elev)
+		drs.append(der)
+		ss.append(s)
+	for j in range(cen.size() - 1):
+		var s0 := ss[j]
+		var s1 := ss[j + 1]
+		if s1 - s0 < 0.001:
+			continue
+		var k := floorf(s0 / periodo)
+		while k * periodo < s1:
+			var d0 := maxf(s0, k * periodo)
+			var d1 := minf(s1, k * periodo + trazo)
+			k += 1.0
+			if d1 <= d0 + 0.01:
+				continue
+			var q := verts.size()
+			for dd in [d0, d1]:
+				var f: float = (dd - s0) / (s1 - s0)
+				var c := cen[j].lerp(cen[j + 1], f)
+				var der := drs[j].lerp(drs[j + 1], f).normalized()
+				verts.append(c - der * hw)
+				verts.append(c + der * hw)
+				nor.append(Vector3.UP)
+				nor.append(Vector3.UP)
+			idx.append_array([q, q + 2, q + 1, q + 1, q + 2, q + 3])
 
 
 ## Marcas viales (APROXIMACIÓN: OSM no dice dónde es continua la línea): bordes continuos; eje discontinuo en las de
@@ -1101,13 +1220,15 @@ static func _marcas(tr: Dictionary, pts: PackedVector3Array, a: int, b: int, anc
 	var carriles := int(tr["carriles"])
 	if sentido == 0:
 		var lento := int(tr["c"]) >= 3 or int(tr["rot"]) == 1
-		_franja(pts, a, b, 0.07, 0.0, 0.085, mv, mn, mi, false, PackedVector3Array(), PackedVector3Array(), PackedInt32Array(), 0.0 if lento else 12.0)
+		_franja(pts, a, b, 0.075 if norma else 0.07, 0.0, 0.085, mv, mn, mi, false, PackedVector3Array(), PackedVector3Array(), PackedInt32Array(), 0.0 if lento else (12.5 if norma else 12.0))
 		return
 	if carriles >= 2:
 		var util := ancho - 1.0
+		# 8.2-IC (aspecto): autopistas y autovías M-1.1 (5 m de trazo, 12 de vano), el resto M-1.2 (3,5 y 9)
+		var periodo := (17.0 if int(tr["c"]) <= 1 else 12.5) if norma else 12.0
 		for c in range(1, carriles):
 			var lat := -util * 0.5 + util * c / carriles
-			_franja(pts, a, b, 0.07, lat, 0.085, mv, mn, mi, false, PackedVector3Array(), PackedVector3Array(), PackedInt32Array(), 12.0)
+			_franja(pts, a, b, 0.075 if norma else 0.07, lat, 0.085, mv, mn, mi, false, PackedVector3Array(), PackedVector3Array(), PackedInt32Array(), periodo)
 
 
 ## Bionda: banda vertical de 0,45 a 0,8 m sobre la calzada a `lat` m del eje (+ derecha), sin postes. Se corta donde
@@ -1213,6 +1334,8 @@ static func _malla(superficies: Array) -> ArrayMesh:
 		arr[Mesh.ARRAY_VERTEX] = s[0]
 		arr[Mesh.ARRAY_NORMAL] = s[1]
 		arr[Mesh.ARRAY_INDEX] = s[2]
+		if s.size() > 4 and (s[4] as PackedVector2Array).size() == (s[0] as PackedVector3Array).size():
+			arr[Mesh.ARRAY_TEX_UV] = s[4]
 		malla.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arr)
 		malla.surface_set_material(malla.get_surface_count() - 1, s[3])
 	return malla
@@ -1324,6 +1447,8 @@ func _cielo() -> void:
 	entorno.fog_depth_end = 45000.0
 	entorno.fog_depth_curve = 0.6
 	entorno.fog_sky_affect = 0.0
+	if norma:
+		Aspecto.luz(sol, entorno)
 	var we := WorldEnvironment.new()
 	we.environment = entorno
 	add_child(we)

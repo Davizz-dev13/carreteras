@@ -4,15 +4,16 @@ extends Node3D
 
 
 var mat_terreno = StandardMaterial3D.new()   # en Gráficos alto (solo .exe) lo sustituye el shader del paisaje real (paisaje.gd)
-var mat_asfalto := StandardMaterial3D.new()
-var mat_asfalto2 := StandardMaterial3D.new()
-var mat_marca := StandardMaterial3D.new()
-var mat_talud := StandardMaterial3D.new()
+var mat_asfalto: Variant = StandardMaterial3D.new()   # ShaderMaterial en Gráficos alto (aspecto.gd)
+var mat_asfalto2: Variant = StandardMaterial3D.new()
+var mat_marca: Variant = StandardMaterial3D.new()
+var mat_talud: Variant = StandardMaterial3D.new()
 var mat_marca_amarilla := StandardMaterial3D.new()
 var mat_copa := StandardMaterial3D.new()
 var mat_tronco := StandardMaterial3D.new()
 var entorno: Environment
 var streaming: MapaStreaming
+var marcas_norma := false     # Gráficos alto (solo .exe): marcas viales según la 8.2-IC y materiales con detalle (aspecto.gd)
 
 
 func construir() -> void:
@@ -32,6 +33,14 @@ func construir() -> void:
 	mat_tronco.albedo_color = Color(0.36, 0.25, 0.17)
 	_cielo()
 	mat_terreno = Paisaje.material_terreno(mat_terreno)
+	if Paisaje.activo() and Ajustes.args.get("aspecto", "1") == "1":
+		# asfalto, marcas y arcenes con detalle (shaders baratos: 2 ruidos de 256 px); el asfalto de las rutas es el
+		# aglomerado algo más oscuro de siempre y el de las vías secundarias el gris algo más claro
+		marcas_norma = true
+		mat_asfalto = Aspecto.asfalto(Color(0.16, 0.16, 0.155))
+		mat_asfalto2 = Aspecto.asfalto(Color(0.20, 0.20, 0.19))
+		mat_marca = Aspecto.marca()
+		mat_talud = Aspecto.talud(mat_terreno)
 	var paisaje := Paisaje.new()
 	add_child(paisaje)
 	paisaje.preparar(self, mat_terreno)
@@ -90,6 +99,8 @@ func _cielo() -> void:
 	entorno.fog_depth_end = 13000.0
 	entorno.fog_depth_curve = 1.2
 	entorno.fog_sky_affect = 0.25
+	if Paisaje.activo() and Ajustes.args.get("aspecto", "1") == "1":
+		Aspecto.luz(sol, entorno)
 	var we := WorldEnvironment.new()
 	we.environment = entorno
 	add_child(we)

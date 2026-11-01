@@ -640,7 +640,7 @@ func _captura() -> void:
 	if modo == "memoria" or modo == "prueba":
 		var minutos := float(Ajustes.args.get("minutos", "5"))
 		var f: FileAccess = FileAccess.open(Ajustes.args.get("log", "user://ma_memoria.tsv"), FileAccess.WRITE)
-		f.store_line("t_min\tfuera_s\tkm\ttramo\tvideo_MB\ttex_MB\tbuf_MB\tobjetos\trecursos\tnodos\thuerfanos\tteselas\tcargadas\tdescargadas\tms_max\ttrafico\tchoques\tfps\tvia")
+		f.store_line("t_min\tfuera_s\tkm\ttramo\tvideo_MB\ttex_MB\tbuf_MB\tobjetos\trecursos\tnodos\thuerfanos\tteselas\tcargadas\tdescargadas\tms_max\ttrafico\tchoques\tfps\tvia\tdraws\tprims_k")
 		var t_log := -1.0
 		var km := 0.0
 		var fuera := 0.0
@@ -657,12 +657,13 @@ func _captura() -> void:
 				print("  t=%.0f v=%.0f v0=%.0f fren=%.2f acel=%.2f tramo=%s lat=%.1f piloto=%s camino=%d" % [tiempo, coche.v * 3.6, _velocidad_objetivo() * 3.6, coche.freno, coche.acelerador, datos.rotulo(tramo_actual), lat_camino, piloto, camino.size()])
 			if tiempo - t_log >= 30.0 or t_log < 0.0:
 				t_log = tiempo
-				var linea := "%.1f\t%.1f\t%.2f\t%d\t%.1f\t%.1f\t%.1f\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%.0f\t%d\t%d\t%.1f\t%s" % [tiempo / 60.0, fuera, km, tramo_actual,
+				var linea := "%.1f\t%.1f\t%.2f\t%d\t%.1f\t%.1f\t%.1f\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%.0f\t%d\t%d\t%.1f\t%s\t%d\t%.0f" % [tiempo / 60.0, fuera, km, tramo_actual,
 					Performance.get_monitor(Performance.RENDER_VIDEO_MEM_USED) / 1048576.0, Performance.get_monitor(Performance.RENDER_TEXTURE_MEM_USED) / 1048576.0,
 					Performance.get_monitor(Performance.RENDER_BUFFER_MEM_USED) / 1048576.0, Performance.get_monitor(Performance.OBJECT_COUNT),
 					Performance.get_monitor(Performance.OBJECT_RESOURCE_COUNT), Performance.get_monitor(Performance.OBJECT_NODE_COUNT),
 					Performance.get_monitor(Performance.OBJECT_ORPHAN_NODE_COUNT), mundo.listas(), mundo.est["cargadas"], mundo.est["descargadas"],
-					mundo.est["ms_max"], trafico.coches.size(), choques, Engine.get_frames_per_second(), datos.rotulo(tramo_actual)]
+					mundo.est["ms_max"], trafico.coches.size(), choques, Engine.get_frames_per_second(), datos.rotulo(tramo_actual),
+					Performance.get_monitor(Performance.RENDER_TOTAL_DRAW_CALLS_IN_FRAME), Performance.get_monitor(Performance.RENDER_TOTAL_PRIMITIVES_IN_FRAME) / 1000.0]
 				print(linea)
 				f.store_line(linea)
 				f.flush()
