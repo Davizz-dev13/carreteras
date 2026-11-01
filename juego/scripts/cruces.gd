@@ -1,7 +1,9 @@
 ## Cruces y terreno: deja limpias las intersecciones al cargar el mapa.
-## 1) Una calzada secundaria (otra ruta posterior o una vía de OSM) que entra en otra ya dibujada se corta justo
-##    en el borde de la principal y su altura se funde con la de la principal (antes se pintaban dos asfaltos
+## 1) Una calzada secundaria (otra ruta posterior o una vía de OSM) que entra en otra ya dibujada se corta donde
+##    queda entera bajo la principal; donde la pisa solo en parte (boca oblicua, cuña de un ramal) se pega 3 cm
+##    por debajo de la principal, y su altura se funde con la de la principal (antes se pintaban dos asfaltos
 ##    casi a la misma altura uno encima del otro y parpadeaban, o la secundaria quedaba metros por encima).
+##    Las calzadas terminan en borde recto: la vía que sigue a otra en el mismo nodo de OSM no se recorta.
 ## 2) El terreno (malla de 20 m) se hunde lo justo bajo cada calzada para que nunca asome por encima del asfalto.
 ## Todo en una sola pasada, en la carga (unas décimas de segundo); no cambia los ficheros de datos.
 class_name Cruces
@@ -18,7 +20,8 @@ var sa := PackedVector3Array()
 var sb := PackedVector3Array()
 var shw := PackedFloat32Array()
 var celdas := {}
-var stats := {"cortes": 0, "trozos_ruta_ocultos": 0, "vias_partidas": 0}
+var extremos := {}           # Vector2i (celda de 4 m) -> [Vector3]: extremos de las calzadas ya colocadas
+var stats := {"cortes": 0, "trozos_ruta_ocultos": 0, "vias_partidas": 0, "extremos_pegados": 0}
 
 
 static func preparar(rutas: Array, vias: Array) -> Dictionary:
@@ -65,24 +68,57 @@ func _solape(p: Vector3, t: Vector3, hw: float) -> Vector2:
 		var l2 := abx * abx + abz * abz
 		if l2 < 1e-6:
 			continue
-		var u := clampf(((p.x - a.x) * abx + (p.z - a.z) * abz) / l2, 0.0, 1.0)
-		var ex := p.x - a.x - abx * u
-		var ez := p.z - a.z - abz * u
-		var d2 := ex * ex + ez * ez
-		var tope := shw[k] + hw + HOLGURA
-		if d2 >= tope * tope:
+		var l := sqrt(l2)
+		var paralelo := absf((t.x * abx + t.z * abz) / l)
+		var ur := ((p.x - a.x) * abx + (p.z - a.z) * abz) / l2
+		if ur < 0.0 or ur > 1.0:
+			# más allá del extremo del tramo: la calzada termina en un borde recto (no redondo). Una que sigue
+			# a continuación (otra vía de OSM partida en ese nodo) no la pisa: antes se cortaba hw + hw' ≈ 7 m
+			# y quedaba un agujero en cada nodo donde OSM parte una vía.
+			var e := (-ur if ur < 0.0 else ur - 1.0) * l
+			if e >= hw * sqrt(maxf(0.0, 1.0 - paralelo * paralelo)) + HOLGURA:
+				continue
+		var u := clampf(ur, 0.0, 1.0)
+		var d := absf((p.x - a.x) * abz - (p.z - a.z) * abx) / l   # distancia lateral al eje del tramo
+		if d >= shw[k] + hw + HOLGURA:
 			continue
 		var hh := a.y + (b.y - a.y) * u
 		if absf(hh - p.y) > MAX_DESNIVEL:
 			continue
-		var d := sqrt(d2)
-		var l := sqrt(l2)
-		var paralelo := absf((t.x * abx + t.z * abz) / l)
 		var s := shw[k] + hw * paralelo + HOLGURA - d
 		if s > mejor:
 			mejor = s
 			h = hh
 	return Vector2(mejor, h)
+
+
+## ¿Está el punto (x, z) dentro de alguna calzada ya colocada (al mismo nivel, ±MAX_DESNIVEL de y)?
+func _dentro(x: float, z: float, y: float) -> bool:
+	var lista: PackedInt32Array = celdas.get(Vector2i(floori(x / CELDA), floori(z / CELDA)), PackedInt32Array())
+	for k in lista:
+		var a := sa[k]
+		var b := sb[k]
+		var abx := b.x - a.x
+		var abz := b.z - a.z
+		var l2 := abx * abx + abz * abz
+		if l2 < 1e-6:
+			continue
+		var ur := ((x - a.x) * abx + (z - a.z) * abz) / l2
+		if ur < -0.02 or ur > 1.02:
+			continue
+		var u := clampf(ur, 0.0, 1.0)
+		var ex := x - a.x - abx * u
+		var ez := z - a.z - abz * u
+		var r := shw[k] - 0.05
+		if ex * ex + ez * ez <= r * r and absf(a.y + (b.y - a.y) * u - y) <= MAX_DESNIVEL:
+			return true
+	return false
+
+
+## La sección transversal entera (eje y los dos bordes) queda bajo calzadas ya colocadas: ahí la vía sobra.
+func _todo_dentro(p: Vector3, t: Vector3, hw: float) -> bool:
+	var der := Vector3(-t.z, 0.0, t.x) * hw
+	return _dentro(p.x, p.z, p.y) and _dentro(p.x + der.x, p.z + der.z, p.y) and _dentro(p.x - der.x, p.z - der.z, p.y)
 
 
 static func _tan(pts: PackedVector3Array, i: int) -> Vector3:
@@ -149,6 +185,8 @@ func _procesar_ruta(r: Ruta) -> void:
 	for i in r.n - 1:
 		if r.dibujar[i] == 1 and r.tunel[i] == 0:
 			_anadir(r.pts[i], r.pts[i + 1], r.ancho[i] * 0.5)
+	if r.n >= 2:
+		_registrar_extremos(r.pts)
 
 
 # ---------------- vías de OSM (las más anchas mandan) ----------------
@@ -161,10 +199,15 @@ func _procesar_vias(vias: Array) -> Array:
 		var pts: PackedVector3Array = v["pts"]
 		var hw := float(v["ancho"]) * 0.5
 		if pts.size() < 2 or int(v.get("tunel", 0)) == 1 or int(v.get("puente", 0)) == 1:
-			salida.append(v)
 			if pts.size() >= 2 and int(v.get("tunel", 0)) == 0:
+				var pisa_p := PackedByteArray()
+				pisa_p.resize(pts.size())
+				_pegar_extremos(pts, pisa_p)
+				v["pts"] = pts
 				for i in pts.size() - 1:
 					_anadir(pts[i], pts[i + 1], hw)
+				_registrar_extremos(pts)
+			salida.append(v)
 			continue
 		var n := pts.size()
 		var sol := PackedFloat32Array()
@@ -179,67 +222,165 @@ func _procesar_vias(vias: Array) -> Array:
 			if s.x > 0.0:
 				algun = true
 		if not algun:
+			var pisa0 := PackedByteArray()
+			pisa0.resize(n)
+			_pegar_extremos(pts, pisa0)
+			v["pts"] = pts
 			salida.append(v)
 			for i in n - 1:
 				_anadir(pts[i], pts[i + 1], hw)
+			_registrar_extremos(pts)
 			continue
-		# trozos de vértices fuera de cualquier calzada principal, cortados en el borde exacto
+		# La vía solo sobra donde su sección entera queda bajo calzadas ya colocadas. Donde las pisa solo en parte
+		# (boca de un cruce oblicuo, cuña de un ramal de entrada/salida, calzadas que se solapan) se dibuja igual,
+		# a la altura de la otra menos BAJO (queda justo debajo: ni parpadeo ni agujero), y se funde al salir.
+		# Antes se cortaba en cuanto tocaba el borde: quedaban triángulos sin asfalto en las bocas y en los ramales.
+		var lleno := PackedByteArray()
+		lleno.resize(n)
+		for i in n:
+			if sol[i] > 0.0 and _todo_dentro(pts[i], _tan(pts, i), hw):
+				lleno[i] = 1
 		var piezas := 0
 		var i := 0
 		while i < n:
-			if sol[i] > 0.0:
+			if lleno[i] == 1:
 				i += 1
 				continue
 			var j := i
-			while j + 1 < n and sol[j + 1] <= 0.0:
+			while j + 1 < n and lleno[j + 1] == 0:
 				j += 1
-			var trozo := pts.slice(i, j + 1)
+			var trozo := PackedVector3Array()
+			var orig := PackedFloat32Array()
+			var pisa := PackedByteArray()
 			if i > 0:
-				var c := _corte(pts[i], pts[i - 1], hw)
-				trozo.insert(0, Vector3(c.x, c.y, c.z))
-				var d0: float = c.y - _alt_original(pts, i, i - 1, c)
-				trozo[0].y = _alt_original(pts, i, i - 1, c)
-				_fundir(trozo, 0, 1, d0)
-				stats["cortes"] += 1
+				var c := _borde_lleno(pts[i], pts[i - 1], hw)
+				trozo.append(c)
+				orig.append(_alt_original(pts, i, i - 1, c))
+				pisa.append(1)
+			for k in range(i, j + 1):
+				var q := pts[k]
+				orig.append(q.y)
+				pisa.append(1 if sol[k] > 0.0 else 0)
+				if sol[k] > 0.0:
+					q.y = _altura_pegada(q, _tan(pts, k), hw, hp[k])
+				trozo.append(q)
 			if j < n - 1:
-				var c2 := _corte(pts[j], pts[j + 1], hw)
-				var ya := _alt_original(pts, j, j + 1, c2)
-				trozo.append(Vector3(c2.x, ya, c2.z))
-				_fundir(trozo, trozo.size() - 1, -1, c2.y - ya)
-				stats["cortes"] += 1
+				var c2 := _borde_lleno(pts[j], pts[j + 1], hw)
+				trozo.append(c2)
+				orig.append(_alt_original(pts, j, j + 1, c2))
+				pisa.append(1)
+			# fundido de altura en cada paso de "pisa otra calzada" a "libre" (y al revés)
+			for k in range(1, trozo.size()):
+				if pisa[k - 1] == 1 and pisa[k] == 0:
+					_fundir_libre(trozo, pisa, k, 1, trozo[k - 1].y - orig[k - 1])
+					stats["cortes"] += 1
+				elif pisa[k - 1] == 0 and pisa[k] == 1:
+					_fundir_libre(trozo, pisa, k - 1, -1, trozo[k].y - orig[k])
+					stats["cortes"] += 1
 			if trozo.size() >= 2:
+				_pegar_extremos(trozo, pisa)
 				var nv := v.duplicate()
 				nv["pts"] = trozo
 				salida.append(nv)
 				piezas += 1
 				for k in trozo.size() - 1:
 					_anadir(trozo[k], trozo[k + 1], hw)
+				_registrar_extremos(trozo)
 			i = j + 1
 		if piezas > 1:
 			stats["vias_partidas"] += 1
 	return salida
 
 
-## Punto del segmento fuera→dentro donde el solape pasa a ser 0 (bisección).
-## Devuelve Vector3(x, altura final = principal - BAJO, z).
-func _corte(fuera: Vector3, dentro: Vector3, hw: float) -> Vector3:
+## Altura a la que se pega una sección que pisa otra calzada: la más baja de esa calzada bajo el eje y los dos
+## bordes de la sección, menos BAJO. Con solo la del eje, en un cruce oblicuo sobre una carretera en pendiente un
+## borde de la secundaria asomaba por encima del asfalto de la principal.
+func _altura_pegada(p: Vector3, t: Vector3, hw: float, h_eje: float) -> float:
+	var der := Vector3(-t.z, 0.0, t.x) * hw
+	var h := h_eje
+	for q in [p, p + der, p - der]:
+		var lista: PackedInt32Array = celdas.get(Vector2i(floori(q.x / CELDA), floori(q.z / CELDA)), PackedInt32Array())
+		for k in lista:
+			var a := sa[k]
+			var b := sb[k]
+			var abx := b.x - a.x
+			var abz := b.z - a.z
+			var l2 := abx * abx + abz * abz
+			if l2 < 1e-6:
+				continue
+			var u := clampf(((q.x - a.x) * abx + (q.z - a.z) * abz) / l2, 0.0, 1.0)
+			var ex: float = q.x - a.x - abx * u
+			var ez: float = q.z - a.z - abz * u
+			var hh := a.y + (b.y - a.y) * u
+			if ex * ex + ez * ez <= shw[k] * shw[k] and absf(hh - h_eje) <= 1.5:
+				h = minf(h, hh)
+	return h - BAJO
+
+
+## Extremos de calzada: donde OSM parte una vía en dos, cada trozo trae su propia altura (cada uno se suaviza por
+## separado) y en el nodo común quedaba un escalón de decenas de cm. El extremo de la vía que llega después se
+## pega a la altura del extremo ya colocado y se funde hacia dentro.
+func _registrar_extremos(pts: PackedVector3Array) -> void:
+	for p in [pts[0], pts[pts.size() - 1]]:
+		var c := Vector2i(floori(p.x / 4.0), floori(p.z / 4.0))
+		if not extremos.has(c):
+			extremos[c] = []
+		extremos[c].append(p)
+
+
+func _pegar_extremos(pts: PackedVector3Array, pisa: PackedByteArray) -> void:
+	for lado in [0, 1]:
+		var i0: int = 0 if lado == 0 else pts.size() - 1
+		if pisa[i0] == 1:
+			continue
+		var p := pts[i0]
+		var mejor := 0.75
+		var y := 0.0
+		var hay := false
+		var c := Vector2i(floori(p.x / 4.0), floori(p.z / 4.0))
+		for dx in [-1, 0, 1]:
+			for dz in [-1, 0, 1]:
+				for e in extremos.get(c + Vector2i(dx, dz), []):
+					var d := Vector2(e.x - p.x, e.z - p.z).length()
+					if d < mejor and absf(e.y - p.y) <= MAX_DESNIVEL:
+						mejor = d
+						y = e.y
+						hay = true
+		if hay and absf(y - p.y) > 0.005:
+			_fundir_libre(pts, pisa, i0, 1 if lado == 0 else -1, y - p.y)
+			stats["extremos_pegados"] += 1
+
+
+## Punto del segmento fuera→dentro (bisección) a partir del cual la sección entera queda bajo otra calzada.
+## La altura es la de esa calzada menos BAJO.
+func _borde_lleno(fuera: Vector3, dentro: Vector3, hw: float) -> Vector3:
 	var t := Vector3(dentro.x - fuera.x, 0.0, dentro.z - fuera.z).normalized()
 	var lo := 0.0
 	var hi := 1.0
-	var h := dentro.y
-	for _k in 12:
+	for _k in 10:
 		var m := (lo + hi) * 0.5
-		var s := _solape(fuera.lerp(dentro, m), t, hw)
-		if s.x > 0.0:
+		if _todo_dentro(fuera.lerp(dentro, m), t, hw):
 			hi = m
-			h = s.y
 		else:
 			lo = m
-	var p := fuera.lerp(dentro, lo)
-	var s2 := _solape(fuera.lerp(dentro, hi), t, hw)
-	if s2.x > 0.0:
-		h = s2.y
-	return Vector3(p.x, h - BAJO, p.z)
+	var p := fuera.lerp(dentro, hi)
+	var s := _solape(p, t, hw)
+	return Vector3(p.x, _altura_pegada(p, t, hw, s.y) if s.x > 0.0 else p.y, p.z)
+
+
+## Como _fundir, pero sin tocar los vértices que ya van pegados a otra calzada (pisa = 1).
+static func _fundir_libre(pts: PackedVector3Array, pisa: PackedByteArray, i0: int, dir: int, delta: float) -> void:
+	var largo := clampf(absf(delta) / 0.06, 16.0, 120.0)
+	var acum := 0.0
+	var i := i0
+	while i >= 0 and i < pts.size() and pisa[i] == 0:
+		if i != i0:
+			acum += Vector2(pts[i].x - pts[i - dir].x, pts[i].z - pts[i - dir].z).length()
+		if acum >= largo:
+			break
+		var f := 1.0 - acum / largo
+		pts[i].y += delta * f * f * (3.0 - 2.0 * f)
+		i += dir
 
 
 static func _alt_original(pts: PackedVector3Array, a: int, b: int, c: Vector3) -> float:
