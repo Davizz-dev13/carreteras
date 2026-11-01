@@ -1,7 +1,8 @@
 ## Mapa abierto de una región entera (Comunidad de Madrid): conducción libre por toda la red interurbana, sin
 ## pantallas de carga (teselas de 2 km leídas del disco en hilos, ver ma_mundo.gd). Solo en la versión de escritorio.
 ## Teclas: W/S/A/D o flechas · Espacio freno de mano · P piloto automático · Q/E en el próximo cruce: izquierda/derecha
-## (otra vez = seguir recto) · +/- velocidad del piloto · C cámara · R volver a la carretera · F3 datos · Esc menú.
+## (otra vez = seguir recto) · +/- velocidad del piloto · C cámara · R volver a la carretera · M mapa grande y GPS (ma_mapa.gd)
+## · Z/X zoom del minimapa · F3 datos · Esc menú.
 extends Node3D
 
 var datos := MaDatos.new()
@@ -36,6 +37,8 @@ var l_datos := Label.new()
 var ver_datos := false
 var _choque_t := 0.0
 var en_prueba := false
+var gps: MaGps                  # ruta al destino elegido en el mapa (ma_gps.gd)
+var mapa: MaMapa                # minimapa, mapa grande con M y GPS (ma_mapa.gd)
 
 
 func _ready() -> void:
@@ -73,6 +76,10 @@ func _ready() -> void:
 	cam.physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_OFF
 	cargando.queue_free()
 	_crear_hud()
+	gps = MaGps.new(datos, red)
+	mapa = MaMapa.new()
+	add_child(mapa)
+	mapa.iniciar(self)
 	print("Mapa abierto: %d tramos, %d nodos, listo en %d ms (teselas iniciales %d)" % [datos.tramos.size(), datos.nodos.size(), Time.get_ticks_msec() - t0, mundo.listas()])
 	cargado = true
 	if Ajustes.args.has("captura"):
@@ -122,7 +129,7 @@ func _colocar_en(k: int, sd: int, d: float) -> void:
 
 # ------------------------------------------------------------------ simulación
 func _physics_process(dt: float) -> void:
-	if not cargado or en_prueba:
+	if not cargado or en_prueba or (mapa != null and mapa.abierto):
 		return
 	_simular(dt)
 
@@ -241,7 +248,11 @@ func _alargar_camino() -> void:
 			pref = preferencia
 			pref_en = [u[0], u[1]]
 		var nuevos: Array = []
-		if a_glorieta:
+		if gps != null and pref == 0 and gps.activo():
+			var e0: Array = gps.siguiente(u[0], u[1])   # ruta del GPS (destino elegido en el mapa, M)
+			if not e0.is_empty():
+				nuevos = [e0]
+		if nuevos.is_empty() and a_glorieta:
 			nuevos = red.glorieta(u[0], u[1], pref)     # rodearla en su sentido hasta la salida
 		if nuevos.is_empty():
 			var e: Array = red.elegir(u[0], u[1], pref)
@@ -398,8 +409,9 @@ func _velocidad_objetivo() -> float:
 		var kp := absf(_curvatura_piloto())
 		if kp > 1e-3:
 			v0 = minf(v0, sqrt(2.6 / kp))
-		# fuera de su carril (se ha abierto): despacio hasta volver
-		if absf(lat_camino) > 2.5:
+		# fuera de su carril (se ha abierto): despacio hasta volver. Se mide desde el carril que sigue (en una calzada de
+		# 3 carriles el carril derecho va a 3,5 m del eje: medido desde el eje, el piloto iba siempre a 25 km/h)
+		if absf(lat_camino - red.carril_derecho(camino[0][0], 0)) > 2.5:
 			v0 = minf(v0, 25.0 / 3.6)
 	return v0
 
@@ -587,7 +599,7 @@ func _crear_hud() -> void:
 	l_datos.add_theme_font_size_override("font_size", 14)
 	hud.add_child(l_datos)
 	var ayuda := Label.new()
-	ayuda.text = "W/S/A/D · Espacio freno de mano · P piloto · Q/E próximo cruce izq./der. · +/- velocidad · C cámara · R carretera · F3 datos · Esc menú"
+	ayuda.text = "W/S/A/D · Espacio freno de mano · P piloto · Q/E próximo cruce izq./der. · +/- velocidad · C cámara · R carretera · M mapa y GPS · Z/X zoom minimapa · F3 datos · Esc menú"
 	ayuda.add_theme_font_size_override("font_size", 13)
 	ayuda.modulate = Color(1, 1, 1, 0.7)
 	ayuda.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
