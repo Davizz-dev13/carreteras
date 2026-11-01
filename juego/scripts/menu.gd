@@ -27,6 +27,8 @@ var boton_empezar: Button
 
 
 func _ready() -> void:
+	if Ajustes.rutas.is_empty() and not Ajustes.args.has("captura"):
+		await _aviso_cargando()
 	Ajustes.cargar()
 	var fondo := ColorRect.new()
 	fondo.color = Color(0.09, 0.11, 0.13)
@@ -37,9 +39,15 @@ func _ready() -> void:
 	for lado in ["left", "right", "top", "bottom"]:
 		marco.add_theme_constant_override("margin_" + lado, 28)
 	add_child(marco)
+	# con desplazamiento: en pantallas 16:9 (1280×720 lógicos) el menú no cabía y "¡A conducir!" quedaba fuera, abajo
+	var scroll := ScrollContainer.new()
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	scroll.follow_focus = true
+	marco.add_child(scroll)
 	var col := VBoxContainer.new()
 	col.add_theme_constant_override("separation", 8)
-	marco.add_child(col)
+	col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	scroll.add_child(col)
 	var titulo := Label.new()
 	titulo.text = "Carreteras de España · escala 1:1"
 	titulo.add_theme_font_size_override("font_size", 30)
@@ -138,8 +146,6 @@ func _ready() -> void:
 	camara.selected = Ajustes.camara
 	opciones.add_child(camara)
 	col.add_child(opciones)
-	col.add_child(Paisaje.fila_menu())   # Gráficos alto/bajo y Estación (paisaje.gd; oculto en la web)
-	col.add_child(MaMundo.fila_menu(self))   # mapa abierto de la Comunidad de Madrid (ma_mundo.gd; oculto en la web)
 	var boton := Button.new()
 	boton.text = "  ¡A conducir!  "
 	boton.add_theme_font_size_override("font_size", 22)
@@ -152,6 +158,10 @@ func _ready() -> void:
 	ayuda.modulate = Color(0.7, 0.75, 0.8)
 	fila_b.add_child(ayuda)
 	col.add_child(fila_b)
+	# Gráficos y mapa abierto, debajo del botón (así el botón se ve sin desplazar en 16:9)
+	col.add_child(Paisaje.fila_menu())   # Gráficos alto/bajo y Estación (paisaje.gd; oculto en la web)
+	col.add_child(Rendimiento.fila_nota())   # por qué está en "bajo" si se eligió solo (rendimiento.gd)
+	col.add_child(MaMundo.fila_menu(self))   # mapa abierto de la Comunidad de Madrid (ma_mundo.gd; oculto en la web)
 	var mandos := Label.new()
 	mandos.text = ("Mandos en carretera: W/↑ acelerar · S/↓ frenar (parado: marcha atrás) · G/T bajar/subir marcha (cambio manual; T mantenida vuelve al automático) · " +
 		"P piloto automático · O adelantar (con el piloto) · L respetar límite al adelantar · +/− velocidad · K adaptar en curvas · 9/0 menos/más tráfico · " +
@@ -178,6 +188,25 @@ func _ready() -> void:
 		_foco_mando()
 	if Ajustes.args.has("captura") and Ajustes.args["captura"] == "menu":
 		_captura_menu()
+
+
+## La carga de una zona (cruces, superficie) congela unos segundos, más en el navegador (M-406: ~30 s en la web):
+## antes de empezarla se pinta un aviso para que no parezca colgado.
+func _aviso_cargando() -> void:
+	var fondo := ColorRect.new()
+	fondo.color = Color(0.09, 0.11, 0.13)
+	fondo.set_anchors_preset(Control.PRESET_FULL_RECT)
+	add_child(fondo)
+	var l := Label.new()
+	l.text = "Cargando %s…" % Ajustes.ZONAS.get(Ajustes.args.get("zona", Ajustes.zona), Ajustes.zona)
+	l.add_theme_font_size_override("font_size", 26)
+	l.set_anchors_preset(Control.PRESET_CENTER)
+	l.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	l.grow_vertical = Control.GROW_DIRECTION_BOTH
+	fondo.add_child(l)
+	for i in 2:
+		await RenderingServer.frame_post_draw
+	fondo.queue_free()
 
 
 func _al_cambiar_mando(_id: int, conectado: bool) -> void:

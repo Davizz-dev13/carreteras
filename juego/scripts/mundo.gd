@@ -14,6 +14,7 @@ var mat_tronco := StandardMaterial3D.new()
 var entorno: Environment
 var streaming: MapaStreaming
 var marcas_norma := false     # Gráficos alto (solo .exe): marcas viales según la 8.2-IC y materiales con detalle (aspecto.gd)
+var aspecto_web := false      # versión web: materiales del aspecto sin ortofoto (terreno_web.gdshader)
 
 
 func construir() -> void:
@@ -41,6 +42,15 @@ func construir() -> void:
 		mat_asfalto2 = Aspecto.asfalto(Color(0.20, 0.20, 0.19))
 		mat_marca = Aspecto.marca()
 		mat_talud = Aspecto.talud(mat_terreno)
+	elif Rendimiento.es_web() and Ajustes.args.get("aspecto", "1") == "1":
+		# versión web: lo barato del aspecto (asfalto, marcas, arcenes y suelo con detalle, luz) sin ortofoto ni árboles
+		# nuevos, que no se exportan por tamaño; las mismas mallas, marcas y pinos de siempre
+		aspecto_web = true
+		mat_asfalto = Aspecto.asfalto(Color(0.16, 0.16, 0.155))
+		mat_asfalto2 = Aspecto.asfalto(Color(0.20, 0.20, 0.19))
+		mat_marca = Aspecto.marca()
+		mat_terreno = _suelo_web(false)
+		mat_talud = _suelo_web(true)
 	var paisaje := Paisaje.new()
 	add_child(paisaje)
 	paisaje.preparar(self, mat_terreno)
@@ -49,6 +59,16 @@ func construir() -> void:
 	streaming.name = "Streaming"
 	streaming.preparar(self)
 	add_child(streaming)
+
+
+## Suelo de la web: color de siempre (por vértice) con manchas y grano; talud = arcén de grava y tierra
+func _suelo_web(talud: bool) -> ShaderMaterial:
+	var m := ShaderMaterial.new()
+	m.shader = load("res://scripts/terreno_web.gdshader")
+	m.set_shader_parameter("detalle", Aspecto.ruido())
+	m.set_shader_parameter("grano", Aspecto.grano())
+	m.set_shader_parameter("talud", 1.0 if talud else 0.0)
+	return m
 
 
 ## Llamar cada fotograma con la posición del coche: libera lo que queda atrás y construye lo de delante
@@ -99,7 +119,7 @@ func _cielo() -> void:
 	entorno.fog_depth_end = 13000.0
 	entorno.fog_depth_curve = 1.2
 	entorno.fog_sky_affect = 0.25
-	if Paisaje.activo() and Ajustes.args.get("aspecto", "1") == "1":
+	if (Paisaje.activo() or Rendimiento.es_web()) and Ajustes.args.get("aspecto", "1") == "1":
 		Aspecto.luz(sol, entorno)
 	var we := WorldEnvironment.new()
 	we.environment = entorno

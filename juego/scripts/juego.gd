@@ -121,8 +121,7 @@ func _leer_args() -> void:
 ## Coloca el coche en el carril derecho del punto actual (o del inicio del tramo)
 func _reiniciar(en_inicio := true) -> void:
 	var s := s_ini if en_inicio else s_coche
-	var lado := ruta.lateral_carril(s, dir)
-	coche.colocar(ruta.punto(s) + ruta.derecha(s) * lado, ruta.tangente(s) * dir)
+	coche.colocar(ruta.punto_carril(s, dir), ruta.marcha_carril(s, dir))
 	s_coche = s
 	reiniciar_camara()
 	if en_inicio:
@@ -144,10 +143,32 @@ func _physics_process(dt: float) -> void:
 	_simular(dt)
 
 
-func _simular(dt: float) -> void:
+## Posición del jugador sobre la ruta (s_coche, lat_coche). En sentido contrario, en una glorieta se va por el resto
+## del anillo (desvío, ruta.gd), lejos del arco que recorre la ruta: ahí s_coche sale de la distancia recorrida por
+## el desvío y lat_coche es la de su carril.
+var des_k := -1
+var des_u := 0.0
+func _proyectar_jugador() -> void:
+	var kd := ruta.desvio_en(s_coche, dir)
+	if kd >= 0:
+		if kd != des_k:
+			des_k = kd
+			des_u = ruta.u_desvio(kd, s_coche)
+		var u := ruta.proyectar_desvio(kd, coche.position, des_u)
+		var q := ruta.punto_desvio(kd, u)
+		if Vector2(q.x - coche.position.x, q.z - coche.position.z).length() < 12.0:
+			des_u = u
+			s_coche = ruta.s_desvio(kd, u)
+			lat_coche = ruta.lateral_carril(s_coche, dir)
+			return
+	des_k = -1
 	var p := ruta.proyectar(coche.position, s_coche)
 	s_coche = p.x
 	lat_coche = p.y
+
+
+func _simular(dt: float) -> void:
+	_proyectar_jugador()
 	_mandos(dt)
 	var fw0 := coche.adelante()
 	var prev_jug := {"p": Vector2(coche.position.x, coche.position.z), "f": Vector2(fw0.x, fw0.z)}
@@ -155,6 +176,7 @@ func _simular(dt: float) -> void:
 	var lado_jug := 1 if lat_coche > ruta.lateral_eje(s_coche) else -1
 	var en_ruta := absf(lat_coche) < ruta.valor(ruta.ancho, s_coche) * 0.5 + 1.5
 	trafico.factor = Ajustes.trafico
+	trafico.pos_jug = coche.position      # el tráfico también le cede el paso en las glorietas
 	trafico.actualizar(dt, s_coche, lat_coche, coche.v * dir, lado_jug if en_ruta else 0)
 	colisiones.mover_sueltos(dt)
 	colisiones.resolver(dt, prev_jug)
@@ -226,8 +248,8 @@ func _mandos(_dt: float) -> void:
 ## Persecución pura ("pure pursuit") de un punto del carril derecho por delante
 func _volante_piloto() -> float:
 	var mira := clampf(absf(coche.v) * 0.75, 7.0, 26.0)
-	var s := s_coche + dir * mira
-	var obj := ruta.punto(s) + ruta.derecha(s) * ruta.lateral_carril(s, dir, adel_carril)
+	var s := s_coche + dir * mira * ruta.escala_carril(s_coche, dir)
+	var obj := ruta.punto_carril(s, dir, adel_carril)    # en una glorieta, en sentido contrario: por el resto del anillo
 	var fw := coche.adelante()
 	var der := Vector3(-fw.z, 0.0, fw.x)
 	var d := obj - coche.position
@@ -268,6 +290,29 @@ func _control_velocidad(v0: float) -> void:
 		if d > 0.0 and d - trafico.largo < hueco:
 			hueco = d - trafico.largo
 			v_lider = c["v"]
+	# obstáculos físicos delante (cualquier sentido): coches sueltos tras un golpe y, dentro del desvío de una
+	# glorieta (donde la ruta no sirve para medir huecos), los que se cruzan en la trayectoria
+	var en_desvio := ruta.desvio_en(s_coche, dir) >= 0
+	var fw2 := Vector2(coche.adelante().x, coche.adelante().z).normalized()
+	for c in trafico.coches:
+		if not (c.get("suelto", false) or (en_desvio and c["dir"] != dir and not c.get("cede_jug", false))):
+			continue
+		var pq: Vector3 = (c["nodo"] as Node3D).position
+		var rel := Vector2(pq.x - coche.position.x, pq.z - coche.position.z)
+		var delante := rel.dot(fw2)
+		if delante <= 0.0 or delante > 12.0:
+			continue
+		if absf(rel.cross(fw2)) > 1.7:
+			continue
+		var g_fis: float = delante - trafico.largo
+		if g_fis < hueco:
+			hueco = g_fis
+			v_lider = 0.0
+	# glorieta: el piloto cede el paso a quien ya va por el anillo antes de entrar
+	var ceda := trafico.ceda_paso(s_coche, dir)
+	if ceda < hueco:
+		hueco = ceda
+		v_lider = 0.0
 	var v := absf(coche.v)
 	var a := clampf(trafico.idm(v, v0, hueco, v - v_lider) * 1.6, -8.0, 3.0)
 	# fuerza necesaria = inercia + aerodinámica + rodadura + gravedad de la pendiente real
@@ -647,7 +692,7 @@ func _camara(dt: float) -> void:
 
 
 func _ojos() -> Vector3:
-	var o: Array = Catalogo.modelo_de(coche.ficha).get("ojos", [-0.37, 1.12, 0.25])
+	var o: Array = Catalogo.modelo_de(coche.ficha).get("ojos", [-0.37, 1.24, 0.25])
 	return Vector3(float(o[0]), float(o[1]), float(o[2]))
 
 
@@ -957,6 +1002,13 @@ func _captura() -> void:
 		var est0 := adel_estado
 		var ch0 := choques
 		_simular(1.0 / 60.0)
+		if Ajustes.args.has("traza_choque") and choques != ch0 and choques < ch0 + 2 and (choques < 6 or choques % 200 == 0):
+			var txt_c := ""
+			for oc in trafico.coches:
+				var pq: Vector3 = (oc["nodo"] as Node3D).position
+				if pq.distance_to(coche.position) < 8.0:
+					txt_c += " [dir=%d s=%.1f v=%.1f suelto=%s desv=%d]" % [oc["dir"], oc["s"], oc["v"], str(oc.get("suelto", false)), ruta.desvio_en(oc["s"], oc["dir"])]
+			print("  CHOQUE_DBG t=%.1f s=%.1f lat=%.2f v=%.1f desv_jug=%d ceda=%.1f cerca:%s" % [tiempo, s_coche, lat_coche, coche.v, ruta.desvio_en(s_coche, dir), trafico.ceda_paso(s_coche, dir), txt_c])
 		if auto_o and adel_estado == 1 and adel_motivo != "":
 			var km: String = adel_motivo.split(" (")[0]
 			motivos_auto[km] = motivos_auto.get(km, 0.0) + 1.0 / 60.0
@@ -1750,8 +1802,7 @@ func _saltar_a(s: float) -> void:
 	_cancelar_adelantamiento("")
 	adel_estado = 0
 	adel_carril = 0.0
-	var lado := ruta.lateral_carril(s, dir)
-	coche.colocar(ruta.punto(s) + ruta.derecha(s) * lado, ruta.tangente(s) * dir)
+	coche.colocar(ruta.punto_carril(s, dir), ruta.marcha_carril(s, dir))
 	coche.v = 0.0
 	s_coche = s
 	# fuera los coches que haya justo donde cae

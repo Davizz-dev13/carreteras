@@ -59,14 +59,28 @@ jobs:
           Carreteras de España 1:1 — versión para Windows
           Generada automáticamente desde el commit ${GITHUB_SHA::7} ($(date -u '+%Y-%m-%d %H:%M') UTC).
 
-          1. Descomprime el zip en una carpeta (por ejemplo, el Escritorio).
+          1. Descomprime el zip en una carpeta (por ejemplo, el Escritorio). No lo abras desde dentro del zip.
           2. Abre Carreteras.exe.
           3. Si Windows dice "Windows protegió su PC": pulsa "Más información" y luego "Ejecutar de todas formas".
              Sale porque el programa no está firmado con un certificado de pago; no es un virus.
 
-          Usa la gráfica dedicada (Vulkan). Se abre a pantalla completa; Alt+F4 para salir.
+          Requisitos mínimos: Windows 10/11 de 64 bits, procesador de 4 núcleos, 8 GB de RAM,
+          gráfica con Direct3D 12, Vulkan 1.0 u OpenGL 3.3 (integrada Intel UHD 620 / AMD Vega 8 o mejor).
+          Recomendado: 16 GB de RAM y gráfica dedicada tipo GTX 1050 Ti / RX 570 o mejor.
+
+          Si no se abre, sale en negro o se cierra:
+          - Abre "Carreteras (modo compatible).bat": arranca con OpenGL, que funciona en casi cualquier gráfica.
+          - Actualiza el driver de la gráfica y cierra superposiciones (Overwolf, RivaTuner/Afterburner, grabadores).
+          - En portátiles con dos gráficas: clic derecho > Ejecutar con procesador gráfico de alto rendimiento.
+          - Para saber qué pasa: %APPDATA%\Godot\app_userdata\Carreteras de España 1-1\logs\godot.log
+            y diagnostico.txt en esa misma carpeta (gráfica, driver y RAM que ve el juego).
+
+          La primera vez elige solo "Gráficos: bajo" si la gráfica es integrada o el PC es justo, y si con
+          "alto" va a menos de 30 FPS baja una vez a "bajo". Se puede cambiar en el menú. Alt+F4 para salir.
           EOF
-          cd build/windows && zip -q -9 ../Carreteras-windows.zip Carreteras.exe LEEME.txt
+          printf '@echo off\r\nrem Arranca Carreteras con OpenGL (para gráficas o drivers que no van con Direct3D 12 / Vulkan)\r\nstart "" "%%~dp0Carreteras.exe" --rendering-driver opengl3\r\n' > "build/windows/Carreteras (modo compatible).bat"
+          # todo lo que deje la exportación junto al .exe (DLL de ANGLE / Direct3D 12 si los hubiera) va en el zip
+          cd build/windows && zip -q -9 -r ../Carreteras-windows.zip .
           ls -la . ..
 
       - name: Publicar en la release (windows-latest o windows-mundo)

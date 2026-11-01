@@ -102,7 +102,7 @@ func preparar(d: MaDatos) -> void:
 	ruido = _ruido()
 	malla_conifera = _malla_arbol(true)
 	malla_frondosa = _malla_arbol(false)
-	norma = Ajustes.args.get("aspecto", "1") == "1"
+	norma = Ajustes.args.get("aspecto", "1") == "1" and Rendimiento.graficos_altos()   # Gráficos bajo: materiales sencillos
 	if norma:
 		# asfalto, marcas, arcenes y árboles con detalle (aspecto.gd): mismos shaders que las zonas
 		# biondas: gris de acero galvanizado algo más claro que antes; sin metal (con metal reflejaban el cielo y se

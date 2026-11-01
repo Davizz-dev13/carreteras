@@ -25,6 +25,11 @@ var _t_aparecer := 0.0
 var choques := 0
 
 
+## cuadros (coche × frame) en que algún coche estaba cediendo el paso a la entrada de una glorieta (pruebas)
+var cuadros_cediendo := 0
+var cuadros_ante_glorieta := 0   # cuadros (coche × frame) a menos de 30 m de entrar en un anillo (pruebas)
+
+
 func iniciar(r: MaRed, m: MaMundo, f: float) -> void:
 	red = r
 	mundo = m
@@ -161,6 +166,13 @@ func _mover(c: Dictionary, dt: float, jug_paso: Array, jug_d: float, jug_v: floa
 		if g < hueco:
 			hueco = g
 			v_lider = o["v"]
+	# glorieta: antes de entrar al anillo se cede el paso a quien ya circula por él
+	var ce := _ceda_glorieta(c, k, sd, L, sig, jug_paso, jug_d)
+	if ce < 1e4:
+		cuadros_cediendo += 1
+	if ce < hueco:
+		hueco = ce
+		v_lider = 0.0
 	if not jug_paso.is_empty():
 		var g := 1e4
 		if jug_paso[0] == k and jug_paso[1] == sd and jug_d > float(c["d"]):
@@ -231,3 +243,38 @@ func cerca_de(p: Vector3, radio: float) -> Array:
 		if (c["nodo"] as Node3D).position.distance_to(p) < radio:
 			r.append(c)
 	return r
+
+
+## Ceda el paso en las glorietas (en España, quien entra cede al que ya va por el anillo): si el coche c va a pasar de
+## un tramo normal a un tramo de anillo (rot) en los próximos 30 m y por el anillo viene alguien (otro coche o el
+## jugador) a menos de 24 m del punto de entrada y acercándose, se para 5 m antes. Quien va por el anillo no para.
+## Devuelve el hueco hasta el punto de parada (m) o 1e4.
+func _ceda_glorieta(c: Dictionary, k: int, sd: int, L: float, sig: Array, jug_paso: Array, jug_d: float) -> float:
+	if sig.is_empty() or int(sig[0]) < 0:
+		return 1e4
+	var dist := L - float(c["d"])
+	if dist > 30.0 or dist < 0.5:
+		return 1e4
+	var tramos: Array = red.datos.tramos
+	if int(tramos[k]["rot"]) == 1 or int(tramos[int(sig[0])]["rot"]) != 1:
+		return 1e4
+	cuadros_ante_glorieta += 1
+	var pn: Vector3 = red.punto(k, sd, L)[0]
+	for o in coches:
+		if o == c or int(tramos[int(o["k"])]["rot"]) != 1:
+			continue
+		if _viene_por_anillo((o["nodo"] as Node3D).position, red.punto(o["k"], o["sd"], o["d"])[1], pn):
+			return maxf(dist - 5.0, 0.3)
+	if not jug_paso.is_empty() and int(jug_paso[0]) >= 0 and int(tramos[int(jug_paso[0])]["rot"]) == 1:
+		var pj: Array = red.punto(jug_paso[0], jug_paso[1], jug_d)
+		if _viene_por_anillo(pj[0], pj[1], pn):
+			return maxf(dist - 5.0, 0.3)
+	return 1e4
+
+
+static func _viene_por_anillo(q: Vector3, t: Vector3, pn: Vector3) -> bool:
+	var dq := pn - q
+	if absf(dq.y) > 4.0:
+		return false
+	var dh := Vector2(dq.x, dq.z).length()
+	return dh > 1.0 and dh < 24.0 and Vector2(t.x, t.z).dot(Vector2(dq.x, dq.z)) > 0.0

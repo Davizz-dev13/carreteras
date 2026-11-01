@@ -296,14 +296,25 @@ def tesela(ti, tj):
         h = np.where(np.isnan(h), np.nanmin(h) if not np.isnan(h).all() else 600.0, h)
     if fina:
         # bajar el terreno bajo la calzada: a ≤ semiancho + 1,5 celdas, como mucho a 30 cm bajo la rasante
-        relleno = np.full_like(h, -np.inf); tajo = np.full_like(h, np.inf)
+        relleno = np.full_like(h, -np.inf); tajo = np.full_like(h, np.inf); bajo_puente = np.full_like(h, np.inf)
         for (k, i0, i1) in con_red[(ti, tj)]:
             it = info_tramos[k]
-            if it["puente"] or it["tunel"]: continue
+            if it["tunel"]: continue
             x = geo[k][1][i0:i1 + 1]; z = geo[k][2][i0:i1 + 1]; y = alt[k][i0:i1 + 1]
             hw = it["ancho"] * 0.5
             rad = hw + 1.5 * paso
             radr = hw + RELLENO_ANCHO
+            if it["puente"]:
+                # puente: solo se baja el terreno que asome por encima del tablero (rasante del puente bajo el MDT,
+                # p. ej. la M-406); ni terraplén ni tajo: bajo un puente de verdad el terreno ya queda debajo
+                for (px, pz, py) in zip(x, z, y):
+                    a0 = max(int((px - rad - xs[0]) / paso), 0); a1 = min(int((px + rad - xs[0]) / paso) + 1, nn - 1)
+                    b0 = max(int((pz - rad - zs[0]) / paso), 0); b1 = min(int((pz + rad - zs[0]) / paso) + 1, nn - 1)
+                    if a1 < a0 or b1 < b0: continue
+                    sub = bajo_puente[b0:b1 + 1, a0:a1 + 1]
+                    dd = np.hypot(xs[a0:a1 + 1][None, :] - px, zs[b0:b1 + 1][:, None] - pz)
+                    np.minimum(sub, np.where(dd <= rad, py - 0.3, np.inf), out=sub)
+                continue
             for (px, pz, py) in zip(x, z, y):
                 a0 = max(int((px - radr - xs[0]) / paso), 0); a1 = min(int((px + radr - xs[0]) / paso) + 1, nn - 1)
                 b0 = max(int((pz - radr - zs[0]) / paso), 0); b1 = min(int((pz + radr - zs[0]) / paso) + 1, nn - 1)
@@ -319,7 +330,7 @@ def tesela(ti, tj):
                 ts = tajo[b0:b1 + 1, a0:a1 + 1]
                 np.minimum(ts, np.where(dd <= hw + 0.75 * paso, py - 0.3, np.inf), out=ts)
         # el relleno manda salvo justo bajo otra calzada (la de abajo en un paso a distinto nivel sin puente en OSM)
-        h = np.minimum(np.maximum(h, relleno), tajo)
+        h = np.minimum(np.minimum(np.maximum(h, relleno), tajo), bajo_puente)
     dm = np.clip(np.round(h * 10), 0, 32000).astype(np.int32)
     dm[:, 1:] = np.diff(dm, axis=1)     # por filas: 1.ª columna absoluta (dm), resto diferencias → comprime ~2×
     dm = dm.astype("<i2")

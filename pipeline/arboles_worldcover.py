@@ -55,25 +55,35 @@ jj, ii = np.nonzero(arb & (rng.random(arb.shape) < P))   # candidatos a la densi
 E = Emin + (ii + rng.random(len(ii))) * R
 N = Nmax - (jj + rng.random(len(jj))) * R
 X = E - E0; Zc = N0 - N
-# calzadas
+# calzadas: rutas, glorietas y TODAS las vías (las de carreteras.json y las de vias_*.json), densificadas a ≤ 2 m
+def _densa(x, z, hw):
+    x = np.asarray(x, float); z = np.asarray(z, float); hw = np.broadcast_to(np.asarray(hw, float), x.shape)
+    if len(x) < 2: return np.column_stack([x, z]), hw.copy()
+    seg = np.hypot(np.diff(x), np.diff(z)); k = np.maximum(1, np.ceil(seg / 2).astype(int))
+    t = np.concatenate([i + np.arange(k[i]) / k[i] for i in range(len(x) - 1)] + [[len(x) - 1.0]])
+    ii = np.arange(len(x))
+    return np.column_stack([np.interp(t, ii, x), np.interp(t, ii, z)]), np.interp(t, ii, hw)
 C = json.load(open(os.path.join(d, "carreteras.json")))
 pts, hw = [], []
+def _anadir(x, z, h):
+    p, w = _densa(x, z, h); pts.append(p); hw.append(w)
 for r in C["rutas"]:
-    pts.append(np.column_stack([r["x"], r["z"]])); hw.append(np.asarray(r["ancho"], float) / 2)
+    _anadir(r["x"], r["z"], np.asarray(r["ancho"], float) / 2)
 for g in C.get("glorietas", []):
-    pts.append(np.column_stack([g["x"], g["z"]])); hw.append(np.full(len(g["x"]), float(g["hw"])))
+    _anadir(g["x"], g["z"], float(g["hw"]))
+vias = list(C.get("vias", []))
 for f in C.get("vias_archivos", []):
-    for v in json.load(open(os.path.join(d, f)))["vias"]:
-        x = np.asarray(v["x"]); z = np.asarray(v["z"])
-        # densificar a ≤ 4 m
-        seg = np.hypot(np.diff(x), np.diff(z)); k = np.maximum(1, np.ceil(seg / 4).astype(int))
-        xx = np.concatenate([np.linspace(x[i], x[i + 1], k[i], endpoint=False) for i in range(len(x) - 1)] + [x[-1:]])
-        zz = np.concatenate([np.linspace(z[i], z[i + 1], k[i], endpoint=False) for i in range(len(z) - 1)] + [z[-1:]])
-        pts.append(np.column_stack([xx, zz])); hw.append(np.full(len(xx), float(v["ancho"]) / 2))
+    vias += json.load(open(os.path.join(d, f)))["vias"]
+for v in vias:
+    _anadir(v["x"], v["z"], float(v["ancho"]) / 2)
 pts = np.vstack(pts); hw = np.concatenate(hw)
 kd = cKDTree(pts)
-dd, k = kd.query(np.column_stack([X, Zc]), distance_upper_bound=40)
-ok = ~np.isfinite(dd) | (dd > np.where(np.isfinite(dd), hw[np.minimum(k, len(hw) - 1)], 0) + 6.0)
+# margen libre = mín. sobre los 8 puntos de calzada más cercanos de (distancia − semiancho): una calzada ancha algo
+# más lejos puede tapar más que la estrecha más cercana
+dd, k = kd.query(np.column_stack([X, Zc]), k=8, distance_upper_bound=60)
+marg = np.where(np.isfinite(dd), dd - hw[np.minimum(k, len(hw) - 1)], np.inf).min(axis=1)
+ok = marg > 6.0
+print(f"{int((~ok).sum())} candidatos quitados por estar a menos de semiancho + 6 m de una calzada", flush=True)
 X, Zc = X[ok], Zc[ok]
 # densidad: P junto a la ruta (lo que se ve conduciendo), P_LEJOS más allá de BANDA m (se ve de lejos y en LOD)
 rp = np.vstack([np.column_stack([r["x"], r["z"]]) for r in C["rutas"]])

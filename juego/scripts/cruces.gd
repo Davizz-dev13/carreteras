@@ -49,7 +49,9 @@ static func preparar(rutas: Array, vias: Array) -> Dictionary:
 	vias.append_array(nuevas)
 	c.stats["ms_vias"] = Time.get_ticks_msec() - t0
 	c._parches(nodos)
+	var t_an := Time.get_ticks_msec()
 	c._anillos(Ajustes.glorietas)
+	c.stats["ms_anillos"] = Time.get_ticks_msec() - t_an
 	c._excavar_terreno(rutas, vias)
 	c.stats["ms"] = Time.get_ticks_msec() - t0
 	return c.stats
@@ -682,8 +684,119 @@ func _anillos(lista: Array) -> void:
 					fuera.append(q)
 				else:
 					dentro.append(q)
-		parches.append({"c": Vector3(c.x, c.y - PARCHE_BAJO, c.z), "borde": fuera, "interior": dentro, "ruta": false})
+		var pc := {"c": Vector3(c.x, c.y - PARCHE_BAJO, c.z), "borde": fuera, "interior": dentro, "ruta": false}
+		_marcas_anillo(p, c, hw, pc)
+		parches.append(pc)
 		stats["anillos"] += 1
+
+
+## Marcas del anillo (un solo sentido, antihorario): línea de borde exterior e interior (continuas, 15 cm) y, si caben
+## dos carriles (anchura ≥ 8,5 m), separación de carriles discontinua; NUNCA línea central de doble sentido. Las
+## líneas se interrumpen donde llega o sale un brazo (su asfalto pisa la línea). La línea de ceda el paso y el
+## triángulo de cada entrada van con las señales (marcas_ceda). Se guardan en el anillo: pc["marcas"] = [verts, idx].
+func _marcas_anillo(p: PackedVector3Array, c: Vector3, hw: float, pc: Dictionary) -> void:
+	var n := p.size()
+	var nrm := PackedVector3Array()
+	nrm.resize(n)
+	var radio := PackedFloat32Array()
+	radio.resize(n)
+	var ang := PackedFloat32Array()
+	ang.resize(n)
+	for i in n:
+		var r := Vector3(p[i].x - c.x, 0.0, p[i].z - c.z)
+		radio[i] = r.length()
+		ang[i] = atan2(r.z, r.x)
+		nrm[i] = r.normalized()
+	# radio del eje por sectores de 5° (para saber rápido si un trozo de calzada es del propio anillo)
+	var tabla := PackedFloat32Array()
+	tabla.resize(72)
+	var cuenta := PackedInt32Array()
+	cuenta.resize(72)
+	for i in n:
+		var b := clampi(int((ang[i] + PI) / TAU * 72.0), 0, 71)
+		tabla[b] += radio[i]
+		cuenta[b] += 1
+	var media := 0.0
+	for i in n:
+		media += radio[i] / float(n)
+	for b in 72:
+		tabla[b] = tabla[b] / cuenta[b] if cuenta[b] > 0 else media
+	var mv := PackedVector3Array()
+	var mi := PackedInt32Array()
+	var lineas := [[hw - 0.3, 0.0], [-(hw - 0.3), 0.0]]
+	if hw * 2.0 >= 8.5:
+		lineas.append([0.0, 12.5])
+	# alturas: las del borde del parche del anillo (ya calculadas con _h_asfalto en _anillos), sin volver a buscarlas
+	var alt_fuera: PackedVector3Array = pc["borde"]
+	var alt_dentro: PackedVector3Array = pc["interior"]
+	# una muestra de cada dos (tramos de ~2 m: de sobra para una línea en un anillo de radio ≥ 10 m; carga más rápida)
+	var paso := 2 if n >= 24 else 1
+	for ln in lineas:
+		var lat: float = ln[0]
+		var periodo: float = ln[1]
+		var s_acum := 0.0
+		var prev := Vector3.ZERO
+		var prev_ok := false
+		var k := 0
+		while k <= n:
+			var i := k % n
+			k += paso if k + paso <= n or k == n else n - k
+			var q := p[i] + nrm[i] * lat
+			var ok := not _brazo_pisa(q, p[i].y, c, tabla, ang)
+			if k > paso:
+				s_acum += Vector2(q.x - prev.x, q.z - prev.z).length()
+			if periodo > 0.0 and fmod(s_acum, periodo) > 3.5:
+				ok = false
+			var ha: Vector3 = alt_fuera[i] if lat >= 0.0 else alt_dentro[i]
+			var y := ha.y + PARCHE_BAJO + 0.09
+			if lat == 0.0:
+				y = maxf(alt_fuera[i].y, alt_dentro[i].y) + PARCHE_BAJO + 0.09
+			var qq := Vector3(q.x, y, q.z)
+			if ok and prev_ok:
+				var t := qq - prev
+				var der := Vector3(-t.z, 0.0, t.x).normalized() * 0.075
+				var b := mv.size()
+				mv.append_array([prev - der, prev + der, qq - der, qq + der])
+				# cara hacia arriba: mismo orden que las líneas de las calzadas (MapaStreaming._linea); al revés no se ven
+				mi.append_array([b, b + 2, b + 1, b + 1, b + 2, b + 3])
+			prev = qq
+			prev_ok = ok
+	if not mv.is_empty():
+		pc["marcas"] = [mv, mi]
+		stats["marcas_anillo"] = int(stats.get("marcas_anillo", 0)) + 1
+
+
+## ¿Pisa el punto q (sobre una línea del anillo) el asfalto de un brazo (calzada que no es el propio anillo)?
+func _brazo_pisa(q: Vector3, y_ref: float, c: Vector3, radio: PackedFloat32Array, ang: PackedFloat32Array) -> bool:
+	var lista: PackedInt32Array = celdas.get(Vector2i(floori(q.x / CELDA), floori(q.z / CELDA)), PackedInt32Array())
+	for k in lista:
+		var a := sa[k]
+		var b := sb[k]
+		var abx := b.x - a.x
+		var abz := b.z - a.z
+		var l2 := abx * abx + abz * abz
+		if l2 < 1e-6:
+			continue
+		var u := clampf(((q.x - a.x) * abx + (q.z - a.z) * abz) / l2, 0.0, 1.0)
+		if absf(a.y + (b.y - a.y) * u - y_ref) > 2.0:
+			continue
+		if Vector2(q.x - a.x - abx * u, q.z - a.z - abz * u).length() > shw[k] + 0.2:
+			continue
+		# ¿es un trozo del propio anillo? (sus dos extremos sobre el eje del anillo y paralelo a él)
+		if _en_eje_anillo(a, c, radio, ang) and _en_eje_anillo(b, c, radio, ang):
+			var rr := Vector2(a.x - c.x, a.z - c.z).normalized()
+			var tt := Vector2(abx, abz).normalized()
+			if absf(rr.dot(tt)) < 0.5:
+				continue
+		return true
+	return false
+
+
+static func _en_eje_anillo(x: Vector3, c: Vector3, radio: PackedFloat32Array, _ang: PackedFloat32Array) -> bool:
+	# radio: tabla de 72 sectores de 5° (ver _marcas_anillo)
+	var a := atan2(x.z - c.z, x.x - c.x)
+	var r := radio[clampi(int((a + PI) / TAU * 72.0), 0, 71)]
+	return absf(Vector2(x.x - c.x, x.z - c.z).length() - r) < 1.6
 
 
 # ---------------- terreno: hundirlo bajo las calzadas ----------------
@@ -708,10 +821,12 @@ func _excavar_terreno(rutas: Array, vias: Array) -> void:
 		var r: Ruta = rr
 		for i in r.n:
 			var usado: bool = (i < r.n - 1 and r.dibujar[i] == 1) or (i > 0 and r.dibujar[i - 1] == 1)
-			if usado and r.puente[i] == 0 and r.tunel[i] == 0:
+			# también bajo los puentes: si el terreno asoma por encima del tablero (puente de OSM con la rasante casi
+			# a ras de suelo, p. ej. la M-406) se baja igual; bajo un puente alto el terreno ya queda debajo y no se toca
+			if usado and r.tunel[i] == 0:
 				_secciones(muestras, r.pts[i], _tan(r.pts, i), r.ancho[i] * 0.5)
 	for v in vias:
-		if int(v.get("tunel", 0)) == 1 or int(v.get("puente", 0)) == 1:
+		if int(v.get("tunel", 0)) == 1:
 			continue
 		var pts: PackedVector3Array = v["pts"]
 		var hw := float(v["ancho"]) * 0.5

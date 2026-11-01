@@ -635,7 +635,7 @@ func _camara(dt: float) -> void:
 	fw.y = 0.0
 	fw = fw.normalized() if fw.length() > 0.01 else coche.adelante()
 	if Ajustes.camara == 1:
-		var o: Array = Catalogo.modelo_de(coche.ficha).get("ojos", [-0.37, 1.12, 0.25])
+		var o: Array = Catalogo.modelo_de(coche.ficha).get("ojos", [-0.37, 1.24, 0.25])
 		cam.global_transform = Transform3D(tc.basis, pos + tc.basis * Vector3(float(o[0]), float(o[1]), float(o[2])))
 		mando.girar_cabeza(cam)                 # joystick derecho: mirar alrededor
 		cam.fov = 75.0

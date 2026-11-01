@@ -88,6 +88,8 @@ func cargar() -> void:
 	glorietas = car.get("glorietas", [])
 	_lineas_adelantar()
 	_cargar_carriles()
+	for r in rutas:
+		r.cargar_glorietas(glorietas)   # arcos de glorieta de un solo sentido y desvíos del sentido contrario (ruta.gd)
 	# zonas grandes: las vías secundarias van repartidas en varios archivos (≤ 3 MB cada uno)
 	var lista_vias: Array = car["vias"].duplicate()
 	for nombre in car.get("vias_archivos", []):

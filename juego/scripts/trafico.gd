@@ -13,6 +13,7 @@ const A_MAX := 1.4            # IDM: aceleración máxima (m/s²)
 const B_COMODA := 2.2         # IDM: frenada cómoda (m/s²)
 const T_SEG := 1.5            # IDM: tiempo de seguridad (s)
 const S0 := 3.0               # IDM: distancia mínima parado (m)
+var pos_jug := Vector3(INF, INF, INF)   # posición del jugador (la pone juego.gd): también se le cede el paso
 const A_LAT := 2.6            # aceleración lateral de referencia (m/s²); cada conductor lleva la suya (alat)
 
 ## --- Velocidad deseada de cada conductor (ver README, «Tráfico: velocidades») ---
@@ -59,7 +60,12 @@ func vel_curva(s: float, dir: int, a_lat: float, horizonte := 160.0) -> float:
 	var d := 0.0
 	while d <= horizonte:
 		var k := absf(ruta.valor(ruta.curvatura, s + dir * d))
-		var vk := sqrt(a_lat / maxf(k, 1e-5))
+		var kd := ruta.curv_desvio(s + dir * d, dir)
+		var al := a_lat
+		if kd > 0.0:
+			k = kd             # por el resto del anillo de una glorieta (desvío del sentido contrario)
+			al = a_lat * 0.7   # entrada y salida de la glorieta: más suave (sin derrapes del piloto)
+		var vk := sqrt(al / maxf(k, 1e-5))
 		vmin = minf(vmin, sqrt(vk * vk + 2.0 * B_COMODA * d))
 		d += 5.0
 	return vmin
@@ -90,7 +96,15 @@ func _actualizar(dt: float, s_jug: float, lat_jug: float, v_jug: float, dir_jug_
 	# --- aparecer / desaparecer ---
 	for i in range(coches.size() - 1, -1, -1):
 		var c: Dictionary = coches[i]
-		if absf(c["s"] - s_jug) > RADIO + 250.0 or c["s"] < 0.0 or c["s"] > ruta.longitud():
+		# coche suelto tras un golpe y ya parado: se retira a los 10 s (si no, el piloto se quedaba atascado detrás)
+		if c.get("suelto", false):
+			var vs: Vector2 = c.get("v2", Vector2.ZERO)
+			c["t_parado"] = float(c.get("t_parado", 0.0)) + dt if vs.length() < 0.3 else 0.0
+			if float(c["t_parado"]) > 10.0:
+				c["nodo"].queue_free()
+				coches.remove_at(i)
+				continue
+		if absf(c["s"] - s_jug) > RADIO + 250.0 or c["s"] < maxf(0.0, ruta.s_trafico_min - 1.0) or c["s"] > minf(ruta.longitud(), ruta.s_trafico_max + 1.0):
 			c["nodo"].queue_free()
 			coches.remove_at(i)
 	var objetivo := int(clampf(factor, 0.0, 1.0) * 2.0 * RADIO / HUECO_100)
@@ -109,7 +123,7 @@ func _actualizar(dt: float, s_jug: float, lat_jug: float, v_jug: float, dir_jug_
 				if absf(s - s_jug) < 60.0: continue
 			else:
 				s = s_jug + (rng.randf_range(RADIO * 0.7, RADIO) * (1 if rng.randf() < 0.5 else -1))
-			if s < 5.0 or s > ruta.longitud() - 5.0: continue
+			if s < maxf(5.0, ruta.s_trafico_min) or s > minf(ruta.longitud() - 5.0, ruta.s_trafico_max): continue
 			var libre := true
 			for c in coches:
 				if c["dir"] == dir and absf(c["s"] - s) < 35.0: libre = false
@@ -140,6 +154,24 @@ func _actualizar(dt: float, s_jug: float, lat_jug: float, v_jug: float, dir_jug_
 			if d > 0.0 and d - largo < hueco:
 				hueco = d - largo
 				v_lider = v_jug
+		# cerca de una glorieta (zona de desvíos) el jugador puede cruzarse por delante al salir del anillo por el
+		# desvío: si está físicamente en la trayectoria (12 m por delante, ±1,7 m), se frena en vez de embestirlo
+		c["cede_jug"] = false
+		if pos_jug.x != INF and _cerca_de_desvio(s):
+			var nodo_c: Node3D = c["nodo"]
+			var tg := ruta.marcha_carril(s, dir)
+			var fw := Vector2(tg.x, tg.z).normalized()
+			var rel := Vector2(pos_jug.x - nodo_c.position.x, pos_jug.z - nodo_c.position.z)
+			var delante := rel.dot(fw)
+			if delante > 0.0 and delante < 12.0 and absf(rel.cross(fw)) < 1.7 and delante - largo < hueco:
+				hueco = delante - largo
+				v_lider = 0.0
+				c["cede_jug"] = true     # el piloto no le espera a él (sin bloqueos mutuos)
+		# glorietas: ceder el paso a quien ya circula por el anillo (parada antes de la entrada)
+		var ceda := _ceda(c)
+		if ceda < hueco:
+			hueco = ceda
+			v_lider = 0.0
 		if c.get("fijo", false):
 			continue          # coche de prueba (verificación): mantiene su velocidad
 		var v0: float = minf(c["v0"], c["vc"])
@@ -150,7 +182,7 @@ func _actualizar(dt: float, s_jug: float, lat_jug: float, v_jug: float, dir_jug_
 	for c in coches:
 		if c.get("suelto", false):
 			continue          # tras un choque se mueve como cuerpo libre (Colisiones.mover_sueltos)
-		c["s"] += c["v"] * c["dir"] * dt
+		c["s"] += c["v"] * c["dir"] * dt * ruta.escala_carril(c["s"], c["dir"])
 		_colocar(c)
 		Catalogo.animar_ruedas(c["modelo"], c["v"] * dt, 0.0)
 
@@ -224,8 +256,9 @@ func vel_deseada(s: float, dir: int, f: float) -> float:
 func _colocar(c: Dictionary) -> void:
 	var s: float = c["s"]
 	var dir: int = c["dir"]
-	var p := ruta.punto(s) + ruta.derecha(s) * carril_lateral(s, dir) + Vector3.UP * 0.05
-	var t := ruta.tangente(s) * dir
+	# punto_carril: el carril de su sentido; en una glorieta, el sentido contrario va por el resto del anillo
+	var p := ruta.punto_carril(s, dir) + Vector3.UP * 0.05
+	var t := ruta.marcha_carril(s, dir)
 	var nodo: Node3D = c["nodo"]
 	nodo.position = p
 	nodo.basis = Basis.looking_at(t, Vector3.UP)
@@ -243,3 +276,84 @@ func cerca_de(p: Vector3, radio: float) -> Array:
 		if (c["nodo"].position as Vector3).distance_to(p) < radio:
 			r.append(c)
 	return r
+
+
+# ---------------------------------------------------------------- glorietas: ceda el paso
+const CEDA_MIRA := 26.0       # m de anillo, antes del punto de entrada, que mira el que va a entrar
+const CEDA_ANTES := 30.0      # a partir de esta distancia a la entrada se empieza a mirar
+
+## Distancia (en m de la ruta, hacia delante) hasta donde tiene que parar el coche c para ceder el paso al entrar a
+## un anillo, o 1e4 si puede pasar. Dos casos: (1) va por la ruta y entra al arco de la glorieta que recorre la ruta;
+## (2) va por un desvío (sentido contrario) y se incorpora al anillo. Quien ya va por el anillo nunca para.
+func _ceda(c: Dictionary) -> float:
+	return _ceda_en(c["s"], c["dir"], c, true)
+
+
+## Lo mismo para el piloto del jugador (en s, sentido dir): cede a los coches del tráfico que ya van por el anillo
+func ceda_paso(s: float, dir: int) -> float:
+	return _ceda_en(s, dir, {}, false)
+
+
+func _ceda_en(s: float, dir: int, c: Dictionary, mirar_jugador: bool) -> float:
+	if ruta.arcos_glorieta.is_empty():
+		return 1e4
+	var kd := ruta.desvio_en(s, dir)
+	if kd >= 0:
+		var dv: Dictionary = ruta.desvios[kd]
+		var u := ruta.u_desvio(kd, s)
+		var u_ent: float = dv["u_ent"]
+		if u > u_ent - 1.0 or u < u_ent - CEDA_ANTES:
+			return 1e4
+		var p_ent := ruta.punto_desvio(kd, u_ent)
+		if _anillo_ocupado(p_ent, dv["c"], dv["radio"], c, mirar_jugador):
+			return (u_ent - 3.0 - u) * ruta.escala_carril(s, dir)
+		return 1e4
+	for ar in ruta.arcos_glorieta:
+		if int(ar["sentido"]) != dir:
+			continue
+		var s_e: float = (float(ar["a"]) if dir > 0 else float(ar["b"])) * ruta.paso
+		var dd := (s_e - s) * dir
+		if dd <= 2.0 or dd > CEDA_ANTES:
+			continue
+		var p_e := ruta.punto(s_e)
+		var cc := Vector3.ZERO
+		var rr := 0.0
+		for dv in ruta.desvios:
+			if int(dv["g"]) == int(ar["g"]):
+				cc = dv["c"]
+				rr = dv["radio"]
+		if rr <= 0.0:
+			continue
+		if _anillo_ocupado(p_e, cc, rr, c, mirar_jugador):
+			return maxf(dd - 6.0, 0.5)
+	return 1e4
+
+
+## ¿Viene alguien por el anillo (centro cc, radio rr) en los CEDA_MIRA m antes del punto p (aguas arriba en sentido
+## antihorario)? Mira los demás coches del tráfico y al jugador.
+func _anillo_ocupado(p: Vector3, cc: Vector3, rr: float, yo: Dictionary, mirar_jugador := true) -> bool:
+	var th_p := atan2(-(p.z - cc.z), p.x - cc.x)
+	var dth := CEDA_MIRA / maxf(rr, 5.0)
+	for o in coches:
+		if o == yo:
+			continue
+		if _en_anillo_antes(o["nodo"].position, cc, rr, th_p, dth):
+			return true
+	return mirar_jugador and pos_jug.x != INF and _en_anillo_antes(pos_jug, cc, rr, th_p, dth)
+
+
+static func _en_anillo_antes(q: Vector3, cc: Vector3, rr: float, th_p: float, dth: float) -> bool:
+	var d := Vector2(q.x - cc.x, q.z - cc.z).length()
+	if absf(d - rr) > 5.5 or absf(q.y - cc.y) > 6.0:
+		return false
+	var th := atan2(-(q.z - cc.z), q.x - cc.x)
+	var atras := wrapf(th_p - th, -PI, PI)      # > 0: q está antes que p en sentido antihorario
+	return atras > 0.05 and atras < dth
+
+
+## ¿Está s dentro de la zona de algún desvío de glorieta (de cualquier sentido)?
+func _cerca_de_desvio(s: float) -> bool:
+	for dv in ruta.desvios:
+		if s >= float(dv["s_lo"]) - 15.0 and s <= float(dv["s_hi"]) + 15.0:
+			return true
+	return false

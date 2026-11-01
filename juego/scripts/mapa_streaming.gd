@@ -245,6 +245,13 @@ func _piezas_ruta(r: Ruta) -> void:
 			if r.bajo[i] == 1:
 				borde[i] = 0
 				patron[i] = 0
+	# dentro del borde exterior de una glorieta no se pintan las líneas de la ruta (ni eje de doble sentido en el
+	# anillo, que es de un solo sentido): el anillo lleva las suyas (Cruces._marcas_anillo)
+	if r.dentro_glorieta.size() == r.n:
+		for i in r.n:
+			if r.dentro_glorieta[i] == 1:
+				borde[i] = 0
+				patron[i] = 0
 	var i := 0
 	while i < r.n - 1:
 		if r.dibujar[i] == 0:
@@ -354,12 +361,24 @@ static func tri_parche(pc: Dictionary, verts: PackedVector3Array, nor: PackedVec
 func _trozo_parches(pz: Dictionary) -> Node3D:
 	var v := PackedVector3Array(); var n := PackedVector3Array(); var ix := PackedInt32Array()
 	var v2 := PackedVector3Array(); var n2 := PackedVector3Array(); var ix2 := PackedInt32Array()
+	var mv := PackedVector3Array(); var mn := PackedVector3Array(); var mi := PackedInt32Array()
 	for pc in pz["parches"]:
 		if pc["ruta"]:
 			tri_parche(pc, v, n, ix)
 		else:
 			tri_parche(pc, v2, n2, ix2)
-	return _instancia(_malla([[v, n, ix, mundo.mat_asfalto], [v2, n2, ix2, mundo.mat_asfalto2]]), DIST_CALZADA)
+		if pc.has("marcas"):
+			# líneas del anillo de la glorieta (Cruces._marcas_anillo): bordes y separación de carriles, sin eje
+			var b0 := mv.size()
+			mv.append_array(pc["marcas"][0])
+			for q in (pc["marcas"][0] as PackedVector3Array).size():
+				mn.append(Vector3.UP)
+			for t in (pc["marcas"][1] as PackedInt32Array):
+				mi.append(b0 + t)
+	var sup := [[v, n, ix, mundo.mat_asfalto], [v2, n2, ix2, mundo.mat_asfalto2]]
+	if not mv.is_empty():
+		sup.append([mv, mn, mi, mundo.mat_marca])
+	return _instancia(_malla(sup), DIST_CALZADA)
 
 
 # ---------------------------------------------------------------- terreno

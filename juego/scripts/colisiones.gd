@@ -141,7 +141,7 @@ func _cuerpo_trafico(t: Dictionary) -> Dictionary:
 	var fi: Ficha = tr.ficha_trafico
 	var nodo: Node3D = t["nodo"]
 	if not t.get("suelto", false):
-		var tg: Vector3 = tr.ruta.tangente(t["s"]) * t["dir"]
+		var tg: Vector3 = tr.ruta.marcha_carril(t["s"], t["dir"])     # en una glorieta, la dirección del desvío
 		var f := Vector2(tg.x, tg.z).normalized()
 		t["f2"] = f
 		t["v2"] = f * t["v"]

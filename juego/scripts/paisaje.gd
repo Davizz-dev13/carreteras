@@ -140,6 +140,7 @@ static func _ruido() -> NoiseTexture2D:
 ## Llamar desde Mundo.construir() después de _cielo(): relieve lejano + bruma
 func preparar(mundo: Node3D, material: Material) -> void:
 	if not activo():
+		set_process(false)   # sin esto alargaba igual la cámara a 75 km antes de borrarse (Gráficos bajo y web)
 		queue_free()
 		return
 	name = "Paisaje"
