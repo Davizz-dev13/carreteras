@@ -23,6 +23,8 @@ PASO_FINO = 10.0        # m del terreno en teselas con carretera (MDT05)
 PASO_GRUESO = 25.0      # m del terreno en teselas sin carretera (MDT25)
 MARGEN_TES = 6000.0     # teselas hasta 6 km de alguna carretera
 PASO_HOR = 200.0
+RELLENO_ANCHO = 20.0    # m más allá del borde de la calzada hasta donde se rellena el terreno (terraplén)
+RELLENO_TALUD = 0.6     # m de bajada por m de distancia del terraplén
 t00 = time.time()
 def log(*a): print(f"[{time.time()-t00:6.0f} s]", *a, flush=True)
 
@@ -146,6 +148,73 @@ for k, (t, g) in enumerate(zip(tramos, geo)):
         y = z + (ha - z[0]) * (1 - s / max(s[-1], 0.01)) + (hb - z[-1]) * (s / max(s[-1], 0.01))
     alt.append(y.astype(np.float32))
 
+# ---------------- gálibo en los cruces a distinto nivel: el tablero del puente iba en línea recta entre sus dos
+# extremos y la vía de abajo con el MDT, así que en 224 de 1207 cruces quedaban a < 3,5 m (alguno con la de abajo por
+# encima). Se exige GALIBO m (5 m libres + canto) subiendo el de arriba con una joroba suave (extremos fijos, pendiente
+# ≤ PEND_MAX) y, lo que falte, bajando la de abajo igual.
+GALIBO = 6.0; PEND_MAX = 0.08; ALCANCE = 200.0
+def nivel(t):
+    tg = t["tags"]
+    try: capa = float(tg.get("layer", "0").split(";")[0])
+    except ValueError: capa = 0.0
+    if tg.get("bridge", "no") not in ("no", ""): capa += 0.5
+    if tg.get("tunnel", "no") not in ("no", "") or tg.get("covered") == "yes": capa -= 0.5
+    return capa
+def joroba(k, sc, cuanto):
+    """Sube (cuanto > 0) o baja el tramo k alrededor de la abscisa sc; devuelve lo conseguido en sc."""
+    s = geo[k][0]; L = s[-1]
+    if L < 1.0: return 0.0
+    w0 = min(sc, ALCANCE); w1 = min(L - sc, ALCANCE)
+    tope = PEND_MAX * min(w0, w1) / 1.5          # smoothstep: pendiente máx. = 1,5 × media
+    c = float(np.clip(cuanto, -tope, tope))
+    if abs(c) < 0.01: return 0.0
+    f = np.zeros_like(s)
+    m0 = (s <= sc) & (s > sc - w0); u = (s[m0] - (sc - w0)) / max(w0, 1e-3); f[m0] = u * u * (3 - 2 * u)
+    m1 = (s > sc) & (s < sc + w1); u = ((sc + w1) - s[m1]) / max(w1, 1e-3); f[m1] = u * u * (3 - 2 * u)
+    alt[k] = (alt[k] + c * f).astype(np.float32)
+    return c
+celdas_g = collections.defaultdict(list)
+for k, g in enumerate(geo):
+    for i in range(len(g[0]) - 1):
+        celdas_g[(int(g[1][i] // 50), int(g[2][i] // 50))].append((k, i))
+def _corta(a, b, c, d):
+    r = (b - a); q = (d - c); den = r[0] * q[1] - r[1] * q[0]
+    if abs(den) < 1e-9: return None
+    t = ((c[0] - a[0]) * q[1] - (c[1] - a[1]) * q[0]) / den; u = ((c[0] - a[0]) * r[1] - (c[1] - a[1]) * r[0]) / den
+    return (t, u) if 0 <= t <= 1 and 0 <= u <= 1 else None
+cruces_n = []
+vistos = set()
+for cel, lista in celdas_g.items():
+    for x1 in range(len(lista)):
+        k1, i1 = lista[x1]
+        for x2 in range(x1 + 1, len(lista)):
+            k2, i2 = lista[x2]
+            if k1 == k2: continue
+            n1, n2 = nivel(tramos[k1]), nivel(tramos[k2])
+            if n1 == n2: continue
+            t1, t2 = tramos[k1], tramos[k2]
+            if {t1["nodos"][0], t1["nodos"][-1]} & {t2["nodos"][0], t2["nodos"][-1]}: continue
+            g1, g2 = geo[k1], geo[k2]
+            r = _corta(np.array([g1[1][i1], g1[2][i1]]), np.array([g1[1][i1 + 1], g1[2][i1 + 1]]),
+                       np.array([g2[1][i2], g2[2][i2]]), np.array([g2[1][i2 + 1], g2[2][i2 + 1]]))
+            if r is None: continue
+            arriba, abajo, ia, ib, ta, tb = (k1, k2, i1, i2, r[0], r[1]) if n1 > n2 else (k2, k1, i2, i1, r[1], r[0])
+            if (arriba, abajo) in vistos: continue
+            vistos.add((arriba, abajo))
+            sa = geo[arriba][0][ia] + ta * (geo[arriba][0][ia + 1] - geo[arriba][0][ia])
+            sb = geo[abajo][0][ib] + tb * (geo[abajo][0][ib + 1] - geo[abajo][0][ib])
+            cruces_n.append((arriba, sa, abajo, sb))
+def alt_en(k, sc): return float(np.interp(sc, geo[k][0], alt[k]))
+antes = [alt_en(a, sa) - alt_en(b, sb) for (a, sa, b, sb) in cruces_n]
+for it in range(3):
+    for (a, sa, b, sb) in cruces_n:
+        falta = GALIBO - (alt_en(a, sa) - alt_en(b, sb))
+        if falta <= 0.05: continue
+        falta -= joroba(a, sa, falta)
+        if falta > 0.05: joroba(b, sb, -falta)
+despues = [alt_en(a, sa) - alt_en(b, sb) for (a, sa, b, sb) in cruces_n]
+log(f"cruces a distinto nivel: {len(cruces_n)}; con gálibo < 3,5 m antes {sum(1 for v in antes if v < 3.5)}, después {sum(1 for v in despues if v < 3.5)} (< {GALIBO - 0.1:.1f} m: {sum(1 for v in despues if v < GALIBO - 0.1)})")
+
 # ---------------- atributos de cada tramo
 CLASES = ["motorway", "trunk", "primary", "secondary", "tertiary"]
 def carriles(tg, base):
@@ -227,18 +296,30 @@ def tesela(ti, tj):
         h = np.where(np.isnan(h), np.nanmin(h) if not np.isnan(h).all() else 600.0, h)
     if fina:
         # bajar el terreno bajo la calzada: a ≤ semiancho + 1,5 celdas, como mucho a 30 cm bajo la rasante
+        relleno = np.full_like(h, -np.inf); tajo = np.full_like(h, np.inf)
         for (k, i0, i1) in con_red[(ti, tj)]:
             it = info_tramos[k]
             if it["puente"] or it["tunel"]: continue
             x = geo[k][1][i0:i1 + 1]; z = geo[k][2][i0:i1 + 1]; y = alt[k][i0:i1 + 1]
-            rad = it["ancho"] * 0.5 + 1.5 * paso
+            hw = it["ancho"] * 0.5
+            rad = hw + 1.5 * paso
+            radr = hw + RELLENO_ANCHO
             for (px, pz, py) in zip(x, z, y):
-                a0 = max(int((px - rad - xs[0]) / paso), 0); a1 = min(int((px + rad - xs[0]) / paso) + 1, nn - 1)
-                b0 = max(int((pz - rad - zs[0]) / paso), 0); b1 = min(int((pz + rad - zs[0]) / paso) + 1, nn - 1)
+                a0 = max(int((px - radr - xs[0]) / paso), 0); a1 = min(int((px + radr - xs[0]) / paso) + 1, nn - 1)
+                b0 = max(int((pz - radr - zs[0]) / paso), 0); b1 = min(int((pz + radr - zs[0]) / paso) + 1, nn - 1)
                 if a1 < a0 or b1 < b0: continue
                 sub = h[b0:b1 + 1, a0:a1 + 1]
                 dd = np.hypot(xs[a0:a1 + 1][None, :] - px, zs[b0:b1 + 1][:, None] - pz)
                 np.minimum(sub, np.where(dd <= rad, py - 0.3, np.inf), out=sub)
+                # terraplén: el terreno no queda más de 30 cm bajo la calzada (talud 1:1,6 hacia fuera); sin esto, el
+                # desmonte de una vía que pasa por debajo (o un hueco del MDT: obras de drenaje) dejaba la de arriba
+                # en el aire, con sus taludes colgando
+                rs = relleno[b0:b1 + 1, a0:a1 + 1]
+                np.maximum(rs, np.where(dd <= radr, py - 0.3 - RELLENO_TALUD * np.maximum(dd - hw - 1.0, 0.0), -np.inf), out=rs)
+                ts = tajo[b0:b1 + 1, a0:a1 + 1]
+                np.minimum(ts, np.where(dd <= hw + 0.75 * paso, py - 0.3, np.inf), out=ts)
+        # el relleno manda salvo justo bajo otra calzada (la de abajo en un paso a distinto nivel sin puente en OSM)
+        h = np.minimum(np.maximum(h, relleno), tajo)
     dm = np.clip(np.round(h * 10), 0, 32000).astype(np.int32)
     dm[:, 1:] = np.diff(dm, axis=1)     # por filas: 1.ª columna absoluta (dm), resto diferencias → comprime ~2×
     dm = dm.astype("<i2")

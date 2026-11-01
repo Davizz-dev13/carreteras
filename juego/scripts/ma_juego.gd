@@ -15,12 +15,16 @@ var cargado := false
 var tiempo := 0.0
 var choques := 0
 var toques_bionda := 0           # pasos de física tocando una bionda (pruebas)
+var reenganches := 0             # veces que el piloto se ha recolocado en su camino (pruebas)
+var traza_cruces := false        # --traza_cruces=1: escribe cada decisión del piloto en un cruce (pruebas)
 
 # piloto automático: camino por delante [[tramo, sentido], ...]; d = metros recorridos del primero
 var camino: Array = []
 var d_camino := 0.0
 var lat_camino := 0.0
 var preferencia := 0          # próximo cruce: -1 izquierda, 0 seguir, +1 derecha
+var pref_en: Array = []       # paso [tramo, sentido] a cuyo final se aplicó la preferencia ([] = aún no)
+var t_perdido := 0.0          # s del piloto fuera del camino o parado sin motivo (para reengancharlo)
 var tramo_actual := -1
 
 var hud := CanvasLayer.new()
@@ -46,6 +50,7 @@ func _ready() -> void:
 	await get_tree().process_frame
 	var t0 := Time.get_ticks_msec()
 	_leer_args()
+	traza_cruces = Ajustes.args.get("traza_cruces", "0") == "1"
 	if not datos.cargar(str(Ajustes.args.get("region", "madrid"))):
 		cargando.text = "Faltan los datos del mapa abierto (datos/madrid)."
 		return
@@ -149,7 +154,20 @@ func _seguir_camino() -> void:
 	var pr := _proyectar(k, sd, coche.position, d_camino)
 	d_camino = pr.x
 	lat_camino = pr.y
-	if absf(lat_camino) > 25.0:
+	if piloto:
+		# el piloto no suelta el camino: si se ha abierto (rampa o glorieta cerrada) vuelve a él; si tras 4 s sigue
+		# lejos o parado, se le recoloca en el carril (como R). Antes se borraba el camino y, fuera del asfalto, no
+		# encontraba vía y se quedaba parado para siempre.
+		var perdido := absf(lat_camino) > 8.0 or (absf(coche.v) < 0.5 and coche.freno < 0.05)
+		t_perdido = t_perdido + 1.0 / 60.0 if perdido else 0.0
+		if t_perdido > 4.0 or absf(lat_camino) > 40.0:
+			t_perdido = 0.0
+			reenganches += 1
+			if traza_cruces:
+				print("REENGANCHE t=%.0f %s lat=%.1f v=%.1f km/h pos=%.0f,%.0f" % [tiempo, datos.rotulo(k), lat_camino, coche.v * 3.6, coche.position.x, coche.position.z])
+			_colocar_en(k, sd, clampf(d_camino, 0.0, red.longitud(k)))
+			return
+	elif absf(lat_camino) > 25.0:
 		# se ha salido del camino (conducción manual por otra vía): volver a calcularlo desde donde esté
 		camino.clear()
 		_reengancharse()
@@ -160,9 +178,18 @@ func _seguir_camino() -> void:
 		var p2 := _proyectar(camino[0][0], camino[0][1], coche.position, d_camino)
 		d_camino = p2.x
 		lat_camino = p2.y
-		if preferencia != 0:
-			preferencia = 0     # la preferencia se gasta en el primer cruce con opciones (ver _alargar_camino)
+		if not pref_en.is_empty() and camino.size() > 0 and _pasado(pref_en):
+			preferencia = 0     # la preferencia se gasta en el cruce donde se aplicó (ver _alargar_camino)
+			pref_en = []
 	_alargar_camino()
+
+
+## ¿Ya no está el paso p en el camino por delante? (se ha pasado el cruce al final de p)
+func _pasado(p: Array) -> bool:
+	for e in camino:
+		if e[0] == p[0] and e[1] == p[1]:
+			return false
+	return true
 
 
 func _reengancharse() -> void:
@@ -187,18 +214,39 @@ func _alargar_camino() -> void:
 	while i < camino.size():
 		total += red.longitud(camino[i][0])
 		i += 1
-	var usada := false
 	while total < 600.0 and camino.size() < 40:
 		var u: Array = camino[camino.size() - 1]
+		var op := red.salidas(u[0], u[1])
+		var a_glorieta := false
+		if not red.es_glorieta(u[0]):
+			for o in op:
+				if red.es_glorieta(o[0]):
+					a_glorieta = true
+		# Q/E: solo en el próximo cruce de verdad (bifurcación o glorieta) y una sola vez: antes se volvía a aplicar
+		# en cada cruce que se añadía al camino hasta pasar el primer tramo, y el piloto se iba por varias salidas
 		var pref := 0
-		if not usada and preferencia != 0 and red.salidas(u[0], u[1]).size() >= 2:
+		if pref_en.is_empty() and preferencia != 0 and (op.size() >= 2 or a_glorieta):
 			pref = preferencia
-			usada = true
-		var e := red.elegir(u[0], u[1], pref)
-		if e.is_empty():
+			pref_en = [u[0], u[1]]
+		var nuevos: Array = []
+		if a_glorieta:
+			nuevos = red.glorieta(u[0], u[1], pref)     # rodearla en su sentido hasta la salida
+		if nuevos.is_empty():
+			var e: Array = red.elegir(u[0], u[1], pref)
+			if not e.is_empty():
+				nuevos = [e]
+		if nuevos.is_empty():
 			break
-		camino.append([e[0], e[1]])
-		total += red.longitud(e[0])
+		if traza_cruces and (op.size() >= 2 or a_glorieta):
+			var alts: Array = []
+			for o in op:
+				alts.append("%s%s(%d°)" % [datos.rotulo(o[0]), "·enl" if int(datos.tramos[o[0]]["enlace"]) == 1 else "", roundi(rad_to_deg(o[2]))])
+			var fin: Array = nuevos[nuevos.size() - 1]
+			print("CRUCE t=%.0f %s%s → %s%s%s [%d pasos] pref=%d · opciones %s" % [tiempo, datos.rotulo(u[0]), "·enl" if int(datos.tramos[u[0]]["enlace"]) == 1 else "",
+					datos.rotulo(fin[0]), "·enl" if int(datos.tramos[fin[0]]["enlace"]) == 1 else "", " (glorieta)" if a_glorieta else "", nuevos.size(), pref, ", ".join(alts)])
+		for e in nuevos:
+			camino.append([e[0], e[1]])
+			total += red.longitud(e[0])
 
 
 ## Recalcular el camino por delante del tramo actual (al cambiar la preferencia de cruce)
@@ -206,6 +254,7 @@ func _replanificar() -> void:
 	if camino.is_empty():
 		return
 	camino = [camino[0]]
+	pref_en = []
 	_alargar_camino()
 
 
@@ -573,7 +622,7 @@ func _captura() -> void:
 				f.flush()
 			await get_tree().process_frame
 		f.close()
-		print("MA_FIN km=%.1f tiempo=%.0f s fuera=%.1f s choques=%d biondas=%d real=%d s" % [km, tiempo, fuera, choques, toques_bionda, (Time.get_ticks_msec() - t0) / 1000])
+		print("MA_FIN km=%.1f tiempo=%.0f s fuera=%.1f s choques=%d biondas=%d reenganches=%d real=%d s" % [km, tiempo, fuera, choques, toques_bionda, reenganches, (Time.get_ticks_msec() - t0) / 1000])
 		get_tree().quit()
 		return
 	var presim := float(Ajustes.args.get("presim", "5"))

@@ -691,8 +691,11 @@ static func _otra_calzada(p: Vector3, k_propio: int, ignorar: Dictionary, sa: Pa
 		return false
 	for s in lista:
 		var ks := sk[s]
-		if ks == k_propio or ignorar.has(ks):
+		if ks == k_propio:
 			continue
+		# continuación del mismo tramo: solo corta si la valla se mete en su asfalto (curva cerrada en el nodo,
+		# p. ej. una avenida que gira 90°: la valla interior cruzaba la calzada y el coche se quedaba parado)
+		var margen := -0.2 if ignorar.has(ks) else 0.6
 		var q0 := sa[s]
 		var q1 := sb[s]
 		var ab := Vector2(q1.x - q0.x, q1.z - q0.z)
@@ -702,7 +705,7 @@ static func _otra_calzada(p: Vector3, k_propio: int, ignorar: Dictionary, sa: Pa
 			u = clampf(((p.x - q0.x) * ab.x + (p.z - q0.z) * ab.y) / l2, 0.0, 1.0)
 		var cx := q0.x + ab.x * u
 		var cz := q0.z + ab.y * u
-		if Vector2(p.x - cx, p.z - cz).length() < shw[s] + 0.6 and absf(q0.y + (q1.y - q0.y) * u - p.y) < 3.0:
+		if Vector2(p.x - cx, p.z - cz).length() < shw[s] + margen and absf(q0.y + (q1.y - q0.y) * u - p.y) < 3.0:
 			return true
 	return false
 

@@ -1,7 +1,9 @@
 """Mundo abierto · paso 1: red de carreteras interurbanas de la Comunidad de Madrid desde OSM (extracto .osm.pbf).
 Criterio (documentado en FUENTES): autopistas/autovías (motorway), vías rápidas (trunk) y sus enlaces, siempre;
 primary/secondary/tertiary SOLO si tienen 'ref' (carreteras numeradas: M-xxx, N-xxx, A-x...) y sus enlaces;
-enlaces sin ref de primary/secondary/tertiary solo si sus dos extremos tocan la red ya elegida.
+enlaces sin ref de primary/secondary/tertiary solo si sus dos extremos tocan la red ya elegida;
+glorietas (junction=roundabout/circular) primary/secondary/tertiary sin ref si el anillo toca la red en 2+ nodos
+(sin ellas la carretera numerada se cortaba en la glorieta y el piloto la cruzaba por en medio).
 Las calles (residential, unclassified, service...) y las primary/secondary/tertiary sin ref (avenidas urbanas) quedan
 fuera por ahora (se podrán añadir por tesela más adelante).
 Salida: grafo.pkl con nodos (id OSM -> lon, lat) y tramos partidos en cada cruce."""
@@ -25,6 +27,7 @@ for w in fp:
     if hw in SIEMPRE: cat = "si"
     elif hw in CON_REF and t.get("ref"): cat = "si"
     elif hw in ENLACES: cat = "enlace" if not t.get("ref") else "si"
+    elif hw in CON_REF and t.get("junction") in ("roundabout", "circular"): cat = "anillo"
     if cat is None:
         continue
     try:
@@ -37,6 +40,28 @@ uso = collections.Counter()
 for w in ways:
     if w["cat"] == "si":
         for n in w["nodos"]: uso[n[0]] += 1
+# glorietas sin ref: cada anillo (unión de sus ways por nodos compartidos) entra si toca la red en 2+ nodos
+anillos = [w for w in ways if w["cat"] == "anillo"]
+padre = list(range(len(anillos)))
+def raiz(i):
+    while padre[i] != i:
+        padre[i] = padre[padre[i]]; i = padre[i]
+    return i
+de_nodo = {}
+for i, w in enumerate(anillos):
+    for n in w["nodos"]:
+        j = de_nodo.setdefault(n[0], i)
+        if raiz(j) != raiz(i): padre[raiz(j)] = raiz(i)
+grupos = collections.defaultdict(list)
+for i, w in enumerate(anillos): grupos[raiz(i)].append(w)
+n_anillos = 0
+for g in grupos.values():
+    toca = {n[0] for w in g for n in w["nodos"] if uso[n[0]]}
+    if len(toca) >= 2:
+        n_anillos += 1
+        for w in g:
+            w["cat"] = "si"
+            for n in w["nodos"]: uso[n[0]] += 1
 cambio = True
 while cambio:
     cambio = False
@@ -64,4 +89,4 @@ for w in ways:
             a = k
 pickle.dump({"coord": coord, "tramos": tramos}, open(salida, "wb"))
 cruces = sum(1 for n, c in cuenta.items() if c >= 3)
-print(json.dumps({"ways": len(ways), "tramos": len(tramos), "nodos": len(coord), "nodos_cruce": cruces}))
+print(json.dumps({"ways": len(ways), "tramos": len(tramos), "nodos": len(coord), "nodos_cruce": cruces, "glorietas_sin_ref": n_anillos}))
