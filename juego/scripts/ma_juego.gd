@@ -2,7 +2,10 @@
 ## pantallas de carga (teselas de 2 km leídas del disco en hilos, ver ma_mundo.gd). Solo en la versión de escritorio.
 ## Teclas: W/S/A/D o flechas · Espacio freno de mano · P piloto automático · Q/E en el próximo cruce: izquierda/derecha
 ## (otra vez = seguir recto) · +/- velocidad del piloto · C cámara · R volver a la carretera · M mapa grande y GPS (ma_mapa.gd)
-## · Z/X zoom del minimapa · F3 datos · Esc menú.
+## · Z/X zoom del minimapa · F3 datos · Esc menú · G/T bajar/subir marcha (T mantenida: automático) · N silenciar motor.
+## Mando (como en los tramos): R2 acelerar · L2 frenar (parado: marcha atrás) · joystick izq. girar · joystick der.
+## mirar · L1/R1 bajar/subir marcha · ✕ freno de mano · △ piloto · ○ cámara · L3/R3 volver a la carretera ·
+## cruceta ←→ próximo cruce, ↑↓ velocidad del piloto · panel táctil mapa (ma_mapa.gd) · SHARE datos · OPTIONS (dos veces) menú.
 extends Node3D
 
 var datos := MaDatos.new()
@@ -30,6 +33,7 @@ var tramo_actual := -1
 
 var hud := CanvasLayer.new()
 var l_vel := Label.new()
+var l_marcha := Label.new()
 var l_via := Label.new()
 var l_info := Label.new()
 var l_cruce := Label.new()
@@ -62,6 +66,8 @@ func _ready() -> void:
 	mundo.preparar(datos)
 	coche = Coche.new()
 	add_child(coche)
+	sonido.coche = coche
+	coche.add_child(sonido)               # motor con las rpm reales de la caja (sonido_motor.gd)
 	piloto = Ajustes.piloto
 	var salida := _salida(str(Ajustes.args.get("inicio", "A-6")))
 	_colocar_en(salida[0], salida[1], salida[2])
@@ -336,10 +342,18 @@ func _mandos(_dt: float) -> void:
 	if Input.is_physical_key_pressed(KEY_A) or Input.is_physical_key_pressed(KEY_LEFT): vol -= 1.0
 	if Input.is_physical_key_pressed(KEY_D) or Input.is_physical_key_pressed(KEY_RIGHT): vol += 1.0
 	var mano := Input.is_physical_key_pressed(KEY_SPACE)
-	if piloto and (acel > 0.0 or fren > 0.0 or vol != 0.0 or mano):
+	var tocado := acel > 0.0 or fren > 0.0 or vol != 0.0 or mano
+	# mando: se suma al teclado (gana el que pida más; el volante del teclado manda)
+	tocado = mando.leer(_pad()) or tocado
+	acel = maxf(acel, mando.gas)
+	fren = maxf(fren, mando.freno)
+	if vol == 0.0: vol = mando.volante
+	mano = mano or mando.mano
+	if piloto and tocado:
 		piloto = false
 	if mano: fren = 1.0
 	if piloto and not camino.is_empty():
+		if coche.caja.manual: coche.caja.automatico()   # el piloto conduce siempre en automático
 		coche.giro_directo = true
 		coche.volante = _volante_piloto()
 		_control_velocidad(_velocidad_objetivo())
@@ -480,14 +494,22 @@ func _choques(dt: float) -> void:
 
 # ------------------------------------------------------------------ teclas
 func _unhandled_input(ev: InputEvent) -> void:
+	if not cargado:
+		return
+	if ev is InputEventJoypadMotion or ev is InputEventJoypadButton:
+		pad_id = ev.device                     # el último mando que se ha movido es el que se lee
+	if ev is InputEventJoypadButton and ev.pressed:
+		_boton_mando(ev.button_index)
+		return
 	if not (ev is InputEventKey and ev.pressed and not ev.echo):
+		return
+	var leva := Mando.tecla_cambio(ev)          # G baja · T sube (T mantenida: automático)
+	if leva != 0:
+		if mapa == null or not mapa.abierto: _leva(leva)
 		return
 	match ev.physical_keycode:
 		KEY_P:
-			piloto = not piloto
-			if piloto:
-				camino.clear()
-				_reengancharse()
+			_alternar_piloto()
 		KEY_Q:
 			preferencia = 0 if preferencia == -1 else -1
 			_replanificar()
@@ -504,8 +526,71 @@ func _unhandled_input(ev: InputEvent) -> void:
 			_volver_a_carretera()
 		KEY_F3:
 			ver_datos = not ver_datos
+		KEY_N:
+			Ajustes.silencio = not Ajustes.silencio
 		KEY_ESCAPE:
 			get_tree().change_scene_to_file("res://escenas/menu.tscn")
+
+
+func _alternar_piloto() -> void:
+	piloto = not piloto
+	if piloto:
+		coche.caja.automatico()
+		camino.clear()
+		_reengancharse()
+
+
+## Leva o tecla de cambio: DSG a manual con la marcha pedida; cambiar de marcha desconecta el piloto
+func _leva(d: int) -> void:
+	piloto = false
+	Mando.leva(coche.caja, d)
+
+
+var pad_id := -1        # último mando que ha mandado algo (−1 = el primero conectado, si hay)
+
+
+func _pad() -> int:
+	var pads := Input.get_connected_joypads()
+	if pads.is_empty() or pads.has(pad_id):
+		return pad_id
+	return pads[0]
+
+
+var _salir_t := 0.0     # OPTIONS pulsado una vez: s que queda para confirmar la salida al menú
+
+
+## Botones del mando → las mismas acciones que las teclas (con el mapa grande abierto, los lleva ma_mapa.gd)
+func _boton_mando(b: int) -> void:
+	if mapa != null and mapa.abierto:
+		return
+	match b:
+		JOY_BUTTON_LEFT_SHOULDER:             # L1 baja marcha (G)
+			_leva(-1)
+		JOY_BUTTON_RIGHT_SHOULDER:            # R1 sube marcha (T); mantenido 0,8 s vuelve al automático
+			_leva(1)
+		JOY_BUTTON_Y:                         # △ piloto (P)
+			_alternar_piloto()
+		JOY_BUTTON_B:                         # ○ cámara (C)
+			Ajustes.camara = 1 - Ajustes.camara
+		JOY_BUTTON_LEFT_STICK, JOY_BUTTON_RIGHT_STICK:   # L3/R3 volver a la carretera (R)
+			_volver_a_carretera()
+		JOY_BUTTON_DPAD_LEFT:                 # cruceta ←→ próximo cruce (Q/E)
+			preferencia = 0 if preferencia == -1 else -1
+			_replanificar()
+		JOY_BUTTON_DPAD_RIGHT:
+			preferencia = 0 if preferencia == 1 else 1
+			_replanificar()
+		JOY_BUTTON_DPAD_UP:                   # cruceta ↑↓ velocidad del piloto (+/−)
+			Ajustes.velocidad = minf(Ajustes.velocidad + 10.0, 200.0)
+		JOY_BUTTON_DPAD_DOWN:
+			Ajustes.velocidad = maxf(Ajustes.velocidad - 10.0, 20.0)
+		JOY_BUTTON_BACK:                      # SHARE datos (F3)
+			ver_datos = not ver_datos
+		JOY_BUTTON_START:                     # OPTIONS dos veces: menú (Esc)
+			if _salir_t > 0.0:
+				get_tree().change_scene_to_file("res://escenas/menu.tscn")
+			else:
+				_salir_t = 3.0
 
 
 func _volver_a_carretera() -> void:
@@ -523,12 +608,22 @@ var cam_vel := Vector3.ZERO
 var mira := Vector3.ZERO
 var mira_vel := Vector3.ZERO
 var cam_iniciada := false
+var cam_base := Vector3.ZERO     # posición de persecución con su muelle (antes de la órbita del joystick derecho)
+var mando := Mando.new()         # mando: pedales, volante, joystick derecho y levas (mando.gd)
+var sonido := SonidoMotor.new()  # sonido del motor (sonido_motor.gd)
 
 
 func _process(dt: float) -> void:
 	if not cargado:
 		return
 	mundo.actualizar(coche.position)
+	var pad := _pad() if (mapa == null or not mapa.abierto) else -1   # con el mapa abierto el mando mueve el mapa
+	mando.actualizar_mira(pad, dt, Ajustes.camara == 1)
+	mando.vigilar_vuelta_auto(coche.caja, pad, dt)
+	_salir_t = maxf(_salir_t - dt, 0.0)
+	sonido.cabina = Ajustes.camara == 1
+	sonido.volumen = Ajustes.volumen_motor
+	sonido.silencio = Ajustes.silencio
 	_camara(dt)
 	_hud()
 
@@ -542,6 +637,7 @@ func _camara(dt: float) -> void:
 	if Ajustes.camara == 1:
 		var o: Array = Catalogo.modelo_de(coche.ficha).get("ojos", [-0.37, 1.12, 0.25])
 		cam.global_transform = Transform3D(tc.basis, pos + tc.basis * Vector3(float(o[0]), float(o[1]), float(o[2])))
+		mando.girar_cabeza(cam)                 # joystick derecho: mirar alrededor
 		cam.fov = 75.0
 		return
 	cam.fov = 70.0
@@ -549,20 +645,21 @@ func _camara(dt: float) -> void:
 	var suelo := Ajustes.superficie.consultar(objetivo.x, objetivo.z, objetivo.y).x
 	objetivo.y = maxf(objetivo.y, suelo + 1.5)
 	var punto_mira := pos + fw * 5.0 + Vector3.UP * 1.2
-	if not cam_iniciada or cam.global_position.distance_to(objetivo) > 60.0:
-		cam.global_position = objetivo
+	if not cam_iniciada or cam_base.distance_to(objetivo) > 60.0:
+		cam_base = objetivo
 		mira = punto_mira
 		cam_vel = Vector3.ZERO
 		mira_vel = Vector3.ZERO
 		cam_iniciada = true
 	else:
-		var r: Array = _amortiguar(cam.global_position, objetivo, cam_vel, 0.28, dt)
-		cam.global_position = r[0]
+		var r: Array = _amortiguar(cam_base, objetivo, cam_vel, 0.28, dt)
+		cam_base = r[0]
 		cam_vel = r[1]
 		var r2: Array = _amortiguar(mira, punto_mira, mira_vel, 0.12, dt)
 		mira = r2[0]
 		mira_vel = r2[1]
-	cam.look_at(mira, Vector3.UP)
+	# joystick derecho: órbita alrededor del coche (vuelve sola al soltarlo)
+	mando.orbitar(cam, cam_base, mira, pos + Vector3.UP * 1.2)
 
 
 static func _amortiguar(actual: Vector3, objetivo: Vector3, vel: Vector3, t: float, dt: float) -> Array:
@@ -595,20 +692,29 @@ func _crear_hud() -> void:
 	l_vel.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
 	l_vel.position = Vector2(-260, -90)
 	hud.add_child(l_vel)
+	l_marcha.add_theme_font_size_override("font_size", 20)
+	l_marcha.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
+	l_marcha.position = Vector2(-260, -122)
+	hud.add_child(l_marcha)
 	l_datos.position = Vector2(16, 200)
 	l_datos.add_theme_font_size_override("font_size", 14)
 	hud.add_child(l_datos)
 	var ayuda := Label.new()
-	ayuda.text = "W/S/A/D · Espacio freno de mano · P piloto · Q/E próximo cruce izq./der. · +/- velocidad · C cámara · R carretera · M mapa y GPS · Z/X zoom minimapa · F3 datos · Esc menú"
+	ayuda.text = ("W/S/A/D · Espacio freno de mano · G/T marcha (T mantenida: automático) · P piloto · Q/E próximo cruce izq./der. · +/- velocidad · C cámara · R carretera · M mapa y GPS · Z/X zoom minimapa · N silenciar motor · F3 datos · Esc menú\n" +
+		"Mando: R2/L2 gas/freno · joystick izq. girar, der. mirar · L1/R1 marcha (R1 mantenido: automático) · ✕ freno de mano · △ piloto · ○ cámara · cruceta ←→ cruce, ↑↓ velocidad · L3 carretera · panel táctil mapa · SHARE datos · OPTIONS ×2 menú")
 	ayuda.add_theme_font_size_override("font_size", 13)
 	ayuda.modulate = Color(1, 1, 1, 0.7)
 	ayuda.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
-	ayuda.position = Vector2(16, -28)
+	ayuda.position = Vector2(16, -46)
 	hud.add_child(ayuda)
 
 
 func _hud() -> void:
 	l_vel.text = "%d km/h" % roundi(absf(coche.v) * 3.6)
+	var cj := coche.caja
+	l_marcha.text = "%s   %d rpm" % [cj.texto_marcha(), int(round(cj.rpm / 50.0)) * 50]
+	# cambio manual en ámbar; un cambio rechazado (pasaría del corte) en rojo
+	l_marcha.modulate = Color(1, 0.35, 0.25) if cj.rechazo_t > 0.0 else (Color(1, 0.85, 0.4) if cj.manual else Color.WHITE)
 	var via := datos.rotulo(tramo_actual)
 	l_via.text = via if via != "" else "Comunidad de Madrid · mapa abierto"
 	var lim := ""
@@ -618,6 +724,8 @@ func _hud() -> void:
 	l_info.text = ("Piloto %d km/h" % roundi(Ajustes.velocidad) if piloto else "Conducción manual") + lim + "   alt. %d m" % roundi(coche.position.y)
 	var pref: String = ["← izquierda", "seguir", "derecha →"][preferencia + 1]
 	l_cruce.text = "Próximo cruce: %s%s" % [pref, _siguiente_desvio()]
+	if _salir_t > 0.0:
+		l_cruce.text = "Pulsa OPTIONS otra vez para salir al menú"
 	if ver_datos:
 		l_datos.text = "FPS %d · teselas %d (cargadas %d, descargadas %d, máx %.0f ms) · tráfico %d · choques %d\nVRAM %.0f MB · texturas %.0f MB · nodos %d · huérfanos %d" % [
 			Engine.get_frames_per_second(), mundo.listas(), mundo.est["cargadas"], mundo.est["descargadas"], mundo.est["ms_max"], trafico.coches.size(), choques,

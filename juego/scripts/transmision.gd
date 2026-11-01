@@ -56,6 +56,12 @@ var potencia_motor := 0.0               # W en el cigüeñal (≥ 0)
 var corte_inyeccion := false            # pie levantado con marcha metida: no entra gasóleo/gasolina
 var cambios := 0
 var neutro := false                     # punto muerto (solo pruebas: rueda libre sin freno motor)
+# modo manual secuencial (tiptronic, levas L1/R1 del mando o Mayús/Ctrl): el conductor elige la marcha; el cambio
+# solo reduce solo para no calar (casi parado → 1ª, por debajo de ~1.000 rpm → una menos) y rechaza una reducción
+# que pasaría del corte. El piloto automático y el tráfico siguen en automático.
+var manual := false
+var rechazo_t := 0.0                    # s que el HUD marca en rojo un cambio rechazado
+var _va := 0.0                          # última velocidad vista en paso() (para decidir un cambio pedido)
 
 
 func _init(f: Ficha) -> void:
@@ -200,6 +206,7 @@ func _hacer_tabla() -> void:
 # ---------------- DSG ----------------
 func reiniciar() -> void:
 	marcha = 1
+	rechazo_t = 0.0
 	cambio_t = 0.0
 	bloqueo = 0.0
 	rpm = ralenti
@@ -224,9 +231,16 @@ func paso(dt: float, v: float, pedal: float, freno: float, seno: float, atras :=
 		return fuerza
 	if marcha < 1:
 		marcha = 1
+	_va = va
 	bloqueo -= dt
+	rechazo_t -= dt
 	var demanda := clampf(pedal, 0.0, 1.0) * fuerza_max(va)
-	if cambio_t <= 0.0:
+	if manual:
+		# el pedal pide una fracción del par de la marcha metida (sin kickdown); solo reduce para no calar
+		demanda = clampf(pedal, 0.0, 1.0) * f_marcha(va, marcha, 1.0)
+		if marcha > 1 and (va < 1.5 or (cambio_t <= 0.0 and rpm_rueda(va, marcha) < ralenti + 200.0)):
+			_meter(1 if va < 1.5 else marcha - 1, pedal)
+	elif cambio_t <= 0.0:
 		var g := _elegir(va, pedal, demanda, freno, seno)
 		if g != marcha:
 			rpm_antes = rpm
@@ -300,10 +314,41 @@ func _elegir(va: float, pedal: float, demanda: float, freno: float, seno: float)
 	return g
 
 
-## "D4", "R", "N" para el HUD
+func _meter(g: int, pedal: float) -> void:
+	rpm_antes = rpm
+	cambio_dur = 0.15 if pedal > 0.8 or manual else 0.25
+	cambio_caida = 0.5 if pedal > 0.8 else 0.4
+	cambio_t = cambio_dur
+	bloqueo = 0.6 if g > marcha else 0.35
+	marcha = g
+	cambios += 1
+
+
+## Leva: +1 sube, −1 baja. Pasa a modo manual con la marcha pedida. Devuelve false si se rechaza (la reducción
+## pasaría del corte, no hay marcha más larga/corta, o la subida dejaría el motor por debajo del ralentí).
+func pedir_cambio(d: int) -> bool:
+	manual = true
+	if marcha < 1:
+		return false                      # en marcha atrás las levas no hacen nada (el modo manual queda puesto)
+	var g := clampi(marcha + d, 1, 7)
+	var nw := rpm_rueda(_va, g)
+	if g == marcha or (d < 0 and nw > corte * 0.97) or (d > 0 and nw < ralenti + 200.0):
+		rechazo_t = 0.6
+		return false
+	_meter(g, 1.0)
+	return true
+
+
+## Vuelve al cambio automático (D)
+func automatico() -> void:
+	manual = false
+	bloqueo = 0.0
+
+
+## "D4", "M4", "R" para el HUD
 func texto_marcha() -> String:
 	if marcha < 0: return "R"
-	return "D%d" % marcha
+	return ("M%d" if manual else "D%d") % marcha
 
 
 # ---------------- calibración del 0-100 ----------------

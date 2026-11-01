@@ -56,6 +56,8 @@ func actualizar(c: Coche) -> void:
 	var t := c.caja
 	var cs := c.consumo
 	l_marcha.text = "%s   %s rpm" % [t.texto_marcha(), _miles(int(round(t.rpm / 50.0)) * 50)]
+	# cambio manual: la marcha en ámbar; un cambio rechazado (pasaría del corte) parpadea en rojo
+	l_marcha.modulate = Color(1, 0.35, 0.25) if t.rechazo_t > 0.0 else (Color(1, 0.85, 0.4) if t.manual else Color.WHITE)
 	barra.fraccion = t.rpm / t.corte
 	barra.roja = (t.corte - (500.0 if t.diesel else 600.0)) / t.corte
 	barra.queue_redraw()

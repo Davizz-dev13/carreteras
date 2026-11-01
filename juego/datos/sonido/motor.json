@@ -1,0 +1,36 @@
+{
+ "fs": 32000,
+ "motores": {
+  "tsi": {
+   "rpm": [
+    699.98,
+    1000.0,
+    1399.99,
+    1899.99,
+    2500.0,
+    3200.0,
+    4000.0,
+    4899.94,
+    5799.88,
+    6799.97
+   ],
+   "ralenti": 700,
+   "corte": 6500
+  },
+  "tdi": {
+   "rpm": [
+    800.0,
+    1100.01,
+    1500.0,
+    2000.0,
+    2599.99,
+    3300.0,
+    4099.99,
+    5200.01
+   ],
+   "ralenti": 800,
+   "corte": 5000
+  }
+ },
+ "nota": "Bucles generados por pipeline/sonido_motor.py (síntesis procedural). rpm = rpm exactas de cada bucle (ciclos enteros)."
+}

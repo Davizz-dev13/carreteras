@@ -18,6 +18,8 @@ var lbl_ini := Label.new()
 var lbl_fin := Label.new()
 var lbl_vel := Label.new()
 var lbl_traf := Label.new()
+var vol_motor := HSlider.new()
+var lbl_vol_motor := Label.new()
 var lista_coches := OptionButton.new()
 var lista_colores := OptionButton.new()
 var ficha_txt := Label.new()
@@ -104,6 +106,17 @@ func _ready() -> void:
 	traf.step = 5
 	traf.value = Ajustes.trafico * 100.0
 	col.add_child(_fila_slider("Tráfico:", traf, lbl_traf))
+	# sonido del motor (sonido_motor.gd); en carretera, N lo silencia
+	vol_motor.min_value = 0
+	vol_motor.max_value = 100
+	vol_motor.step = 5
+	vol_motor.value = Ajustes.volumen_motor * 100.0
+	lbl_vol_motor.text = "%d %%" % roundi(vol_motor.value)
+	vol_motor.value_changed.connect(func(x: float):
+		Ajustes.volumen_motor = x / 100.0
+		Ajustes.silencio = x <= 0.0
+		lbl_vol_motor.text = "%d %%" % roundi(x))
+	col.add_child(_fila_slider("Sonido motor:", vol_motor, lbl_vol_motor))
 	var opciones := HBoxContainer.new()
 	opciones.add_theme_constant_override("separation", 24)
 	chk_piloto.text = "Piloto automático (sigue su carril a la velocidad elegida)"
@@ -140,11 +153,12 @@ func _ready() -> void:
 	fila_b.add_child(ayuda)
 	col.add_child(fila_b)
 	var mandos := Label.new()
-	mandos.text = ("Mandos en carretera: W/↑ acelerar · S/↓ frenar (parado: marcha atrás) · " +
+	mandos.text = ("Mandos en carretera: W/↑ acelerar · S/↓ frenar (parado: marcha atrás) · G/T bajar/subir marcha (cambio manual; T mantenida vuelve al automático) · " +
 		"P piloto automático · O adelantar (con el piloto) · L respetar límite al adelantar · +/− velocidad · K adaptar en curvas · 9/0 menos/más tráfico · " +
-		"V cámara · R volver a la carretera · Esc pausa (tráfico y velocidad) · H ayuda\n" +
-		"Mando de PS4: R2 acelerar · L2 frenar (parado: marcha atrás) · joystick izquierdo girar · ✕ freno de mano · △ piloto · □ adelantar · " +
-		"R1 límite al adelantar · L1 curvas · cruceta ↑↓ velocidad y ←→ tráfico · ○ cámara · L3/R3 volver a la carretera · OPTIONS pausa · SHARE ayuda. " +
+		"V cámara · R volver a la carretera · N silenciar el motor · Esc pausa (tráfico, velocidad y volumen) · H ayuda\n" +
+		"Mando de PS4: R2 acelerar · L2 frenar (parado: marcha atrás) · joystick izquierdo girar · joystick derecho mirar alrededor · " +
+		"L1/R1 bajar/subir marcha (R1 mantenido: automático) · ✕ freno de mano · △ piloto · □ adelantar · " +
+		"cruceta ↑↓ velocidad y ←→ tráfico · ○ cámara · L3/R3 volver a la carretera · OPTIONS pausa (curvas y límite al adelantar) · SHARE ayuda. " +
 		"En el navegador, pulsa un botón del mando para que lo detecte; en este menú, cruceta para moverte y ✕ para elegir.")
 	mandos.autowrap_mode = TextServer.AUTOWRAP_WORD
 	mandos.modulate = Color(0.65, 0.7, 0.75)

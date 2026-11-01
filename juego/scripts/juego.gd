@@ -55,6 +55,10 @@ var l_traf_p := Label.new()
 var l_vel_p := Label.new()
 var b_continuar := Button.new()
 var b_repetir := Button.new()
+var ck_curvas := CheckButton.new()
+var sl_vol := HSlider.new()
+var l_vol_p := Label.new()
+var ck_limite := CheckButton.new()
 
 
 func _ready() -> void:
@@ -81,6 +85,8 @@ func _ready() -> void:
 	dir = 1 if s_fin > s_ini else -1
 	piloto = Ajustes.piloto
 	add_child(coche)
+	sonido.coche = coche
+	coche.add_child(sonido)               # motor con las rpm reales de la caja (sonido_motor.gd)
 	trafico.iniciar(ruta, Ajustes.trafico)
 	add_child(trafico)
 	cam.near = 0.2
@@ -197,6 +203,7 @@ func _mandos(_dt: float) -> void:
 		piloto = false            # tocar los mandos desconecta el piloto (como en un coche real)
 		_cancelar_adelantamiento("")
 	if piloto:
+		if coche.caja.manual: coche.caja.automatico()   # el piloto conduce siempre en automático
 		coche.giro_directo = true
 		coche.volante = _volante_piloto()
 		_control_velocidad(_tope_limite(_velocidad_objetivo()))
@@ -361,6 +368,10 @@ func _unhandled_input(ev: InputEvent) -> void:
 		return
 	if not (ev is InputEventKey and ev.pressed and not ev.echo) or not cargado:
 		return
+	var leva := Mando.tecla_cambio(ev)          # G baja · T sube (T mantenida: automático)
+	if leva != 0:
+		if not pausado and not terminado: _leva(leva)
+		return
 	match ev.physical_keycode:
 		KEY_ESCAPE:
 			_pausa(not pausado)
@@ -369,12 +380,15 @@ func _unhandled_input(ev: InputEvent) -> void:
 		KEY_P:
 			piloto = not piloto
 			if not piloto: _cancelar_adelantamiento("")
+			else: coche.caja.automatico()
 		KEY_O:
 			_pedir_adelantamiento()
 		KEY_R:
 			_reiniciar(false)
 		KEY_H:
 			l_ayuda.visible = not l_ayuda.visible
+		KEY_N:
+			Ajustes.silencio = not Ajustes.silencio
 		KEY_K:
 			Ajustes.adaptar_curvas = not Ajustes.adaptar_curvas
 		KEY_L:
@@ -392,12 +406,12 @@ func _unhandled_input(ev: InputEvent) -> void:
 # ---------------- mando (PS4 / DualShock 4 o cualquier mando "estándar" del navegador) ----------------
 # En la web, Chrome/Edge/Firefox dan el DualShock 4 con el mapeo "standard" del Gamepad API y Godot convierte
 # R2/L2 (botones analógicos 7/6 del navegador) en los ejes JOY_AXIS_TRIGGER_RIGHT/LEFT (0..1).
-const AYUDA_TECLADO := ("W/↑ acelerar · S/↓ frenar (parado: marcha atrás)\n" +
+const AYUDA_TECLADO := ("W/↑ acelerar · S/↓ frenar (parado: marcha atrás) · G/T bajar/subir marcha (T mantenida: automático)\n" +
 	"P piloto · O adelantar (L: límite) · +/− velocidad · K curvas · 9/0 tráfico\n" +
-	"V cámara · R volver a la carretera · Esc pausa · H ocultar ayuda")
-const AYUDA_MANDO := ("Mando: R2 acelerar · L2 frenar (parado: marcha atrás) · joystick girar\n" +
-	"△ piloto · □ adelantar · R1 límite · L1 curvas · ↑↓ velocidad · ←→ tráfico\n" +
-	"✕ freno de mano · ○ cámara · L3 a la carretera · OPTIONS pausa · SHARE ayuda")
+	"V cámara · R volver a la carretera · N silenciar motor · Esc pausa · H ocultar ayuda")
+const AYUDA_MANDO := ("Mando: R2 acelerar · L2 frenar (parado: marcha atrás) · joystick izq. girar · joystick der. mirar\n" +
+	"L1/R1 bajar/subir marcha (R1 mantenido: automático) · △ piloto · □ adelantar · ↑↓ velocidad · ←→ tráfico\n" +
+	"✕ freno de mano · ○ cámara · L3 a la carretera · OPTIONS pausa (curvas y límite) · SHARE ayuda")
 const PAD_ZONA_MUERTA := 0.08     # joystick: por debajo no gira (deriva del stick)
 const PAD_ZONA_GATILLO := 0.03    # gatillos: holgura en reposo
 var pad_id := -1                  # mando que se lee (-1 = ninguno)
@@ -483,6 +497,19 @@ func _gatillo(eje: JoyAxis) -> float:
 
 
 ## Botones del mando → las mismas acciones que las teclas
+var mando := Mando.new()          # joystick derecho (mirar) y levas L1/R1 (mando.gd)
+var sonido := SonidoMotor.new()   # sonido del motor (sonido_motor.gd)
+
+
+## Leva o tecla de cambio: pasa el DSG a manual con la marcha pedida. Cambiar de marcha es conducir: desconecta el
+## piloto (como pisar un pedal).
+func _leva(d: int) -> void:
+	if piloto:
+		piloto = false
+		_cancelar_adelantamiento("")
+	Mando.leva(coche.caja, d)
+
+
 func _boton_mando(b: int) -> void:
 	if pad_id < 0:
 		var pads := Input.get_connected_joypads()
@@ -496,6 +523,7 @@ func _boton_mando(b: int) -> void:
 		JOY_BUTTON_Y:                         # △ piloto automático (P)
 			piloto = not piloto
 			if not piloto: _cancelar_adelantamiento("")
+			else: coche.caja.automatico()
 		JOY_BUTTON_X:                         # □ adelantar (O)
 			_pedir_adelantamiento()
 		JOY_BUTTON_B:                         # ○ cámara (V)
@@ -504,10 +532,10 @@ func _boton_mando(b: int) -> void:
 			_reiniciar(false)
 		JOY_BUTTON_BACK:                      # SHARE ocultar/mostrar ayuda (H)
 			l_ayuda.visible = not l_ayuda.visible
-		JOY_BUTTON_LEFT_SHOULDER:             # L1 adaptar en curvas (K)
-			Ajustes.adaptar_curvas = not Ajustes.adaptar_curvas
-		JOY_BUTTON_RIGHT_SHOULDER:            # R1 respetar límite al adelantar (L)
-			Ajustes.limite_adelantar = not Ajustes.limite_adelantar
+		JOY_BUTTON_LEFT_SHOULDER:             # L1 baja marcha (G) — "curvas" y "límite" pasan al menú de pausa
+			_leva(-1)
+		JOY_BUTTON_RIGHT_SHOULDER:            # R1 sube marcha (T); mantenido 0,8 s vuelve al automático
+			_leva(1)
 		JOY_BUTTON_DPAD_UP:                   # cruceta ↑↓ velocidad elegida (+/−)
 			Ajustes.velocidad = minf(Ajustes.velocidad + 5.0, 200.0)
 		JOY_BUTTON_DPAD_DOWN:
@@ -522,6 +550,12 @@ func _process(dt: float) -> void:
 	if not cargado:
 		return
 	mundo.actualizar_streaming(coche.position, coche.adelante())
+	if not pausado:
+		mando.actualizar_mira(pad_id, dt, Ajustes.camara == 1)
+		mando.vigilar_vuelta_auto(coche.caja, pad_id, dt)
+	sonido.cabina = Ajustes.camara == 1
+	sonido.volumen = Ajustes.volumen_motor
+	sonido.silencio = Ajustes.silencio or pausado
 	_camara(dt)
 	_hud()
 	_aviso_mando(dt)
@@ -544,6 +578,7 @@ var mira_vel := Vector3.ZERO
 var cab_cam := 0.0
 var bal_cam := 0.0
 var cam_iniciada := false
+var cam_base := Vector3.ZERO     # posición de persecución con su muelle (antes de la órbita del joystick derecho)
 
 
 ## Muelle con amortiguación crítica (SmoothDamp): sigue a `objetivo` sin sobrepasarlo. tiempo ≈ s de respuesta.
@@ -576,6 +611,7 @@ func _camara(dt: float) -> void:
 		var b := Basis.from_euler(Vector3(cab_cam, e.y, bal_cam), EULER_ORDER_YXZ)
 		var asiento := _ojos()
 		cam.global_transform = Transform3D(b, pos + b * asiento)
+		mando.girar_cabeza(cam)                 # joystick derecho: mirar alrededor
 		cam.fov = 75.0
 		cam_iniciada = true
 		return
@@ -592,20 +628,22 @@ func _camara(dt: float) -> void:
 	var suelo := Ajustes.superficie.consultar(objetivo.x, objetivo.z, objetivo.y).x
 	objetivo.y = maxf(objetivo.y, suelo + 1.5)
 	var punto_mira := pos + fw * 5.0 + Vector3.UP * 1.2
-	if not cam_iniciada or cam.global_position.distance_to(objetivo) > 60.0:
-		cam.global_position = objetivo
+	if not cam_iniciada or cam_base.distance_to(objetivo) > 60.0:
+		cam_base = objetivo
 		mira = punto_mira
 		cam_vel = Vector3.ZERO
 		mira_vel = Vector3.ZERO
 		cam_iniciada = true
 	else:
-		var r := amortiguar(cam.global_position, objetivo, cam_vel, 0.28, dt)
-		cam.global_position = r[0]
+		var r := amortiguar(cam_base, objetivo, cam_vel, 0.28, dt)
+		cam_base = r[0]
 		cam_vel = r[1]
 		var r2 := amortiguar(mira, punto_mira, mira_vel, 0.12, dt)
 		mira = r2[0]
 		mira_vel = r2[1]
-	cam.look_at(mira, Vector3.UP)
+	# joystick derecho: órbita alrededor del coche (vuelve sola al soltarlo); sin mirar = la cámara de siempre
+	var pivote := pos + Vector3.UP * 1.2
+	mando.orbitar(cam, cam_base, mira, pivote)
 
 
 func _ojos() -> Vector3:
@@ -793,6 +831,24 @@ func _crear_pausa() -> void:
 		v.add_child(s)
 	sl_traf.value_changed.connect(_al_cambiar_trafico)
 	sl_vel.value_changed.connect(_al_cambiar_velocidad)
+	# opciones del piloto que antes iban en L1/R1 (ahora son las levas del cambio); con teclado siguen en K y L
+	ck_curvas.text = "Piloto: frenar antes de las curvas (K)"
+	ck_curvas.toggled.connect(func(on: bool): Ajustes.adaptar_curvas = on)
+	ck_limite.text = "Al adelantar, respetar el límite (L)"
+	ck_limite.toggled.connect(func(on: bool): Ajustes.limite_adelantar = on)
+	v.add_child(ck_curvas)
+	v.add_child(ck_limite)
+	l_vol_p.text = "Volumen del motor"
+	v.add_child(l_vol_p)
+	sl_vol.min_value = 0.0
+	sl_vol.max_value = 100.0
+	sl_vol.step = 5.0
+	sl_vol.custom_minimum_size.x = 380
+	sl_vol.value_changed.connect(func(x: float):
+		Ajustes.volumen_motor = x / 100.0
+		Ajustes.silencio = false
+		l_vol_p.text = "Volumen del motor: %d %%" % roundi(x))
+	v.add_child(sl_vol)
 	var b1 := b_continuar
 	b1.text = "Continuar"
 	b1.pressed.connect(func(): _pausa(false))
@@ -859,6 +915,10 @@ func _pausa(on: bool) -> void:
 		sl_vel.value = Ajustes.velocidad
 		l_traf_p.text = "Tráfico: %d %%" % roundi(sl_traf.value)
 		l_vel_p.text = "Velocidad elegida: %d km/h" % roundi(sl_vel.value)
+		ck_curvas.set_pressed_no_signal(Ajustes.adaptar_curvas)
+		sl_vol.set_value_no_signal(Ajustes.volumen_motor * 100.0)
+		l_vol_p.text = "Volumen del motor: %d %%%s" % [roundi(Ajustes.volumen_motor * 100.0), " (silenciado, N)" if Ajustes.silencio else ""]
+		ck_limite.set_pressed_no_signal(Ajustes.limite_adelantar)
 		if pad_id >= 0: b_continuar.grab_focus.call_deferred()   # con el mando: cruceta para moverse, ✕ para elegir
 	else:
 		get_viewport().gui_release_focus()   # que Espacio / ✕ no pulsen un botón del menú mientras conduces

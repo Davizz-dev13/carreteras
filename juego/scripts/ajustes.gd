@@ -17,6 +17,8 @@ var piloto_limites := false   # el piloto no pasa del límite de cada tramo (apa
 var limite_adelantar := false  # al adelantar, no pasar del límite de velocidad del tramo (apagado = más agresivo)
 var trafico := 0.3         # 0..1
 var camara := 0            # 0 persecución, 1 cabina
+var volumen_motor := 0.8   # 0..1, sonido del motor del coche (sonido_motor.gd)
+var silencio := false      # N: silenciar el motor
 
 # --- datos cargados ---
 var info := {}
