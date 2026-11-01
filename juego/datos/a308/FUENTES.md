@@ -28,3 +28,15 @@ encadenar() guarda en cada punto la vía del tramo que sale de él y procesar() 
 invertir la ruta). Sin invertir, las propiedades iban corridas un tramo: el puente de 292 m de Iznalloz se marcaba en el
 tramo anterior y salía una "pendiente" falsa del 28 %. Corregido solo para presets con "orden" (Navacerrada no se ha
 regenerado; sus rutas invertidas ya estaban bien, las no invertidas tienen el mismo desfase).
+
+## Revisión de errores de mapeo (01-11-2026)
+- Cruces y empalmes: los huecos en el asfalto (379 de 396 empalmes rectos con > 3 m de hueco, triángulos en los
+  cruces oblicuos) venían del código común (scripts/cruces.gd) y se arreglan allí para todas las zonas.
+- Puentes y túneles de las vías secundarias (23): el tablero salía del MDT y bajaba al fondo del barranco (hasta 5 m)
+  con escalones de 1-2 m en los estribos; ahora es la recta entre las vías que llegan a cada extremo
+  (pipeline/rasante_puentes.py). No cambia nada en planta.
+- Señales STOP / ceda (10 de 38): estaban encima del asfalto de la vía principal o del ramal de al lado (OSM pone el
+  nodo en el propio cruce). Se retrasan por su vía hasta quedar ≥ 0,5 m fuera de cualquier calzada
+  (pipeline/senales_fuera_calzada.py).
+- Quitamiedos: OSM no tiene ninguno etiquetado junto a la A-308 y no hay foto a pie de carretera para confirmarlos:
+  no se dibuja ninguno (regla: solo donde existen de verdad).

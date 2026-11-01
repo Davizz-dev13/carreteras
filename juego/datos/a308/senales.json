@@ -24,12 +24,13 @@
 },
 {
 "tipo": "R2",
-"x": -12740.33,
-"y": 831.88,
-"z": -3337.14,
-"rumbo": 0.624,
+"x": -12738.45,
+"y": 831.61,
+"z": -3334.52,
+"rumbo": 0.614,
 "suelta": false,
-"osm": 2622108541
+"osm": 2622108541,
+"recolocada": "fuera de la calzada"
 },
 {
 "tipo": "R1",
@@ -87,30 +88,33 @@
 },
 {
 "tipo": "R1",
-"x": -8066.63,
+"x": -8069.41,
 "y": 803.0,
-"z": -4440.61,
-"rumbo": 2.319,
+"z": -4441.71,
+"rumbo": 2.467,
 "suelta": false,
-"osm": 8318793360
+"osm": 8318793360,
+"recolocada": "fuera de la calzada"
 },
 {
 "tipo": "R2",
-"x": -7983.35,
+"x": -7984.62,
 "y": 803.87,
-"z": -4498.56,
-"rumbo": -2.642,
+"z": -4496.84,
+"rumbo": -2.262,
 "suelta": false,
-"osm": 8318793356
+"osm": 8318793356,
+"recolocada": "fuera de la calzada"
 },
 {
 "tipo": "R1",
-"x": -7977.44,
-"y": 803.25,
-"z": -4517.31,
-"rumbo": -2.149,
+"x": -7983.39,
+"y": 803.13,
+"z": -4517.56,
+"rumbo": -2.151,
 "suelta": false,
-"osm": 8318793345
+"osm": 8318793345,
+"recolocada": "fuera de la calzada"
 },
 {
 "tipo": "R2",
@@ -141,12 +145,13 @@
 },
 {
 "tipo": "R1",
-"x": -1700.94,
+"x": -1702.07,
 "y": 984.05,
-"z": -3061.61,
-"rumbo": 1.699,
+"z": -3064.33,
+"rumbo": 1.801,
 "suelta": false,
-"osm": 8362681913
+"osm": 8362681913,
+"recolocada": "fuera de la calzada"
 },
 {
 "tipo": "R2",
@@ -159,12 +164,13 @@
 },
 {
 "tipo": "R2",
-"x": -1639.77,
-"y": 985.42,
-"z": -3054.51,
-"rumbo": -3.138,
+"x": -1642.53,
+"y": 985.32,
+"z": -3055.26,
+"rumbo": -2.895,
 "suelta": false,
-"osm": 8362681908
+"osm": 8362681908,
+"recolocada": "fuera de la calzada"
 },
 {
 "tipo": "R1",
@@ -195,12 +201,13 @@
 },
 {
 "tipo": "R1",
-"x": 2308.2,
+"x": 2304.56,
 "y": 1061.8,
-"z": -4020.16,
-"rumbo": -2.506,
+"z": -4019.06,
+"rumbo": -3.027,
 "suelta": false,
-"osm": 6886584590
+"osm": 6886584590,
+"recolocada": "fuera de la calzada"
 },
 {
 "tipo": "R2",
@@ -240,21 +247,23 @@
 },
 {
 "tipo": "R1",
-"x": 10406.21,
+"x": 10402.31,
 "y": 1104.0,
-"z": 2618.11,
-"rumbo": -1.373,
+"z": 2620.5,
+"rumbo": -1.844,
 "suelta": false,
-"osm": 2755583440
+"osm": 2755583440,
+"recolocada": "fuera de la calzada"
 },
 {
 "tipo": "R2",
-"x": 10413.17,
+"x": 10410.45,
 "y": 1104.0,
-"z": 2628.46,
-"rumbo": -1.755,
+"z": 2633.06,
+"rumbo": -2.294,
 "suelta": false,
-"osm": 6579776602
+"osm": 6579776602,
+"recolocada": "fuera de la calzada"
 },
 {
 "tipo": "R2",
@@ -339,12 +348,13 @@
 },
 {
 "tipo": "R1",
-"x": 12155.55,
+"x": 12157.38,
 "y": 1074.98,
-"z": 5199.0,
-"rumbo": 1.114,
+"z": 5197.05,
+"rumbo": 1.102,
 "suelta": false,
-"osm": 2191757808
+"osm": 2191757808,
+"recolocada": "fuera de la calzada"
 }
 ],
 "estadisticas": {
@@ -360,5 +370,6 @@
 "en_via_que_llega": 33,
 "sobre_la_ruta_con_sentido": 5
 }
-}
+},
+"recolocadas_fuera_de_calzada": 10
 }
