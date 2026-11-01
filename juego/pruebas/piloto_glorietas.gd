@@ -61,6 +61,8 @@ func _probar(g: Dictionary) -> Dictionary:
 			var sv := int(t["s"])
 			if (sd > 0 and sv == -1) or (sd < 0 and sv == 1):
 				continue
+			if sv == 0 and red.has_method("prohibido") and red.prohibido(k, sd):
+				continue     # ramal de salida que OSM deja como de doble sentido (ver MaRed.prohibido)
 			if nodos_anillo.has(int(t["a"])) and nodos_anillo.has(int(t["b"])):
 				continue
 			var entra := false

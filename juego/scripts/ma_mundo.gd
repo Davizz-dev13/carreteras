@@ -390,6 +390,7 @@ func _discos_nodos(d: Dictionary, sa: PackedVector3Array, sb: PackedVector3Array
 			if p.x < x0 or p.x >= x0 + datos.tesela or p.z < z0 or p.z >= z0 + datos.tesela:
 				continue    # lo pone la tesela que contiene el nodo
 			var brazos := []
+			var tiras := []
 			var hw_min := INF
 			var hw_max := 0.0
 			var rapida := false
@@ -410,8 +411,12 @@ func _discos_nodos(d: Dictionary, sa: PackedVector3Array, sb: PackedVector3Array
 						continue
 					var hw := float(tk["ancho"]) * 0.5
 					if not bor.is_empty():
-						hw += minf(0.0, minf((bor[0] as PackedFloat32Array)[i0], (bor[1] as PackedFloat32Array)[i0]))
+						var hw_rec := hw + minf(0.0, minf((bor[0] as PackedFloat32Array)[i0], (bor[1] as PackedFloat32Array)[i0]))
+						# recortado del todo (ramal pegado a otra calzada en su final): sin disco quedaba el pico sin
+						# asfalto; con la anchura sin recortar solo cubre lo que ya pisa la otra calzada
+						hw = hw_rec if hw_rec >= 0.5 else hw
 					brazos.append([Cruces._dir_salida(g, desde), hw])
+					tiras.append([kk, desde, hw])
 					hw_min = minf(hw_min, hw)
 					hw_max = maxf(hw_max, hw)
 					rapida = rapida or int(tk["c"]) <= 1
@@ -429,11 +434,25 @@ func _discos_nodos(d: Dictionary, sa: PackedVector3Array, sb: PackedVector3Array
 			var ids_: PackedInt32Array = iv if rapida else ix
 			vs.append(Vector3(p.x, y0 + 0.02, p.z))
 			ns.append(Vector3.UP)
+			# sin ningún brazo que siga recto (esquina o pico): por detrás de todos los brazos el disco llega a la anchura
+			# del más ancho (el extremo recto del ancho asomaba fuera del disco: cuarto o medio anillo sin asfalto)
+			var recto := false
+			for b1 in brazos:
+				for b2 in brazos:
+					if (b1[0] as Vector2).dot(b2[0]) < -0.7:
+						recto = true
 			const LADOS := 24
 			for j in LADOS:
 				var ang := TAU * j / LADOS
 				var u := Vector2(cos(ang), sin(ang))
 				var rr := Cruces._radio_parche(u, brazos, hw_min, hw_max)
+				if not recto:
+					var detras := true
+					for b in brazos:
+						if u.dot(b[0]) >= 0.0:
+							detras = false
+					if detras:
+						rr = hw_max
 				var q := Vector3(p.x + u.x * rr, 0.0, p.z + u.y * rr)
 				var h := _h_asfalto_tesela(q.x, q.z, y0, sa, sb, shw, celdas)
 				q.y = (y0 if is_nan(h) else h) + 0.02
@@ -441,6 +460,64 @@ func _discos_nodos(d: Dictionary, sa: PackedVector3Array, sb: PackedVector3Array
 				ns.append(Vector3.UP)
 			for j in LADOS:
 				ids_.append_array([k0, k0 + 1 + j, k0 + 1 + (j + 1) % LADOS])   # cara de arriba hacia arriba (como las franjas)
+			# brazos en ángulo agudo (< 75°; p. ej. un ramal que sale de la glorieta casi en paralelo al anillo): entre el
+			# borde de fuera de uno y el del otro quedaba una cuña sin asfalto más allá del disco (el ramal se recorta donde
+			# pisa la calzada principal). Cada uno de los dos brazos lleva su anchura entera desde el nodo hasta que se separan.
+			for i1 in brazos.size():
+				for i2 in range(i1 + 1, brazos.size()):
+					var d1: Vector2 = brazos[i1][0]
+					var d2: Vector2 = brazos[i2][0]
+					if d1 == Vector2.ZERO or d2 == Vector2.ZERO or d1.dot(d2) < cos(deg_to_rad(75.0)):
+						continue
+					var sn := maxf(absf(d1.cross(d2)), 0.12)
+					var largo := minf((float(brazos[i1][1]) + float(brazos[i2][1])) / sn + 2.0, 30.0)
+					for tt in [tiras[i1], tiras[i2]]:
+						_tira_nodo(int(tt[0]), bool(tt[1]), float(tt[2]), largo, y0, sa, sb, shw, celdas, vs, ns, ids_)
+
+
+## Tira de asfalto con la anchura entera de un tramo desde su extremo (nodo) hasta `largo` m, a la altura del asfalto que
+## ya hay + 2 cm (como los discos: rellena las cuñas entre brazos casi tangentes)
+func _tira_nodo(k: int, desde: bool, hw: float, largo: float, y0: float, sa: PackedVector3Array, sb: PackedVector3Array,
+		shw: PackedFloat32Array, celdas: Dictionary, vs: PackedVector3Array, ns: PackedVector3Array, ids_: PackedInt32Array) -> void:
+	var g := datos.geometria(k)
+	var pts := PackedVector3Array()
+	var acum := 0.0
+	var n_ := g.size()
+	for i in n_:
+		var q: Vector3 = g[i if desde else n_ - 1 - i]
+		if i > 0:
+			var prev: Vector3 = pts[pts.size() - 1]
+			var dl := Vector2(q.x - prev.x, q.z - prev.z).length()
+			if acum + dl > largo:
+				pts.append(prev.lerp(q, (largo - acum) / maxf(dl, 1e-4)))
+				break
+			acum += dl
+		pts.append(q)
+	if pts.size() < 2:
+		return
+	var k0 := vs.size()
+	for i in pts.size():
+		var a: Vector3 = pts[maxi(i - 1, 0)]
+		var b: Vector3 = pts[mini(i + 1, pts.size() - 1)]
+		var t := Vector2(b.x - a.x, b.z - a.z).normalized()
+		var nn := Vector2(-t.y, t.x) * hw
+		for lado in [1.0, -1.0]:
+			var q := Vector3(pts[i].x + nn.x * lado, 0.0, pts[i].z + nn.y * lado)
+			var h := _h_asfalto_tesela(q.x, q.z, y0, sa, sb, shw, celdas)
+			q.y = (y0 if is_nan(h) else h) + 0.02
+			vs.append(q)
+			ns.append(Vector3.UP)
+	for i in pts.size() - 1:
+		var a := k0 + 2 * i
+		for tri in [[a, a + 1, a + 2], [a + 1, a + 3, a + 2]]:
+			var p0: Vector3 = vs[tri[0]]
+			var p1: Vector3 = vs[tri[1]]
+			var p2: Vector3 = vs[tri[2]]
+			var cz := (p1.x - p0.x) * (p2.z - p0.z) - (p1.z - p0.z) * (p2.x - p0.x)
+			if cz >= 0.0:
+				ids_.append_array([tri[0], tri[1], tri[2]])
+			else:
+				ids_.append_array([tri[0], tri[2], tri[1]])
 
 
 ## Nodo donde los tramos de un sentido salen desplazados a ras de los bordes (bifurcación o unión): un disco del
@@ -461,11 +538,44 @@ func _discos_extremos(id: int, p: Vector3, sa: PackedVector3Array, sb: PackedVec
 				continue
 			var i0: int = 0 if desde else g.size() - 1
 			ext.append([g[i0], Cruces._dir_salida(g, desde), float(tk["ancho"]) * 0.5, int(tk["c"]) <= 1])
+	# disco en el propio nodo con el semiancho del más estrecho: los extremos están desplazados (a ras de un borde) y
+	# por el lado de fuera del giro quedaba un medio círculo sin asfalto entre los dos finales (continuaciones en ángulo)
+	var hw_n := INF
+	var rap_n := false
+	for e in ext:
+		hw_n = minf(hw_n, float(e[2]))
+		rap_n = rap_n or bool(e[3])
+	if ext.size() >= 2 and hw_n >= 0.5 and hw_n < INF:
+		var y_n := _h_asfalto_tesela(p.x, p.z, p.y, sa, sb, shw, celdas)
+		if not is_nan(y_n):
+			var vs0: PackedVector3Array = vv if rap_n else v
+			var ns0: PackedVector3Array = nv if rap_n else n
+			var ix0: PackedInt32Array = iv if rap_n else ix
+			var k00 := vs0.size()
+			vs0.append(Vector3(p.x, y_n + 0.02, p.z))
+			ns0.append(Vector3.UP)
+			for j in 20:
+				var ang := TAU * j / 20
+				var q := Vector3(p.x + cos(ang) * hw_n, 0.0, p.z + sin(ang) * hw_n)
+				var h := _h_asfalto_tesela(q.x, q.z, y_n, sa, sb, shw, celdas)
+				q.y = (y_n if is_nan(h) else h) + 0.02
+				vs0.append(q)
+				ns0.append(Vector3.UP)
+			for j in 20:
+				ix0.append_array([k00, k00 + 1 + j, k00 + 1 + (j + 1) % 20])
+	# punta: todos los tramos salen hacia el mismo lado (dos calzadas que se juntan en un pico): sin disco quedaba un
+	# medio círculo sin asfalto delante del pico
+	var punta := true
+	for e in ext:
+		for e2 in ext:
+			if e2 != e and (e2[1] as Vector2).dot(e[1]) < 0.3:
+				punta = false
 	for e in ext:
 		var dir: Vector2 = e[1]
-		var sigue := false
+		var sigue := punta
 		for e2 in ext:
-			if e2 != e and (e2[1] as Vector2).dot(dir) < -0.7:
+			# casi opuesto (sigue recto) o en ángulo de hasta ~70° (esquina: quedaba un cuarto de círculo por fuera)
+			if e2 != e and (e2[1] as Vector2).dot(dir) < 0.3:
 				sigue = true
 		var hw: float = e[2]
 		if not sigue or hw < 0.5:

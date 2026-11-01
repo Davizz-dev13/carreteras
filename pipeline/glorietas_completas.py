@@ -78,6 +78,15 @@ def main():
             g = el["geometry"]
             if not all(s_ <= p["lat"] <= n_ and o_ <= p["lon"] <= e_ for p in g): continue
             glorietas[el["id"]] = el
+    # vías de coches de OSM (para los remates: una calzada del juego que se queda a pocos metros de una glorieta)
+    viales = {}
+    for f in sorted(glob.glob(os.path.join(a.cache, "*.json"))):
+        try: datos = json.load(open(f))
+        except Exception: continue
+        if not isinstance(datos, dict): continue
+        for el in datos.get("elements", []):
+            if el.get("type") == "way" and "geometry" in el and "nodes" in el and osm.es_carretera(el.get("tags", {})):
+                viales[el["id"]] = el
     # anillos: vías de glorieta que comparten nodos (una glorieta suele ser varias vías de OSM)
     ids = sorted(glorietas)
     padre = {w: w for w in ids}
@@ -96,7 +105,62 @@ def main():
     n_anillos = 0
     anillos_juego = []
 
-    def anillo_cerrado(ways):
+    extremos = []      # extremos de las calzadas del juego: (punto, altura, anchura)
+    for (x, z, y), w in zip(lineas, anchos):
+        if len(x) >= 2:
+            extremos += [(np.array([x[0], z[0]]), float(y[0]), float(w[0])), (np.array([x[-1], z[-1]]), float(y[-1]), float(w[-1]))]
+    ext_xy = np.array([e[0] for e in extremos]); ext_kd = cKDTree(ext_xy)
+
+    def callejon(p):
+        """¿es p un final sin salida? (ninguna otra calzada a menos de 3 m)"""
+        idx = arbol.query_ball_point(p, 3.0)
+        if not idx: return True
+        A = seg_a[idx]; B = seg_b[idx]
+        # los segmentos de la propia calzada que acaba en p tocan p: mira si alguno NO tiene p como extremo
+        otros = [i for i, (aa, bb) in enumerate(zip(A, B)) if np.hypot(*(aa - p)) > 0.05 and np.hypot(*(bb - p)) > 0.05]
+        return len(otros) == 0
+
+    def remate(grupo):
+        nodos_anillo = set(n for w in grupo for n in glorietas[w]["nodes"])
+        pts_anillo = []
+        for w in grupo:
+            g = glorietas[w]["geometry"]
+            xs, ys = utm.transform([p["lon"] for p in g], [p["lat"] for p in g])
+            pts_anillo.append(np.column_stack([np.array(xs) - E0, N0 - np.array(ys)]))
+        pa = np.vstack(pts_anillo)
+        cerca = ext_kd.query_ball_point(pa.mean(0), float(np.hypot(*(pa - pa.mean(0)).T).max()) + 30.0)
+        for i in cerca:
+            p, y, w_fin = extremos[i]
+            if np.hypot(*(pa - p).T).min() > 30.0 or not callejon(p):
+                continue
+            # vía de OSM que pasa por p y llega a un nodo del anillo
+            for wid, el in viales.items():
+                if wid in glorietas: continue
+                ns = el["nodes"]; comunes = [k for k, n in enumerate(ns) if n in nodos_anillo]
+                if not comunes: continue
+                g = el["geometry"]
+                xs, ys = utm.transform([q["lon"] for q in g], [q["lat"] for q in g])
+                P = np.column_stack([np.array(xs) - E0, N0 - np.array(ys)])
+                dd = np.hypot(*(P - p).T); j = int(np.argmin(dd))
+                # distancia de p a la polilínea (no solo a sus vértices)
+                AB = P[1:] - P[:-1]; l2 = np.maximum((AB ** 2).sum(1), 1e-9)
+                u = np.clip(((p - P[:-1]) * AB).sum(1) / l2, 0, 1); q = P[:-1] + AB * u[:, None]
+                dseg = np.hypot(*(q - p).T); s = int(np.argmin(dseg))
+                if dseg[s] > 1.5: continue
+                k = min(comunes, key=lambda c: abs(c - s))
+                if k > s: tramo = np.vstack([p, P[s + 1:k + 1]])
+                else: tramo = np.vstack([P[k:s + 1], p])[::-1]
+                L = float(np.hypot(*np.diff(tramo, axis=0).T).sum())
+                if L > 40.0 or L < 0.5: continue
+                t = el["tags"]
+                P2, si, _ = R.remuestrear(tramo, 2.0)
+                print(f"  remate {wid} ({t.get('name', '') or t.get('ref', '') or t.get('highway')}): {L:.0f} m hasta la glorieta")
+                return {"x": np.round(P2[:, 0], 2).tolist(), "y": [round(y, 2)] * len(P2), "z": np.round(P2[:, 1], 2).tolist(),
+                        "ancho": round(max(R.ancho_de(t), w_fin), 2), "ref": t.get("ref", ""), "nombre": t.get("name", ""),
+                        "tipo": R.tipo_base(t), "puente": 0, "tunel": 0, "anadida": "glorieta", "osm_id": wid}
+        return None
+
+    def anillo_cerrado(ways, forzar=False, y=None, hw=None):
         """Eje cerrado de la glorieta (sus vías de OSM encadenadas por nodos), cada 1,5 m, con la altura y la anchura de
         la calzada del juego más cercana. None si las vías no cierran un anillo."""
         resto = list(ways)
@@ -117,6 +181,8 @@ def main():
         pts, _, _ = R.remuestrear(xy, 1.5)
         if np.hypot(*(pts[0] - pts[-1])) < 0.3:
             pts = pts[:-1]
+        if forzar:
+            return {"x": np.round(pts[:, 0], 2).tolist(), "z": np.round(pts[:, 1], 2).tolist(), "y": [round(y, 2)] * len(pts), "hw": round(hw, 2)}
         info = [mas_cercano(p) for p in pts]
         ok = [i for i in info if i[1] is not None and i[0] <= 3.0]
         if len(ok) < 0.5 * len(pts):
@@ -144,8 +210,30 @@ def main():
             an = anillo_cerrado([glorietas[w] for w in grupo])
             if an is not None:
                 anillos_juego.append(an)
-        if not falta_todo.any() or falta_todo.all():
-            continue        # entera en el juego, o ninguna parte toca la red del juego: no es nuestra
+        if falta_todo.all():
+            # ninguna parte toca la red del juego. Remate (1-11-2026): si una calzada del juego se acaba a menos de 30 m
+            # del anillo y su vía de OSM sigue hasta él (se cortó porque el último trozo era muy corto: M-406, una
+            # primary que se quedaba a 19 m de su glorieta), se añade ese trozo y la glorieta entera.
+            rem = remate(grupo)
+            if rem is None:
+                continue
+            nuevas.append(rem)
+            n_anillos += 1
+            for wid in grupo:
+                el = glorietas[wid]; t = el["tags"]; g = el["geometry"]
+                xs, ys = utm.transform([p["lon"] for p in g], [p["lat"] for p in g])
+                P, si, _ = R.remuestrear(np.column_stack([np.array(xs) - E0, N0 - np.array(ys)]), 2.0)
+                Y = np.full(len(P), rem["y"][-1])
+                nuevas.append({"x": np.round(P[:, 0], 2).tolist(), "y": np.round(Y, 2).tolist(), "z": np.round(P[:, 1], 2).tolist(),
+                               "ancho": round(R.ancho_de(t), 2), "ref": t.get("ref", ""), "nombre": t.get("name", ""),
+                               "tipo": R.tipo_base(t), "puente": 0, "tunel": 0, "anadida": "glorieta", "osm_id": wid})
+                print(f"  glorieta {wid} ({t.get('name', '') or t.get('ref', '') or t.get('highway')}): entera, con remate")
+            an = anillo_cerrado([glorietas[w] for w in grupo], forzar=True, y=rem["y"][-1], hw=max(R.ancho_de(glorietas[w]["tags"]) for w in grupo) * 0.5)
+            if an is not None:
+                anillos_juego.append(an)
+            continue
+        if not falta_todo.any():
+            continue        # entera en el juego
         n_anillos += 1
         for wid, el, pts, info in muestras:
             t = el["tags"]

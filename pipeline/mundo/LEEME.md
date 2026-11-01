@@ -3,6 +3,12 @@
 Genera `juego/datos/madrid/` (teselas de 2 km en paquetes de 8 km). En orden:
 
 1. `m1_red.py` — red interurbana de OSM (autopistas/autovías y enlaces siempre; primary/secondary/tertiary con `ref`; glorietas sin `ref` que unen la red) → red.pkl
+1b. `m1b_glorietas.py` — glorietas completas: de cada glorieta de OSM de la que la red usa algún trozo se añaden los arcos
+   que faltan (antes quedaban 109 glorietas a medias: la carretera llegaba y acababa en el aire), y a las glorietas que
+   quedan sin salida o sin entrada (sus otros brazos son calles que la red no lleva) el camino más corto por vías de coches
+   de OSM hasta la red (≤ 1,5 km, respetando sentidos únicos, sin puentes ni túneles). Los tramos nuevos van al final (los
+   números existentes no cambian salvo los tramos partidos donde llega un conector, cuya segunda parte va al final) →
+   red_glorietas.pkl (`m1b_glorietas.py red.pkl red_glorietas.pkl madrid.osm.pbf clm-10km.osm.pbf cyl-10km.osm.pbf`)
 2. `m2_mdt.py` — descarga IGN MDT05 / MDT25 (WCS) a cache_mdt
 3. `m3_mundo.py` — rasante de cada tramo (cada 5 m; gálibo de 6 m en los cruces a distinto nivel), terreno por tesela (con terraplén bajo cada calzada) (10 m con carretera / 25 m sin ella), horizonte (200 m) → red.json.gz, red_N.bin.gz, ter_I_J.bin, horizonte.bin.gz, mundo.json
 4. `m4_orto.py` — ortofoto IGN PNOA por tesela + horizonte → ort_I_J.bin, horizonte_orto.jpg

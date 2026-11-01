@@ -76,6 +76,8 @@ func salidas(k: int, sentido: int) -> Array:
 		var sv := int(t2["s"])
 		if (s2 > 0 and sv == -1) or (s2 < 0 and sv == 1):
 			continue
+		if sv == 0 and prohibido(k2i, s2):
+			continue
 		var sal: Vector3 = punto(k2i, s2, minf(15.0, longitud(k2i)))[0] - punto(k2i, s2, 0.0)[0]
 		sal.y = 0.0
 		var f := Vector3(llegada.x, 0.0, llegada.z).normalized()
@@ -254,3 +256,78 @@ func limite(k: int, sentido: int) -> float:
 	var t: Dictionary = datos.tramos[k]
 	var v := float(t["vf"] if sentido > 0 else t["vb"])
 	return v if v > 0.0 else float(t["v"])
+
+
+## Ramal de doble sentido (según OSM) que en realidad solo sirve en un sentido: en las glorietas con isleta partida
+## OSM a veces deja los dos ramales de un brazo como de doble sentido. El que sale de la glorieta llega a ella en
+## horquilla (giro de más de 120° para seguir el anillo) y el que entra sale de ella igual: el piloto entraba por el
+## ramal de salida, no podía girar tanto y daba vueltas fuera del asfalto (M-203). Prohibido recorrerlo en el sentido
+## de la horquilla si en el otro sentido el empalme con el anillo es suave y el otro extremo es un cruce (hay otro ramal).
+var _prohibidos := {}
+
+func prohibido(k: int, sentido: int) -> bool:
+	var clave := k * 2 + (1 if sentido > 0 else 0)
+	_m.lock()
+	var c = _prohibidos.get(clave)
+	_m.unlock()
+	if c != null:
+		return c
+	var r := false
+	var t: Dictionary = datos.tramos[k]
+	if int(t["rot"]) == 0 and int(t["s"]) == 0 and int(t["a"]) != int(t["b"]):
+		# entrar al anillo por el final en horquilla
+		var nf := nodo_final(k, sentido)
+		var ni := nodo_final(k, -sentido)
+		var e1 := _giro_anillo(k, sentido, nf)
+		if e1.x > deg_to_rad(120.0) and e1.y < deg_to_rad(75.0) and _grado(ni) >= 3:
+			r = true
+		# salir del anillo por el comienzo en horquilla
+		var e2 := _giro_anillo(k, -sentido, ni)
+		if e2.y > deg_to_rad(120.0) and e2.x < deg_to_rad(75.0) and _grado(nf) >= 3:
+			r = true
+	_m.lock()
+	_prohibidos[clave] = r
+	_m.unlock()
+	return r
+
+
+func _grado(n: int) -> int:
+	var nd = datos.nodos.get(n)
+	return 0 if nd == null else (nd[3] as Array).size()
+
+
+## (giro al entrar al anillo llegando por [k, sentido] a n, giro al salir del anillo en n por [k, -sentido]) en rad;
+## (0, 0) si en n no hay anillo que entre y salga
+func _giro_anillo(k: int, sentido: int, n: int) -> Vector2:
+	var nd = datos.nodos.get(n)
+	if nd == null:
+		return Vector2.ZERO
+	var t_sale := Vector2.ZERO
+	var t_llega := Vector2.ZERO
+	for x in nd[3]:
+		var k2 := int(x)
+		if k2 == k or not es_glorieta(k2):
+			continue
+		var t2: Dictionary = datos.tramos[k2]
+		var sv := int(t2["s"])
+		var L2 := longitud(k2)
+		var dd := minf(8.0, L2)
+		if int(t2["a"]) == n and sv >= 0:
+			var v: Vector3 = punto(k2, 1, dd)[0] - punto(k2, 1, 0.0)[0]
+			t_sale = Vector2(v.x, v.z)
+		elif int(t2["b"]) == n and sv <= 0:
+			var v: Vector3 = punto(k2, -1, dd)[0] - punto(k2, -1, 0.0)[0]
+			t_sale = Vector2(v.x, v.z)
+		if int(t2["b"]) == n and sv >= 0:
+			var v: Vector3 = punto(k2, 1, L2)[0] - punto(k2, 1, L2 - dd)[0]
+			t_llega = Vector2(v.x, v.z)
+		elif int(t2["a"]) == n and sv <= 0:
+			var v: Vector3 = punto(k2, -1, L2)[0] - punto(k2, -1, L2 - dd)[0]
+			t_llega = Vector2(v.x, v.z)
+	if t_sale == Vector2.ZERO or t_llega == Vector2.ZERO:
+		return Vector2.ZERO
+	var L := longitud(k)
+	var d := minf(8.0, L)
+	var w: Vector3 = punto(k, sentido, L)[0] - punto(k, sentido, L - d)[0]
+	var llegada := Vector2(w.x, w.z)
+	return Vector2(absf(llegada.angle_to(t_sale)), absf(t_llega.angle_to(-llegada)))
