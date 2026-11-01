@@ -57,6 +57,7 @@ func preparar(m: Node3D) -> void:
 		_piezas_ruta(r)
 	for v in Ajustes.vias:
 		_piezas_via(v)
+	_piezas_parches()
 	_piezas_extra()
 	print("Streaming: %d piezas descritas, terreno lejano listo en %d ms" % [piezas.size(), Time.get_ticks_msec() - t0])
 
@@ -220,6 +221,16 @@ func _piezas_ruta(r: Ruta) -> void:
 		# línea derivada del criterio de adelantamiento del juego (adelantar.json); sin él, regla antigua de radio 350 m
 		var continua := (r.discontinua[i] == 0) if r.discontinua.size() == r.n else absf(r.curvatura[i]) > 1.0 / 350.0
 		patron[i] = 1 if (continua or fmod(i * r.paso, 12.0) < 4.5) else 0
+	# donde la ruta va por debajo de otra calzada (boca de un cruce, tramo compartido) no se pintan sus líneas:
+	# quedarían encima del asfalto de la otra
+	var borde := PackedByteArray()
+	borde.resize(r.n)
+	borde.fill(1)
+	if r.bajo.size() == r.n:
+		for i in r.n:
+			if r.bajo[i] == 1:
+				borde[i] = 0
+				patron[i] = 0
 	var i := 0
 	while i < r.n - 1:
 		if r.dibujar[i] == 0:
@@ -232,7 +243,7 @@ func _piezas_ruta(r: Ruta) -> void:
 		while a < j:
 			var b := mini(a + TROZO, j)
 			var c := _caja(r.pts, a, b)
-			_pieza(T_RUTA, 0, c.position.x - 10, c.position.y - 10, c.end.x + 10, c.end.y + 10, {"ruta": r, "a": a, "b": b, "patron": patron})
+			_pieza(T_RUTA, 0, c.position.x - 10, c.position.y - 10, c.end.x + 10, c.end.y + 10, {"ruta": r, "a": a, "b": b, "patron": patron, "borde": borde})
 			a = b
 		i = j
 
@@ -266,6 +277,75 @@ func _piezas_via(v: Dictionary) -> void:
 		var c := _caja(pts, a, b)
 		_pieza(T_VIA, 0, c.position.x - 8, c.position.y - 8, c.end.x + 8, c.end.y + 8, {"pts": pts, "anchos": anchos, "sin_talud": sin_talud, "a": a, "b": b})
 		a = b
+
+
+## Discos de asfalto de los nodos (Cruces.parches: muescas entre los trozos de una glorieta, empalmes, bocas):
+## agrupados en piezas de 250 m para no multiplicar las mallas.
+func _piezas_parches() -> void:
+	var grupos := {}
+	for pc in Cruces.parches:
+		var c0: Vector3 = pc["c"]
+		var cl := Vector2i(floori(c0.x / 250.0), floori(c0.z / 250.0))
+		if not grupos.has(cl):
+			grupos[cl] = []
+		grupos[cl].append(pc)
+	for cl in grupos:
+		var mn := Vector2(INF, INF)
+		var mx := Vector2(-INF, -INF)
+		for pc in grupos[cl]:
+			for q in pc["borde"]:
+				mn = Vector2(minf(mn.x, q.x), minf(mn.y, q.z))
+				mx = Vector2(maxf(mx.x, q.x), maxf(mx.y, q.z))
+		_pieza(T_VIA, 0, mn.x - 4, mn.y - 4, mx.x + 4, mx.y + 4, {"parches": grupos[cl]})
+
+
+## Triángulos (abanico) de un disco de nodo, o banda cerrada de un anillo de glorieta.
+static func tri_parche(pc: Dictionary, verts: PackedVector3Array, nor: PackedVector3Array, idx: PackedInt32Array) -> void:
+	var borde: PackedVector3Array = pc["borde"]
+	var k0 := verts.size()
+	if pc.has("interior"):
+		# anillo de glorieta: banda cerrada entre el borde de dentro y el de fuera
+		var dentro: PackedVector3Array = pc["interior"]
+		var m2 := borde.size()
+		for k in m2:
+			verts.append(dentro[k])
+			verts.append(borde[k])
+			nor.append(Vector3.UP)
+			nor.append(Vector3.UP)
+		for k in m2:
+			var a := k0 + 2 * k
+			var b := k0 + 2 * ((k + 1) % m2)
+			for t3 in [[a, b + 1, a + 1], [a, b, b + 1]]:
+				# cara de arriba hacia arriba (mismo sentido que las franjas de las calzadas; del revés no se ven)
+				var p0: Vector3 = verts[t3[0]]
+				var p1: Vector3 = verts[t3[1]]
+				var p2: Vector3 = verts[t3[2]]
+				if (p1.x - p0.x) * (p2.z - p0.z) - (p1.z - p0.z) * (p2.x - p0.x) < 0.0:
+					idx.append_array([t3[0], t3[2], t3[1]])
+				else:
+					idx.append_array(t3)
+		return
+	verts.append(pc["c"])
+	nor.append(Vector3.UP)
+	for q in borde:
+		verts.append(q)
+		nor.append(Vector3.UP)
+	var m := borde.size()
+	for k in m:
+		# mismo sentido de giro que las franjas de las calzadas: al revés la cara de arriba quedaba hacia abajo y el
+		# disco no se veía (se descarta la cara de atrás)
+		idx.append_array([k0, k0 + 1 + k, k0 + 1 + (k + 1) % m])
+
+
+func _trozo_parches(pz: Dictionary) -> Node3D:
+	var v := PackedVector3Array(); var n := PackedVector3Array(); var ix := PackedInt32Array()
+	var v2 := PackedVector3Array(); var n2 := PackedVector3Array(); var ix2 := PackedInt32Array()
+	for pc in pz["parches"]:
+		if pc["ruta"]:
+			tri_parche(pc, v, n, ix)
+		else:
+			tri_parche(pc, v2, n2, ix2)
+	return _instancia(_malla([[v, n, ix, mundo.mat_asfalto], [v2, n2, ix2, mundo.mat_asfalto2]]), DIST_CALZADA)
 
 
 # ---------------------------------------------------------------- terreno
@@ -492,8 +572,8 @@ func _trozo_ruta(pz: Dictionary) -> Node3D:
 	raiz.add_child(_instancia(_malla([[v, n, ix, mundo.mat_asfalto], [tv, tn, ti, mundo.mat_talud]]), DIST_CALZADA))
 	var mv := PackedVector3Array(); var mn := PackedVector3Array(); var mi := PackedInt32Array()
 	# líneas de borde (continuas, 15 cm) y central (continua en curvas cerradas, discontinua en rectas)
-	_franja(r.pts, r.ancho, a, b, -1.0, 0.075, 0.08, mv, mn, mi)
-	_franja(r.pts, r.ancho, a, b, 1.0, 0.075, 0.08, mv, mn, mi)
+	_franja(r.pts, r.ancho, a, b, -1.0, 0.075, 0.08, mv, mn, mi, pz["borde"])
+	_franja(r.pts, r.ancho, a, b, 1.0, 0.075, 0.08, mv, mn, mi, pz["borde"])
 	if not r.tiene_carriles():
 		_franja(r.pts, r.ancho, a, b, 0.0, 0.07, 0.085, mv, mn, mi, pz["patron"])
 	else:
@@ -513,10 +593,10 @@ func _trozo_ruta(pz: Dictionary) -> Node3D:
 			sep_i[i] = r.pts[i] + der * (r.lat_ida[i] + r.lat_ida_adel[i]) * 0.5
 			sep_v[i] = r.pts[i] + der * (r.lat_vuelta[i] + r.lat_vuelta_adel[i]) * 0.5
 			var discontinua := fmod(i * r.paso, 12.0) < 4.5
-			if r.car_ida[i] != r.car_vuelta[i]:
+			if r.car_ida[i] != r.car_vuelta[i] and pz["borde"][i] == 1:
 				pat_eje[i] = 1     # 2+1: línea continua en el eje (ver adelantar.json, supuesto_2+1)
-			pat_i[i] = 1 if (r.car_ida[i] >= 2 and discontinua) else 0
-			pat_v[i] = 1 if (r.car_vuelta[i] >= 2 and discontinua) else 0
+			pat_i[i] = 1 if (r.car_ida[i] >= 2 and discontinua and pz["borde"][i] == 1) else 0
+			pat_v[i] = 1 if (r.car_vuelta[i] >= 2 and discontinua and pz["borde"][i] == 1) else 0
 			hay_i = hay_i or r.car_ida[i] >= 2
 			hay_v = hay_v or r.car_vuelta[i] >= 2
 		_franja(eje, r.ancho, a, b, 0.0, 0.07, 0.085, mv, mn, mi, pat_eje)
@@ -527,6 +607,8 @@ func _trozo_ruta(pz: Dictionary) -> Node3D:
 
 
 func _trozo_via(pz: Dictionary) -> Node3D:
+	if pz.has("parches"):
+		return _trozo_parches(pz)
 	var v := PackedVector3Array(); var n := PackedVector3Array(); var ix := PackedInt32Array()
 	var tv := PackedVector3Array(); var tn := PackedVector3Array(); var ti := PackedInt32Array()
 	_franja(pz["pts"], pz["anchos"], pz["a"], pz["b"], 0.0, 0.0, 0.04, v, n, ix, PackedByteArray(), true, pz["sin_talud"], tv, tn, ti)

@@ -181,6 +181,18 @@ func _seguir_camino() -> void:
 		if not pref_en.is_empty() and camino.size() > 0 and _pasado(pref_en):
 			preferencia = 0     # la preferencia se gasta en el cruce donde se aplicó (ver _alargar_camino)
 			pref_en = []
+	# giro muy cerrado al final del tramo (entrada o salida de glorieta): el coche gira antes de pasar el final y su
+	# proyección se quedaba a unos centímetros de él para siempre; el piloto seguía apuntando a un punto fijo y daba
+	# vueltas a su alrededor fuera del asfalto. Si ya está más cerca del tramo siguiente (y pasado su comienzo), sigue.
+	if camino.size() > 1 and d_camino >= red.longitud(camino[0][0]) - 4.0:
+		var p1 := _proyectar(camino[1][0], camino[1][1], coche.position, 0.0)
+		if p1.x > 0.2 and absf(p1.y) < absf(lat_camino):
+			camino.pop_front()
+			d_camino = p1.x
+			lat_camino = p1.y
+			if not pref_en.is_empty() and _pasado(pref_en):
+				preferencia = 0
+				pref_en = []
 	_alargar_camino()
 
 
@@ -347,7 +359,16 @@ func _volante_piloto() -> float:
 	var x := dd.dot(dr)
 	var z := dd.dot(fw)
 	var ld := maxf(sqrt(x * x + z * z), 1.0)
-	return atan(2.0 * coche.ficha.batalla * sin(atan2(x, z)) / ld)
+	return atan(2.0 * coche.ficha.batalla * sin(_angulo_mira(x, z)) / ld)
+
+
+## Ángulo al punto de mira, como mucho de lado: si el punto queda detrás (salida de glorieta casi en U, coche abierto)
+## el seno de atan2 vuelve a 0 y el piloto soltaba el volante y se iba recto campo a través
+func _angulo_mira(x: float, z: float) -> float:
+	var a := atan2(x, z)
+	if absf(a) > PI * 0.5:
+		a = PI * 0.5 * (1.0 if x >= 0.0 else -1.0)
+	return a
 
 
 func _velocidad_objetivo() -> float:
@@ -371,7 +392,32 @@ func _velocidad_objetivo() -> float:
 			pa = pb
 			pb = pc
 			dd += 20.0
+		# la curva que hay que trazar ya (arco del piloto hasta su punto de mira): al salir de una glorieta por una
+		# salida muy cerrada la curva queda dentro de la primera cuerda y no se veía; el piloto aceleraba a 60 km/h,
+		# no podía girar y se iba recto (N-320)
+		var kp := absf(_curvatura_piloto())
+		if kp > 1e-3:
+			v0 = minf(v0, sqrt(2.6 / kp))
+		# fuera de su carril (se ha abierto): despacio hasta volver
+		if absf(lat_camino) > 2.5:
+			v0 = minf(v0, 25.0 / 3.6)
 	return v0
+
+
+## Curvatura (1/m) del arco que sigue el piloto hasta su punto de mira
+func _curvatura_piloto() -> float:
+	var mira := clampf(absf(coche.v) * 0.75, 7.0, 30.0)
+	var pt := _punto_camino(mira)
+	var t: Vector3 = pt[1]
+	var der := Vector3(-t.z, 0.0, t.x).normalized()
+	var k: int = pt[2] if pt[2] >= 0 else camino[0][0]
+	var obj: Vector3 = (pt[0] as Vector3) + der * red.carril_derecho(k, 0)
+	var fw := coche.adelante()
+	var dd := obj - coche.position
+	var x := dd.dot(Vector3(-fw.z, 0.0, fw.x))
+	var z := dd.dot(fw)
+	var ld := maxf(sqrt(x * x + z * z), 1.0)
+	return 2.0 * sin(_angulo_mira(x, z)) / ld
 
 
 func _control_velocidad(v0: float) -> void:

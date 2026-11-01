@@ -11,56 +11,56 @@
    "prohibido": [
     {
      "km_ini": 0.0,
-     "km_fin": 1.298,
+     "km_fin": 1.307,
      "sentido": "ida",
      "fuente": "osm_calzadas_separadas",
      "motivo": "calzadas separadas en OSM: no hay carril contrario que invadir"
     },
     {
      "km_ini": 0.0,
-     "km_fin": 1.298,
+     "km_fin": 1.307,
      "sentido": "vuelta",
      "fuente": "osm_calzadas_separadas",
      "motivo": "calzadas separadas en OSM: no hay carril contrario que invadir"
     },
     {
-     "km_ini": 1.356,
-     "km_fin": 9.274,
+     "km_ini": 1.364,
+     "km_fin": 9.28,
      "sentido": "ida",
      "fuente": "osm_calzadas_separadas",
      "motivo": "calzadas separadas en OSM: no hay carril contrario que invadir"
     },
     {
-     "km_ini": 1.356,
-     "km_fin": 9.274,
+     "km_ini": 1.364,
+     "km_fin": 9.28,
      "sentido": "vuelta",
      "fuente": "osm_calzadas_separadas",
      "motivo": "calzadas separadas en OSM: no hay carril contrario que invadir"
     },
     {
-     "km_ini": 9.336,
-     "km_fin": 9.83,
+     "km_ini": 9.342,
+     "km_fin": 9.837,
      "sentido": "ida",
      "fuente": "osm_calzadas_separadas",
      "motivo": "calzadas separadas en OSM: no hay carril contrario que invadir"
     },
     {
-     "km_ini": 9.336,
-     "km_fin": 9.83,
+     "km_ini": 9.342,
+     "km_fin": 9.837,
      "sentido": "vuelta",
      "fuente": "osm_calzadas_separadas",
      "motivo": "calzadas separadas en OSM: no hay carril contrario que invadir"
     },
     {
-     "km_ini": 9.904,
-     "km_fin": 10.588,
+     "km_ini": 9.91,
+     "km_fin": 10.594,
      "sentido": "ida",
      "fuente": "osm_calzadas_separadas",
      "motivo": "calzadas separadas en OSM: no hay carril contrario que invadir"
     },
     {
-     "km_ini": 9.904,
-     "km_fin": 10.588,
+     "km_ini": 9.91,
+     "km_fin": 10.594,
      "sentido": "vuelta",
      "fuente": "osm_calzadas_separadas",
      "motivo": "calzadas separadas en OSM: no hay carril contrario que invadir"
@@ -69,10 +69,10 @@
    "carril_adelantamiento": [
     {
      "km_ini": 0.0,
-     "km_fin": 1.298,
+     "km_fin": 1.307,
      "sentido": "ida",
      "carriles": 2,
-     "longitud_m": 1298,
+     "longitud_m": 1307,
      "fuente": "osm",
      "osm_ways": [
       28047982,
@@ -85,10 +85,10 @@
     },
     {
      "km_ini": 0.0,
-     "km_fin": 1.298,
+     "km_fin": 1.307,
      "sentido": "vuelta",
      "carriles": 2,
-     "longitud_m": 1298,
+     "longitud_m": 1307,
      "fuente": "osm",
      "osm_ways": [
       27886854,
@@ -99,11 +99,11 @@
      ]
     },
     {
-     "km_ini": 1.356,
-     "km_fin": 2.22,
+     "km_ini": 1.364,
+     "km_fin": 2.237,
      "sentido": "ida",
      "carriles": 2,
-     "longitud_m": 864,
+     "longitud_m": 873,
      "fuente": "osm",
      "osm_ways": [
       37780194,
@@ -111,11 +111,11 @@
      ]
     },
     {
-     "km_ini": 1.356,
-     "km_fin": 2.22,
+     "km_ini": 1.364,
+     "km_fin": 2.237,
      "sentido": "vuelta",
      "carriles": 2,
-     "longitud_m": 864,
+     "longitud_m": 873,
      "fuente": "osm",
      "osm_ways": [
       244402285,
@@ -123,11 +123,11 @@
      ]
     },
     {
-     "km_ini": 2.444,
-     "km_fin": 3.256,
+     "km_ini": 2.462,
+     "km_fin": 3.262,
      "sentido": "ida",
      "carriles": 2,
-     "longitud_m": 812,
+     "longitud_m": 800,
      "fuente": "osm",
      "osm_ways": [
       28682268,
@@ -141,11 +141,11 @@
      ]
     },
     {
-     "km_ini": 2.444,
-     "km_fin": 3.256,
+     "km_ini": 2.462,
+     "km_fin": 3.262,
      "sentido": "vuelta",
      "carriles": 2,
-     "longitud_m": 812,
+     "longitud_m": 800,
      "fuente": "osm",
      "osm_ways": [
       32031241,
@@ -157,11 +157,11 @@
      ]
     },
     {
-     "km_ini": 3.532,
-     "km_fin": 5.728,
+     "km_ini": 3.538,
+     "km_fin": 5.736,
      "sentido": "ida",
      "carriles": 2,
-     "longitud_m": 2196,
+     "longitud_m": 2198,
      "fuente": "osm",
      "osm_ways": [
       28682224,
@@ -169,11 +169,11 @@
      ]
     },
     {
-     "km_ini": 3.532,
-     "km_fin": 5.728,
+     "km_ini": 3.538,
+     "km_fin": 5.736,
      "sentido": "vuelta",
      "carriles": 2,
-     "longitud_m": 2196,
+     "longitud_m": 2198,
      "fuente": "osm",
      "osm_ways": [
       27886864,
@@ -184,11 +184,11 @@
      ]
     },
     {
-     "km_ini": 5.814,
-     "km_fin": 8.646,
+     "km_ini": 5.822,
+     "km_fin": 8.652,
      "sentido": "ida",
      "carriles": 2,
-     "longitud_m": 2832,
+     "longitud_m": 2830,
      "fuente": "osm",
      "osm_ways": [
       28047994,
@@ -200,11 +200,11 @@
      ]
     },
     {
-     "km_ini": 5.814,
-     "km_fin": 8.646,
+     "km_ini": 5.822,
+     "km_fin": 8.652,
      "sentido": "vuelta",
      "carriles": 2,
-     "longitud_m": 2832,
+     "longitud_m": 2830,
      "fuente": "osm",
      "osm_ways": [
       27886864,
@@ -216,8 +216,8 @@
      ]
     },
     {
-     "km_ini": 8.696,
-     "km_fin": 8.868,
+     "km_ini": 8.702,
+     "km_fin": 8.874,
      "sentido": "ida",
      "carriles": 2,
      "longitud_m": 172,
@@ -228,8 +228,8 @@
      ]
     },
     {
-     "km_ini": 8.696,
-     "km_fin": 8.868,
+     "km_ini": 8.702,
+     "km_fin": 8.874,
      "sentido": "vuelta",
      "carriles": 2,
      "longitud_m": 172,
@@ -241,8 +241,8 @@
      ]
     },
     {
-     "km_ini": 8.928,
-     "km_fin": 9.094,
+     "km_ini": 8.934,
+     "km_fin": 9.1,
      "sentido": "ida",
      "carriles": 2,
      "longitud_m": 166,
@@ -254,8 +254,8 @@
      ]
     },
     {
-     "km_ini": 8.928,
-     "km_fin": 9.094,
+     "km_ini": 8.934,
+     "km_fin": 9.1,
      "sentido": "vuelta",
      "carriles": 2,
      "longitud_m": 166,
@@ -266,11 +266,11 @@
      ]
     },
     {
-     "km_ini": 9.336,
-     "km_fin": 9.83,
+     "km_ini": 9.342,
+     "km_fin": 9.837,
      "sentido": "ida",
      "carriles": 2,
-     "longitud_m": 494,
+     "longitud_m": 495,
      "fuente": "osm",
      "osm_ways": [
       30994503,
@@ -279,11 +279,11 @@
      ]
     },
     {
-     "km_ini": 9.336,
-     "km_fin": 9.83,
+     "km_ini": 9.342,
+     "km_fin": 9.837,
      "sentido": "vuelta",
      "carriles": 2,
-     "longitud_m": 494,
+     "longitud_m": 495,
      "fuente": "osm",
      "osm_ways": [
       30994500,
@@ -292,11 +292,11 @@
      ]
     },
     {
-     "km_ini": 9.904,
-     "km_fin": 10.292,
+     "km_ini": 9.91,
+     "km_fin": 10.299,
      "sentido": "ida",
      "carriles": 2,
-     "longitud_m": 388,
+     "longitud_m": 389,
      "fuente": "osm",
      "osm_ways": [
       28748299,
@@ -305,11 +305,11 @@
      ]
     },
     {
-     "km_ini": 9.904,
-     "km_fin": 10.292,
+     "km_ini": 9.91,
+     "km_fin": 10.299,
      "sentido": "vuelta",
      "carriles": 2,
-     "longitud_m": 388,
+     "longitud_m": 389,
      "fuente": "osm",
      "osm_ways": [
       246726029,
@@ -318,22 +318,22 @@
      ]
     },
     {
-     "km_ini": 10.358,
-     "km_fin": 10.544,
+     "km_ini": 10.365,
+     "km_fin": 10.55,
      "sentido": "ida",
      "carriles": 2,
-     "longitud_m": 186,
+     "longitud_m": 185,
      "fuente": "osm",
      "osm_ways": [
       338006648
      ]
     },
     {
-     "km_ini": 10.358,
-     "km_fin": 10.544,
+     "km_ini": 10.365,
+     "km_fin": 10.55,
      "sentido": "vuelta",
      "carriles": 2,
-     "longitud_m": 186,
+     "longitud_m": 185,
      "fuente": "osm",
      "osm_ways": [
       250301234,
@@ -345,182 +345,182 @@
    "carriles": [
     {
      "km_ini": 0.0,
-     "km_fin": 1.298,
+     "km_fin": 1.307,
      "ida": 2,
      "vuelta": 2,
      "calzadas_separadas": true
     },
     {
-     "km_ini": 1.298,
-     "km_fin": 1.356,
+     "km_ini": 1.307,
+     "km_fin": 1.364,
      "ida": 1,
      "vuelta": 1,
      "calzadas_separadas": false
     },
     {
-     "km_ini": 1.356,
-     "km_fin": 2.22,
+     "km_ini": 1.364,
+     "km_fin": 2.237,
      "ida": 2,
      "vuelta": 2,
      "calzadas_separadas": true
     },
     {
-     "km_ini": 2.22,
-     "km_fin": 2.302,
+     "km_ini": 2.237,
+     "km_fin": 2.32,
      "ida": 3,
      "vuelta": 2,
      "calzadas_separadas": true
     },
     {
-     "km_ini": 2.302,
-     "km_fin": 2.38,
+     "km_ini": 2.32,
+     "km_fin": 2.398,
      "ida": 2,
      "vuelta": 2,
      "calzadas_separadas": true
     },
     {
-     "km_ini": 2.38,
-     "km_fin": 2.444,
+     "km_ini": 2.398,
+     "km_fin": 2.462,
      "ida": 3,
      "vuelta": 2,
      "calzadas_separadas": true
     },
     {
-     "km_ini": 2.444,
-     "km_fin": 3.256,
+     "km_ini": 2.462,
+     "km_fin": 3.262,
      "ida": 2,
      "vuelta": 2,
      "calzadas_separadas": true
     },
     {
-     "km_ini": 3.256,
-     "km_fin": 3.348,
+     "km_ini": 3.262,
+     "km_fin": 3.354,
      "ida": 2,
      "vuelta": 3,
      "calzadas_separadas": true
     },
     {
-     "km_ini": 3.348,
-     "km_fin": 3.468,
+     "km_ini": 3.354,
+     "km_fin": 3.474,
      "ida": 3,
      "vuelta": 3,
      "calzadas_separadas": true
     },
     {
-     "km_ini": 3.468,
-     "km_fin": 3.532,
+     "km_ini": 3.474,
+     "km_fin": 3.538,
      "ida": 2,
      "vuelta": 3,
      "calzadas_separadas": true
     },
     {
-     "km_ini": 3.532,
-     "km_fin": 5.728,
+     "km_ini": 3.538,
+     "km_fin": 5.736,
      "ida": 2,
      "vuelta": 2,
      "calzadas_separadas": true
     },
     {
-     "km_ini": 5.728,
-     "km_fin": 5.814,
+     "km_ini": 5.736,
+     "km_fin": 5.822,
      "ida": 3,
      "vuelta": 2,
      "calzadas_separadas": true
     },
     {
-     "km_ini": 5.814,
-     "km_fin": 8.646,
+     "km_ini": 5.822,
+     "km_fin": 8.652,
      "ida": 2,
      "vuelta": 2,
      "calzadas_separadas": true
     },
     {
-     "km_ini": 8.646,
-     "km_fin": 8.696,
+     "km_ini": 8.652,
+     "km_fin": 8.702,
      "ida": 2,
      "vuelta": 3,
      "calzadas_separadas": true
     },
     {
-     "km_ini": 8.696,
-     "km_fin": 8.868,
+     "km_ini": 8.702,
+     "km_fin": 8.874,
      "ida": 2,
      "vuelta": 2,
      "calzadas_separadas": true
     },
     {
-     "km_ini": 8.868,
-     "km_fin": 8.928,
+     "km_ini": 8.874,
+     "km_fin": 8.934,
      "ida": 3,
      "vuelta": 3,
      "calzadas_separadas": true
     },
     {
-     "km_ini": 8.928,
-     "km_fin": 9.094,
+     "km_ini": 8.934,
+     "km_fin": 9.1,
      "ida": 2,
      "vuelta": 2,
      "calzadas_separadas": true
     },
     {
-     "km_ini": 9.094,
-     "km_fin": 9.126,
+     "km_ini": 9.1,
+     "km_fin": 9.132,
      "ida": 3,
      "vuelta": 2,
      "calzadas_separadas": true
     },
     {
-     "km_ini": 9.126,
-     "km_fin": 9.274,
+     "km_ini": 9.132,
+     "km_fin": 9.28,
      "ida": 2,
      "vuelta": 2,
      "calzadas_separadas": true
     },
     {
-     "km_ini": 9.274,
-     "km_fin": 9.336,
+     "km_ini": 9.28,
+     "km_fin": 9.342,
      "ida": 1,
      "vuelta": 1,
      "calzadas_separadas": false
     },
     {
-     "km_ini": 9.336,
-     "km_fin": 9.83,
+     "km_ini": 9.342,
+     "km_fin": 9.837,
      "ida": 2,
      "vuelta": 2,
      "calzadas_separadas": true
     },
     {
-     "km_ini": 9.83,
-     "km_fin": 9.904,
+     "km_ini": 9.837,
+     "km_fin": 9.91,
      "ida": 1,
      "vuelta": 1,
      "calzadas_separadas": false
     },
     {
-     "km_ini": 9.904,
-     "km_fin": 10.292,
+     "km_ini": 9.91,
+     "km_fin": 10.299,
      "ida": 2,
      "vuelta": 2,
      "calzadas_separadas": true
     },
     {
-     "km_ini": 10.292,
-     "km_fin": 10.358,
+     "km_ini": 10.299,
+     "km_fin": 10.365,
      "ida": 2,
      "vuelta": 3,
      "calzadas_separadas": true
     },
     {
-     "km_ini": 10.358,
-     "km_fin": 10.544,
+     "km_ini": 10.365,
+     "km_fin": 10.55,
      "ida": 2,
      "vuelta": 2,
      "calzadas_separadas": true
     },
     {
-     "km_ini": 10.544,
-     "km_fin": 10.588,
+     "km_ini": 10.55,
+     "km_fin": 10.594,
      "ida": 3,
      "vuelta": 3,
      "calzadas_separadas": true
@@ -538,43 +538,43 @@
    "nombre": "M-406 Leganés → A-4",
    "prohibido": [
     {
-     "km_ini": 0.076,
+     "km_ini": 0.075,
      "km_fin": 1.35,
      "sentido": "ida",
      "fuente": "osm_calzadas_separadas",
      "motivo": "calzadas separadas en OSM: no hay carril contrario que invadir"
     },
     {
-     "km_ini": 0.076,
+     "km_ini": 0.075,
      "km_fin": 1.35,
      "sentido": "vuelta",
      "fuente": "osm_calzadas_separadas",
      "motivo": "calzadas separadas en OSM: no hay carril contrario que invadir"
     },
     {
-     "km_ini": 1.394,
-     "km_fin": 2.026,
+     "km_ini": 1.393,
+     "km_fin": 2.027,
      "sentido": "ida",
      "fuente": "osm_calzadas_separadas",
      "motivo": "calzadas separadas en OSM: no hay carril contrario que invadir"
     },
     {
-     "km_ini": 1.394,
-     "km_fin": 2.026,
+     "km_ini": 1.393,
+     "km_fin": 2.027,
      "sentido": "vuelta",
      "fuente": "osm_calzadas_separadas",
      "motivo": "calzadas separadas en OSM: no hay carril contrario que invadir"
     },
     {
      "km_ini": 2.092,
-     "km_fin": 3.026,
+     "km_fin": 3.025,
      "sentido": "ida",
      "fuente": "osm_calzadas_separadas",
      "motivo": "calzadas separadas en OSM: no hay carril contrario que invadir"
     },
     {
      "km_ini": 2.092,
-     "km_fin": 3.026,
+     "km_fin": 3.025,
      "sentido": "vuelta",
      "fuente": "osm_calzadas_separadas",
      "motivo": "calzadas separadas en OSM: no hay carril contrario que invadir"
@@ -582,11 +582,11 @@
    ],
    "carril_adelantamiento": [
     {
-     "km_ini": 0.076,
+     "km_ini": 0.075,
      "km_fin": 1.35,
      "sentido": "ida",
      "carriles": 2,
-     "longitud_m": 1274,
+     "longitud_m": 1275,
      "fuente": "osm",
      "osm_ways": [
       23605801,
@@ -595,22 +595,22 @@
      ]
     },
     {
-     "km_ini": 0.076,
+     "km_ini": 0.075,
      "km_fin": 1.35,
      "sentido": "vuelta",
      "carriles": 2,
-     "longitud_m": 1274,
+     "longitud_m": 1275,
      "fuente": "osm",
      "osm_ways": [
       23605780
      ]
     },
     {
-     "km_ini": 1.478,
+     "km_ini": 1.477,
      "km_fin": 1.844,
      "sentido": "ida",
      "carriles": 2,
-     "longitud_m": 366,
+     "longitud_m": 367,
      "fuente": "osm",
      "osm_ways": [
       23605793,
@@ -618,11 +618,11 @@
      ]
     },
     {
-     "km_ini": 1.478,
+     "km_ini": 1.477,
      "km_fin": 1.844,
      "sentido": "vuelta",
      "carriles": 2,
-     "longitud_m": 366,
+     "longitud_m": 367,
      "fuente": "osm",
      "osm_ways": [
       23605777,
@@ -658,13 +658,13 @@
    "carriles": [
     {
      "km_ini": 0.0,
-     "km_fin": 0.076,
+     "km_fin": 0.075,
      "ida": 1,
      "vuelta": 1,
      "calzadas_separadas": false
     },
     {
-     "km_ini": 0.076,
+     "km_ini": 0.075,
      "km_fin": 1.35,
      "ida": 2,
      "vuelta": 2,
@@ -672,27 +672,27 @@
     },
     {
      "km_ini": 1.35,
-     "km_fin": 1.394,
+     "km_fin": 1.393,
      "ida": 1,
      "vuelta": 1,
      "calzadas_separadas": false
     },
     {
-     "km_ini": 1.394,
-     "km_fin": 1.436,
+     "km_ini": 1.393,
+     "km_fin": 1.435,
      "ida": 2,
      "vuelta": 3,
      "calzadas_separadas": true
     },
     {
-     "km_ini": 1.436,
-     "km_fin": 1.478,
+     "km_ini": 1.435,
+     "km_fin": 1.477,
      "ida": 3,
      "vuelta": 2,
      "calzadas_separadas": true
     },
     {
-     "km_ini": 1.478,
+     "km_ini": 1.477,
      "km_fin": 1.844,
      "ida": 2,
      "vuelta": 2,
@@ -707,13 +707,13 @@
     },
     {
      "km_ini": 1.9,
-     "km_fin": 2.026,
+     "km_fin": 2.027,
      "ida": 2,
      "vuelta": 2,
      "calzadas_separadas": true
     },
     {
-     "km_ini": 2.026,
+     "km_ini": 2.027,
      "km_fin": 2.092,
      "ida": 1,
      "vuelta": 1,
@@ -770,14 +770,14 @@
     },
     {
      "km_ini": 2.99,
-     "km_fin": 3.026,
+     "km_fin": 3.025,
      "ida": 2,
      "vuelta": 2,
      "calzadas_separadas": true
     },
     {
-     "km_ini": 3.026,
-     "km_fin": 3.162,
+     "km_ini": 3.025,
+     "km_fin": 3.161,
      "ida": 1,
      "vuelta": 1,
      "calzadas_separadas": false

@@ -221,6 +221,10 @@ func glorieta(k: int, sentido: int, preferencia := 0) -> Array:
 		var fin_salida := nodo_final(ult[0], ult[1])
 		if fin_salida == nodo_previo or fin_salida == nodo0 or nodos_anillo.has(fin_salida):
 			v -= 10.0
+		# salida a un tramo sin continuación (calle cortada de pocos metros): el piloto tenía que dar media vuelta en
+		# ella y se salía del asfalto
+		if salidas(ult[0], ult[1]).is_empty():
+			v -= 8.0
 		if v > nota:
 			nota = v
 			mejor = op

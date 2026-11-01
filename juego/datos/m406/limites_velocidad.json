@@ -3,327 +3,327 @@
   {
    "id": 0,
    "nombre": "M-406 Alcorcón (A-5) → Leganés",
-   "longitud_km": 10.588,
+   "longitud_km": 10.592,
    "tramos": [
     {
      "km_ini": 0.0,
-     "km_fin": 0.398,
+     "km_fin": 0.406,
      "limite": 90,
      "sentido": "ida",
      "fuente": "por_defecto_legal"
     },
     {
      "km_ini": 0.0,
-     "km_fin": 0.186,
+     "km_fin": 0.19,
      "limite": 50,
      "sentido": "vuelta",
      "fuente": "osm",
      "osm_way": 244403635
     },
     {
-     "km_ini": 0.186,
-     "km_fin": 0.514,
+     "km_ini": 0.19,
+     "km_fin": 0.522,
      "limite": 70,
      "sentido": "vuelta",
      "fuente": "osm",
      "osm_way": 27886854
     },
     {
-     "km_ini": 0.398,
-     "km_fin": 0.514,
+     "km_ini": 0.406,
+     "km_fin": 0.522,
      "limite": 90,
      "sentido": "ida",
      "fuente": "osm",
      "osm_way": 64737466
     },
     {
-     "km_ini": 0.514,
-     "km_fin": 1.114,
+     "km_ini": 0.522,
+     "km_fin": 1.122,
      "limite": 90,
      "sentido": "ambos",
      "fuente": "osm",
      "osm_way": 64737465
     },
     {
-     "km_ini": 1.114,
-     "km_fin": 1.356,
+     "km_ini": 1.122,
+     "km_fin": 1.364,
      "limite": 70,
      "sentido": "ida",
      "fuente": "osm",
      "osm_way": 359883195
     },
     {
-     "km_ini": 1.114,
-     "km_fin": 1.356,
+     "km_ini": 1.122,
+     "km_fin": 1.364,
      "limite": 90,
      "sentido": "vuelta",
      "fuente": "osm",
      "osm_way": 28906069
     },
     {
-     "km_ini": 1.356,
-     "km_fin": 1.734,
+     "km_ini": 1.364,
+     "km_fin": 1.743,
      "limite": 90,
      "sentido": "ambos",
      "fuente": "osm",
      "osm_way": 37780194
     },
     {
-     "km_ini": 1.734,
-     "km_fin": 1.834,
+     "km_ini": 1.743,
+     "km_fin": 1.843,
      "limite": 80,
      "sentido": "ida",
      "fuente": "osm",
      "osm_way": 257259339
     },
     {
-     "km_ini": 1.734,
-     "km_fin": 1.834,
+     "km_ini": 1.743,
+     "km_fin": 1.843,
      "limite": 90,
      "sentido": "vuelta",
      "fuente": "osm",
      "osm_way": 244402285
     },
     {
-     "km_ini": 1.834,
-     "km_fin": 2.22,
+     "km_ini": 1.843,
+     "km_fin": 2.237,
      "limite": 80,
      "sentido": "ambos",
      "fuente": "osm",
      "osm_way": 257259339
     },
     {
-     "km_ini": 2.22,
-     "km_fin": 2.302,
+     "km_ini": 2.237,
+     "km_fin": 2.32,
      "limite": 90,
      "sentido": "ida",
      "fuente": "por_defecto_legal"
     },
     {
-     "km_ini": 2.22,
-     "km_fin": 2.52,
+     "km_ini": 2.237,
+     "km_fin": 2.537,
      "limite": 80,
      "sentido": "vuelta",
      "fuente": "osm",
      "osm_way": 244402323
     },
     {
-     "km_ini": 2.302,
-     "km_fin": 3.254,
+     "km_ini": 2.32,
+     "km_fin": 3.26,
      "limite": 90,
      "sentido": "ida",
      "fuente": "osm",
      "osm_way": 257259341
     },
     {
-     "km_ini": 2.52,
-     "km_fin": 3.254,
+     "km_ini": 2.537,
+     "km_fin": 3.26,
      "limite": 90,
      "sentido": "vuelta",
      "fuente": "por_defecto_legal"
     },
     {
-     "km_ini": 3.254,
-     "km_fin": 3.468,
+     "km_ini": 3.26,
+     "km_fin": 3.474,
      "limite": 90,
      "sentido": "ambos",
      "fuente": "por_defecto_legal"
     },
     {
-     "km_ini": 3.468,
-     "km_fin": 3.532,
+     "km_ini": 3.474,
+     "km_fin": 3.538,
      "limite": 90,
      "sentido": "ida",
      "fuente": "osm",
      "osm_way": 244402312
     },
     {
-     "km_ini": 3.468,
-     "km_fin": 3.532,
+     "km_ini": 3.474,
+     "km_fin": 3.538,
      "limite": 90,
      "sentido": "vuelta",
      "fuente": "por_defecto_legal"
     },
     {
-     "km_ini": 3.532,
-     "km_fin": 8.608,
+     "km_ini": 3.538,
+     "km_fin": 8.613,
      "limite": 90,
      "sentido": "ambos",
      "fuente": "osm",
      "osm_way": 244402312
     },
     {
-     "km_ini": 8.608,
-     "km_fin": 8.664,
+     "km_ini": 8.613,
+     "km_fin": 8.67,
      "limite": 90,
      "sentido": "ida",
      "fuente": "osm",
      "osm_way": 31454145
     },
     {
-     "km_ini": 8.608,
-     "km_fin": 8.664,
+     "km_ini": 8.613,
+     "km_fin": 8.67,
      "limite": 90,
      "sentido": "vuelta",
      "fuente": "por_defecto_legal"
     },
     {
-     "km_ini": 8.664,
-     "km_fin": 8.696,
+     "km_ini": 8.67,
+     "km_fin": 8.702,
      "limite": 90,
      "sentido": "ambos",
      "fuente": "por_defecto_legal"
     },
     {
-     "km_ini": 8.696,
-     "km_fin": 9.126,
+     "km_ini": 8.702,
+     "km_fin": 9.132,
      "limite": 90,
      "sentido": "ida",
      "fuente": "por_defecto_legal"
     },
     {
-     "km_ini": 8.696,
-     "km_fin": 9.126,
+     "km_ini": 8.702,
+     "km_fin": 9.132,
      "limite": 50,
      "sentido": "vuelta",
      "fuente": "osm",
      "osm_way": 1176602863
     },
     {
-     "km_ini": 9.126,
-     "km_fin": 9.204,
+     "km_ini": 9.132,
+     "km_fin": 9.21,
      "limite": 90,
      "sentido": "ambos",
      "fuente": "por_defecto_legal"
     },
     {
-     "km_ini": 9.204,
-     "km_fin": 9.274,
+     "km_ini": 9.21,
+     "km_fin": 9.28,
      "limite": 40,
      "sentido": "ida",
      "fuente": "osm",
      "osm_way": 338006631
     },
     {
-     "km_ini": 9.204,
-     "km_fin": 9.274,
+     "km_ini": 9.21,
+     "km_fin": 9.28,
      "limite": 90,
      "sentido": "vuelta",
      "fuente": "por_defecto_legal"
     },
     {
-     "km_ini": 9.274,
-     "km_fin": 9.336,
+     "km_ini": 9.28,
+     "km_fin": 9.342,
      "limite": 50,
      "sentido": "ambos",
      "fuente": "osm",
      "osm_way": 889921783
     },
     {
-     "km_ini": 9.336,
-     "km_fin": 9.584,
+     "km_ini": 9.342,
+     "km_fin": 9.591,
      "limite": 90,
      "sentido": "ida",
      "fuente": "osm",
      "osm_way": 30994503
     },
     {
-     "km_ini": 9.336,
-     "km_fin": 9.394,
+     "km_ini": 9.342,
+     "km_fin": 9.4,
      "limite": 50,
      "sentido": "vuelta",
      "fuente": "osm",
      "osm_way": 246726035
     },
     {
-     "km_ini": 9.394,
-     "km_fin": 9.584,
+     "km_ini": 9.4,
+     "km_fin": 9.591,
      "limite": 70,
      "sentido": "vuelta",
      "fuente": "osm",
      "osm_way": 246726049
     },
     {
-     "km_ini": 9.584,
-     "km_fin": 9.606,
+     "km_ini": 9.591,
+     "km_fin": 9.613,
      "limite": 90,
      "sentido": "ambos",
      "fuente": "osm",
      "osm_way": 30994503
     },
     {
-     "km_ini": 9.606,
-     "km_fin": 9.734,
+     "km_ini": 9.613,
+     "km_fin": 9.741,
      "limite": 70,
      "sentido": "ida",
      "fuente": "osm",
      "osm_way": 338006595
     },
     {
-     "km_ini": 9.606,
-     "km_fin": 9.83,
+     "km_ini": 9.613,
+     "km_fin": 9.837,
      "limite": 90,
      "sentido": "vuelta",
      "fuente": "osm",
      "osm_way": 30994500
     },
     {
-     "km_ini": 9.734,
-     "km_fin": 9.83,
+     "km_ini": 9.741,
+     "km_fin": 9.837,
      "limite": 40,
      "sentido": "ida",
      "fuente": "osm",
      "osm_way": 338006604
     },
     {
-     "km_ini": 9.83,
-     "km_fin": 9.904,
+     "km_ini": 9.837,
+     "km_fin": 9.91,
      "limite": 50,
      "sentido": "ambos",
      "fuente": "osm",
      "osm_way": 663773953
     },
     {
-     "km_ini": 9.904,
-     "km_fin": 10.018,
+     "km_ini": 9.91,
+     "km_fin": 10.025,
      "limite": 90,
      "sentido": "ida",
      "fuente": "por_defecto_legal"
     },
     {
-     "km_ini": 9.904,
-     "km_fin": 9.936,
+     "km_ini": 9.91,
+     "km_fin": 9.942,
      "limite": 50,
      "sentido": "vuelta",
      "fuente": "osm",
      "osm_way": 246726043
     },
     {
-     "km_ini": 9.936,
-     "km_fin": 10.018,
+     "km_ini": 9.942,
+     "km_fin": 10.025,
      "limite": 70,
      "sentido": "vuelta",
      "fuente": "osm",
      "osm_way": 246726029
     },
     {
-     "km_ini": 10.018,
-     "km_fin": 10.338,
+     "km_ini": 10.025,
+     "km_fin": 10.345,
      "limite": 90,
      "sentido": "ambos",
      "fuente": "por_defecto_legal"
     },
     {
-     "km_ini": 10.338,
-     "km_fin": 10.588,
+     "km_ini": 10.345,
+     "km_fin": 10.594,
      "limite": 50,
      "sentido": "ida",
      "fuente": "osm",
      "osm_way": 338006648
     },
     {
-     "km_ini": 10.338,
-     "km_fin": 10.588,
+     "km_ini": 10.345,
+     "km_fin": 10.594,
      "limite": 90,
      "sentido": "vuelta",
      "fuente": "por_defecto_legal"
@@ -335,53 +335,53 @@
    },
    "tramos_pequenos_absorbidos": [
     {
-     "km_ini": 1.27,
-     "km_fin": 1.298,
+     "km_ini": 1.279,
+     "km_fin": 1.307,
      "limite": 40,
      "fuente": "osm"
     },
     {
-     "km_ini": 1.298,
-     "km_fin": 1.356,
+     "km_ini": 1.307,
+     "km_fin": 1.364,
      "limite": 90,
      "fuente": "por_defecto_legal"
     },
     {
-     "km_ini": 4.456,
-     "km_fin": 4.458,
+     "km_ini": 4.469,
+     "km_fin": 4.471,
      "limite": 90,
      "fuente": "por_defecto_legal"
     },
     {
-     "km_ini": 6.834,
-     "km_fin": 6.836,
+     "km_ini": 6.839,
+     "km_fin": 6.841,
      "limite": 50,
      "fuente": "osm"
     },
     {
-     "km_ini": 1.298,
-     "km_fin": 1.356,
+     "km_ini": 1.307,
+     "km_fin": 1.364,
      "limite": 90,
      "fuente": "por_defecto_legal",
      "sentido": "vuelta"
     },
     {
-     "km_ini": 4.24,
-     "km_fin": 4.256,
+     "km_ini": 4.254,
+     "km_fin": 4.27,
      "limite": 90,
      "fuente": "por_defecto_legal",
      "sentido": "vuelta"
     },
     {
-     "km_ini": 9.336,
-     "km_fin": 9.394,
+     "km_ini": 9.342,
+     "km_fin": 9.4,
      "limite": 40,
      "fuente": "osm",
      "sentido": "vuelta"
     },
     {
-     "km_ini": 9.904,
-     "km_fin": 9.936,
+     "km_ini": 9.91,
+     "km_fin": 9.942,
      "limite": 40,
      "fuente": "osm",
      "sentido": "vuelta"
@@ -391,40 +391,40 @@
   {
    "id": 1,
    "nombre": "M-406 Leganés → A-4",
-   "longitud_km": 3.162,
+   "longitud_km": 3.16,
    "tramos": [
     {
      "km_ini": 0.0,
-     "km_fin": 0.076,
+     "km_fin": 0.075,
      "limite": 90,
      "sentido": "ambos",
      "fuente": "por_defecto_legal"
     },
     {
-     "km_ini": 0.076,
-     "km_fin": 1.2,
+     "km_ini": 0.075,
+     "km_fin": 1.199,
      "limite": 90,
      "sentido": "ida",
      "fuente": "osm",
      "osm_way": 23605801
     },
     {
-     "km_ini": 0.076,
-     "km_fin": 2.026,
+     "km_ini": 0.075,
+     "km_fin": 2.027,
      "limite": 90,
      "sentido": "vuelta",
      "fuente": "por_defecto_legal"
     },
     {
-     "km_ini": 1.2,
-     "km_fin": 1.434,
+     "km_ini": 1.199,
+     "km_fin": 1.433,
      "limite": 70,
      "sentido": "ida",
      "fuente": "osm",
      "osm_way": 222299447
     },
     {
-     "km_ini": 1.434,
+     "km_ini": 1.433,
      "km_fin": 1.7,
      "limite": 90,
      "sentido": "ida",
@@ -441,14 +441,14 @@
     },
     {
      "km_ini": 1.9,
-     "km_fin": 2.026,
+     "km_fin": 2.027,
      "limite": 40,
      "sentido": "ida",
      "fuente": "osm",
      "osm_way": 222299453
     },
     {
-     "km_ini": 2.026,
+     "km_ini": 2.027,
      "km_fin": 2.092,
      "limite": 50,
      "sentido": "ambos",
@@ -496,14 +496,14 @@
     },
     {
      "km_ini": 2.69,
-     "km_fin": 3.026,
+     "km_fin": 3.025,
      "limite": 90,
      "sentido": "ambos",
      "fuente": "por_defecto_legal"
     },
     {
-     "km_ini": 3.026,
-     "km_fin": 3.162,
+     "km_ini": 3.025,
+     "km_fin": 3.161,
      "limite": 40,
      "sentido": "ambos",
      "fuente": "osm",
@@ -523,19 +523,19 @@
     },
     {
      "km_ini": 1.35,
-     "km_fin": 1.394,
+     "km_fin": 1.393,
      "limite": 50,
      "fuente": "osm"
     },
     {
-     "km_ini": 1.394,
-     "km_fin": 1.434,
+     "km_ini": 1.393,
+     "km_fin": 1.433,
      "limite": 90,
      "fuente": "por_defecto_legal"
     },
     {
      "km_ini": 1.35,
-     "km_fin": 1.394,
+     "km_fin": 1.393,
      "limite": 50,
      "fuente": "osm",
      "sentido": "vuelta"

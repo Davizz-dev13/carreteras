@@ -22,6 +22,7 @@ var camara := 0            # 0 persecución, 1 cabina
 var info := {}
 var rutas: Array[Ruta] = []
 var vias: Array = []       # [{pts: PackedVector3Array, ancho, nombre}]
+var glorietas: Array = []  # ejes cerrados de las glorietas [{x, y, z, hw}] (pipeline/glorietas_completas.py)
 var terreno := {}          # Vector2i -> PackedFloat32Array
 var ter_x0 := 0.0
 var ter_z0 := 0.0
@@ -67,6 +68,7 @@ func cambiar_zona(z: String) -> void:
 	info = {}
 	rutas.clear()
 	vias.clear()
+	glorietas = []
 	terreno.clear()
 	superficie = null
 
@@ -81,6 +83,7 @@ func cargar() -> void:
 	var car: Dictionary = JSON.parse_string(FileAccess.get_file_as_string(dir_datos() + "carreteras.json"))
 	for d in car["rutas"]:
 		rutas.append(Ruta.desde_json(d))
+	glorietas = car.get("glorietas", [])
 	_lineas_adelantar()
 	_cargar_carriles()
 	# zonas grandes: las vías secundarias van repartidas en varios archivos (≤ 3 MB cada uno)

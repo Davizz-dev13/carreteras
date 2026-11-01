@@ -15,6 +15,7 @@ var vmax := PackedInt32Array()         # km/h (OSM maxspeed o por tipo de vía)
 var puente := PackedByteArray()
 var tunel := PackedByteArray()
 var dibujar := PackedByteArray()       # 0 si ese trozo ya lo dibuja otra ruta
+var bajo := PackedByteArray()          # 1 donde pisa otra calzada ya dibujada (va 3 cm por debajo): sin líneas pintadas
 var discontinua := PackedByteArray()   # 1 = línea central discontinua (se permite adelantar); de datos/…/adelantar.json
 var estadisticas := {}
 var etiquetas := PackedStringArray()   # "CL-601 · Carretera de …"

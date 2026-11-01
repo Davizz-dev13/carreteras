@@ -59,4 +59,21 @@ Generada con el pipeline de siempre, leyendo OSM de un extracto Geofabrik en vez
 Preset con "orden" ("oeste_este"), así que se aplica la corrección del desfase de un tramo de las propiedades por vía
 (cada muestra toma la vía del tramo que llega a ella).
 
+## Revisión de errores de mapeo (01-11-2026)
+Revisado en el juego (capturas) y contra la ortofoto PNOA (WMS pnoa-ma del IGN).
+- Eje de la ruta: en calzadas separadas el juego hace circular los dos sentidos por una sola banda (ancho = carriles
+  de las dos calzadas), pero la banda iba centrada en el eje OSM de UNA calzada, así que quedaba 5–6 m desplazada
+  hacia un lado: pisaba y partía la calzada contraria y dejaba una tira suelta de asfalto al otro lado. Ahora el eje
+  va por el centro de la mediana (entre las dos calzadas, medido en la ortofoto): desplazamiento mediano 5,1 m en la
+  ruta 0 (90 % < 6,0 m) y 4,1 m en la ruta 1. Recorrido y longitud iguales (10,59 km y 3,16 km).
+  Ojo: el ajuste está hecho sobre los datos, no en el pipeline; si se regenera la zona con extraer.py vuelve el eje
+  de una sola calzada.
+- Vías de la calzada contraria: recortadas donde quedan bajo la banda (vias_1.json, vias_2.json).
+- Límites de velocidad, quitamiedos y adelantamiento: los mismos valores de OSM, recalculados sobre el eje nuevo
+  (los PK cambian unos metros).
+- Señales STOP / ceda el paso (senales.json, pipeline/senales.py): 36 de OSM (33 ceda, 3 STOP); 5 que caían sobre
+  el asfalto se apartan al arcén (pipeline/senales_fuera_calzada.py).
+- Puentes de vías secundarias: rasante recta de estribo a estribo (pipeline/rasante_puentes.py): 115 tableros,
+  cambio máximo 2,45 m.
+
 Datos © colaboradores de OpenStreetMap (ODbL) · MDT05 © IGN/CNIG (CC BY 4.0).

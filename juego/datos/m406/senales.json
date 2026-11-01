@@ -1,0 +1,354 @@
+{
+"zona": "m406",
+"fuente": "© colaboradores de OpenStreetMap (ODbL), vía Overpass API: highway=stop/give_way y traffic_sign=ES:R1/ES:R2",
+"descargado": "2026-11-01 08:44",
+"rumbo": "ángulo en radianes alrededor de Y (Godot) hacia el que mira la cara de la señal",
+"senales": [
+{
+"tipo": "R1",
+"x": -4892.45,
+"y": 681.0,
+"z": -2859.72,
+"rumbo": -1.578,
+"suelta": false,
+"osm": 8802561171,
+"recolocada": "fuera de la calzada"
+},
+{
+"tipo": "R1",
+"x": -4883.66,
+"y": 681.48,
+"z": -2805.42,
+"rumbo": 0.167,
+"suelta": false,
+"osm": 8802561168
+},
+{
+"tipo": "R1",
+"x": -4556.63,
+"y": 676.24,
+"z": -2834.11,
+"rumbo": -2.294,
+"suelta": false,
+"osm": 794328161
+},
+{
+"tipo": "R1",
+"x": -3819.36,
+"y": 680.88,
+"z": -2325.81,
+"rumbo": -2.488,
+"suelta": false,
+"osm": 10169265750
+},
+{
+"tipo": "R1",
+"x": -3799.75,
+"y": 681.0,
+"z": -2290.84,
+"rumbo": -1.153,
+"suelta": false,
+"osm": 12146760737
+},
+{
+"tipo": "R1",
+"x": -3780.15,
+"y": 691.0,
+"z": -1349.74,
+"rumbo": -0.764,
+"suelta": false,
+"osm": 1417224576
+},
+{
+"tipo": "R1",
+"x": -3747.73,
+"y": 681.0,
+"z": -2305.36,
+"rumbo": -2.667,
+"suelta": false,
+"osm": 10169265749
+},
+{
+"tipo": "R1",
+"x": -3647.72,
+"y": 687.17,
+"z": -1511.22,
+"rumbo": 2.787,
+"suelta": false,
+"osm": 1363996403
+},
+{
+"tipo": "R1",
+"x": -3624.77,
+"y": 682.24,
+"z": -778.12,
+"rumbo": -1.878,
+"suelta": false,
+"osm": 2628532379
+},
+{
+"tipo": "R2",
+"x": -3359.39,
+"y": 688.32,
+"z": -701.77,
+"rumbo": 1.991,
+"suelta": false,
+"osm": 315262710
+},
+{
+"tipo": "R1",
+"x": -3138.43,
+"y": 689.88,
+"z": -137.68,
+"rumbo": 2.909,
+"suelta": false,
+"osm": 10171417343
+},
+{
+"tipo": "R2",
+"x": -3138.01,
+"y": 690.0,
+"z": -148.29,
+"rumbo": -2.162,
+"suelta": false,
+"osm": 10171417344,
+"recolocada": "fuera de la calzada"
+},
+{
+"tipo": "R1",
+"x": -2881.15,
+"y": 681.44,
+"z": 738.96,
+"rumbo": 0.602,
+"suelta": false,
+"osm": 10171417347
+},
+{
+"tipo": "R1",
+"x": -2654.29,
+"y": 682.0,
+"z": 1055.48,
+"rumbo": -2.206,
+"suelta": false,
+"osm": 10171417350
+},
+{
+"tipo": "R1",
+"x": -2400.42,
+"y": 679.94,
+"z": 1259.45,
+"rumbo": 0.997,
+"suelta": false,
+"osm": 11228133776
+},
+{
+"tipo": "R1",
+"x": -1816.51,
+"y": 677.8,
+"z": 1785.84,
+"rumbo": 1.371,
+"suelta": false,
+"osm": 10171417351
+},
+{
+"tipo": "R1",
+"x": -1193.1,
+"y": 677.94,
+"z": 1762.33,
+"rumbo": -1.022,
+"suelta": false,
+"osm": 10171417355
+},
+{
+"tipo": "R1",
+"x": -1099.98,
+"y": 676.48,
+"z": 1718.22,
+"rumbo": -1.084,
+"suelta": false,
+"osm": 10171417356
+},
+{
+"tipo": "R1",
+"x": -788.44,
+"y": 670.25,
+"z": 1522.12,
+"rumbo": -0.929,
+"suelta": false,
+"osm": 10171417357
+},
+{
+"tipo": "R1",
+"x": -625.82,
+"y": 662.67,
+"z": 1386.06,
+"rumbo": -0.811,
+"suelta": false,
+"osm": 10171417359
+},
+{
+"tipo": "R1",
+"x": -7.53,
+"y": 646.95,
+"z": 1245.86,
+"rumbo": 1.2,
+"suelta": false,
+"osm": 10143238904
+},
+{
+"tipo": "R1",
+"x": 7.31,
+"y": 646.4,
+"z": 1294.92,
+"rumbo": 0.823,
+"suelta": false,
+"osm": 1425272373
+},
+{
+"tipo": "R1",
+"x": 113.17,
+"y": 645.02,
+"z": 1350.8,
+"rumbo": -2.074,
+"suelta": false,
+"osm": 1425272357
+},
+{
+"tipo": "R2",
+"x": 164.6,
+"y": 644.05,
+"z": 1330.14,
+"rumbo": 2.574,
+"suelta": false,
+"osm": 2917205165
+},
+{
+"tipo": "R1",
+"x": 333.02,
+"y": 645.0,
+"z": 1451.31,
+"rumbo": -2.389,
+"suelta": false,
+"osm": 1360319815,
+"recolocada": "fuera de la calzada"
+},
+{
+"tipo": "R1",
+"x": 671.89,
+"y": 642.0,
+"z": 1791.21,
+"rumbo": -2.861,
+"suelta": false,
+"osm": 1425272207
+},
+{
+"tipo": "R1",
+"x": 735.32,
+"y": 641.0,
+"z": 1812.71,
+"rumbo": 2.646,
+"suelta": false,
+"osm": 6351801417,
+"recolocada": "fuera de la calzada"
+},
+{
+"tipo": "R1",
+"x": 2359.79,
+"y": 615.98,
+"z": 3185.63,
+"rumbo": -2.607,
+"suelta": false,
+"osm": 10140360209
+},
+{
+"tipo": "R1",
+"x": 2373.05,
+"y": 615.87,
+"z": 3232.22,
+"rumbo": -1.192,
+"suelta": false,
+"osm": 10140360210
+},
+{
+"tipo": "R1",
+"x": 2409.18,
+"y": 615.0,
+"z": 3181.94,
+"rumbo": -2.003,
+"suelta": false,
+"osm": 1086767216
+},
+{
+"tipo": "R1",
+"x": 2994.13,
+"y": 612.0,
+"z": 3162.52,
+"rumbo": 1.64,
+"suelta": false,
+"osm": 1430737529
+},
+{
+"tipo": "R1",
+"x": 3725.15,
+"y": 610.0,
+"z": 3136.59,
+"rumbo": -1.87,
+"suelta": false,
+"osm": 12926574643,
+"recolocada": "fuera de la calzada"
+},
+{
+"tipo": "R1",
+"x": 4354.1,
+"y": 605.85,
+"z": 3268.88,
+"rumbo": -1.024,
+"suelta": false,
+"osm": 9501285963
+},
+{
+"tipo": "R1",
+"x": 4398.28,
+"y": 605.96,
+"z": 3233.13,
+"rumbo": -2.072,
+"suelta": false,
+"osm": 1430737519
+},
+{
+"tipo": "R1",
+"x": 4601.08,
+"y": 605.0,
+"z": 3286.43,
+"rumbo": -1.195,
+"suelta": false,
+"osm": 1430737499
+},
+{
+"tipo": "R1",
+"x": 5405.05,
+"y": 614.0,
+"z": 3335.62,
+"rumbo": 0.566,
+"suelta": false,
+"osm": 2312811126
+}
+],
+"estadisticas": {
+"nodos_osm_zona": 1715,
+"puestas": 36,
+"por_tipo": {
+"R1": 33,
+"R2": 3
+},
+"descartes": {
+"lejos_de_las_rutas": 1672,
+"sobre_la_ruta_sin_sentido": 5,
+"en_via_que_llega": 35,
+"sobre_la_ruta_con_sentido": 2,
+"otro_tipo:destination": 1,
+"duplicada": 1
+}
+},
+"recolocadas_fuera_de_calzada": 5
+}

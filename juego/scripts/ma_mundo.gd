@@ -337,6 +337,9 @@ func construir_tesela(t: Vector2i, lod: int) -> Dictionary:
 			if puente and int(tr["c"]) <= 1:
 				pedidas_bionda.append([pts, rm[1], rm[2], ancho * 0.5 + 0.6, k])
 				pedidas_bionda.append([pts, rm[1], rm[2], -(ancho * 0.5 + 0.6), k])
+	# discos en los nodos (trozos de una glorieta, empalmes, bocas): cada tramo acaba en borde recto y donde dos se
+	# juntan con ángulo quedaba una muesca sin asfalto en el lado de fuera (se veía en todas las glorietas)
+	_discos_nodos(d, sa, sb, shw, celdas_sup, v, n, ix, vv, nv, iv)
 	var choque := Biondas.new()
 	for pb in pedidas_bionda:
 		_bionda(pb[0], pb[1], pb[2], pb[3], bv, bn, bi, _continuaciones(int(pb[4])), int(pb[4]), sa, sb, shw, sk, celdas_sup, choque,
@@ -355,6 +358,169 @@ func construir_tesela(t: Vector2i, lod: int) -> Dictionary:
 	var supd := {"a": sa, "b": sb, "hw": shw, "k": sk, "celdas": celdas_sup, "ter": ter}
 	return {"nodo": raiz, "sup": supd, "biondas": choque, "ms": (Time.get_ticks_usec() - t0) / 1000.0, "orto": orto, "ter_mi": ter_mi,
 			"marco": Vector4(float(d["x0"]), float(d["z0"]), float(d["x0"]) + datos.tesela, float(d["z0"]) + datos.tesela)}
+
+
+## Discos de asfalto en los nodos de la tesela donde se juntan dos o más tramos (mismo criterio que Cruces en las zonas:
+## radio por dirección hasta donde llegan los tramos que salen del nodo, nunca más que el más ancho), 3 cm por debajo
+## de la calzada más baja en cada punto: solo se ve donde no hay otro asfalto. Los nodos donde un tramo de un sentido
+## se desplaza para salir a ras del borde (bifurcaciones y uniones, ver MaDatos._ajustar) ya los cubren los bordes.
+func _discos_nodos(d: Dictionary, sa: PackedVector3Array, sb: PackedVector3Array, shw: PackedFloat32Array, celdas: Dictionary,
+		v: PackedVector3Array, n: PackedVector3Array, ix: PackedInt32Array,
+		vv: PackedVector3Array, nv: PackedVector3Array, iv: PackedInt32Array) -> void:
+	var x0 := float(d["x0"])
+	var z0 := float(d["z0"])
+	var vistos := {}
+	for pz in d["piezas"]:
+		var k: int = pz[0]
+		var tr: Dictionary = datos.tramos[k]
+		var npts := datos.geometria(k).size()
+		var ids := []
+		if int(pz[1]) == 0:
+			ids.append(int(tr["a"]))
+		if int(pz[2]) >= npts - 1:
+			ids.append(int(tr["b"]))
+		for id in ids:
+			if vistos.has(id):
+				continue
+			vistos[id] = true
+			var nd = datos.nodos.get(id)
+			if nd == null:
+				continue
+			var p := Vector3(float(nd[0]), float(nd[1]), float(nd[2]))
+			if p.x < x0 or p.x >= x0 + datos.tesela or p.z < z0 or p.z >= z0 + datos.tesela:
+				continue    # lo pone la tesela que contiene el nodo
+			var brazos := []
+			var hw_min := INF
+			var hw_max := 0.0
+			var rapida := false
+			var ajustado := false
+			for x in nd[3]:
+				var kk := int(x)
+				var tk: Dictionary = datos.tramos[kk]
+				var g := datos.geometria(kk)
+				if g.size() < 2:
+					continue
+				var bor := datos.bordes(kk)
+				for desde in [true, false]:
+					if int(tk["a" if desde else "b"]) != id:
+						continue
+					var i0: int = 0 if desde else g.size() - 1
+					if Vector2(g[i0].x - p.x, g[i0].z - p.z).length() > 0.5:
+						ajustado = true
+						continue
+					var hw := float(tk["ancho"]) * 0.5
+					if not bor.is_empty():
+						hw += minf(0.0, minf((bor[0] as PackedFloat32Array)[i0], (bor[1] as PackedFloat32Array)[i0]))
+					brazos.append([Cruces._dir_salida(g, desde), hw])
+					hw_min = minf(hw_min, hw)
+					hw_max = maxf(hw_max, hw)
+					rapida = rapida or int(tk["c"]) <= 1
+			if ajustado:
+				_discos_extremos(id, p, sa, sb, shw, celdas, v, n, ix, vv, nv, iv)
+				continue
+			if brazos.size() < 2 or hw_min < 0.5:
+				continue
+			var y0 := _h_asfalto_tesela(p.x, p.z, p.y, sa, sb, shw, celdas)
+			if is_nan(y0):
+				continue
+			var k0 := (vv if rapida else v).size()
+			var vs: PackedVector3Array = vv if rapida else v
+			var ns: PackedVector3Array = nv if rapida else n
+			var ids_: PackedInt32Array = iv if rapida else ix
+			vs.append(Vector3(p.x, y0 + 0.02, p.z))
+			ns.append(Vector3.UP)
+			const LADOS := 24
+			for j in LADOS:
+				var ang := TAU * j / LADOS
+				var u := Vector2(cos(ang), sin(ang))
+				var rr := Cruces._radio_parche(u, brazos, hw_min, hw_max)
+				var q := Vector3(p.x + u.x * rr, 0.0, p.z + u.y * rr)
+				var h := _h_asfalto_tesela(q.x, q.z, y0, sa, sb, shw, celdas)
+				q.y = (y0 if is_nan(h) else h) + 0.02
+				vs.append(q)
+				ns.append(Vector3.UP)
+			for j in LADOS:
+				ids_.append_array([k0, k0 + 1 + j, k0 + 1 + (j + 1) % LADOS])   # cara de arriba hacia arriba (como las franjas)
+
+
+## Nodo donde los tramos de un sentido salen desplazados a ras de los bordes (bifurcación o unión): un disco del
+## semiancho de cada tramo en su propio extremo, si sigue en otro tramo (casi opuesto). No sale de sus bordes: tapa la
+## muesca de fuera entre su final recto y el de la calzada que continúa.
+func _discos_extremos(id: int, p: Vector3, sa: PackedVector3Array, sb: PackedVector3Array, shw: PackedFloat32Array, celdas: Dictionary,
+		v: PackedVector3Array, n: PackedVector3Array, ix: PackedInt32Array,
+		vv: PackedVector3Array, nv: PackedVector3Array, iv: PackedInt32Array) -> void:
+	var nd = datos.nodos.get(id)
+	var ext := []    # [punto, dir, hw, rapida]
+	for x in nd[3]:
+		var tk: Dictionary = datos.tramos[int(x)]
+		var g := datos.geometria(int(x))
+		if g.size() < 2 or int(tk["tunel"]) == 1:
+			continue
+		for desde in [true, false]:
+			if int(tk["a" if desde else "b"]) != id:
+				continue
+			var i0: int = 0 if desde else g.size() - 1
+			ext.append([g[i0], Cruces._dir_salida(g, desde), float(tk["ancho"]) * 0.5, int(tk["c"]) <= 1])
+	for e in ext:
+		var dir: Vector2 = e[1]
+		var sigue := false
+		for e2 in ext:
+			if e2 != e and (e2[1] as Vector2).dot(dir) < -0.7:
+				sigue = true
+		var hw: float = e[2]
+		if not sigue or hw < 0.5:
+			continue
+		var c: Vector3 = e[0]
+		var y0 := _h_asfalto_tesela(c.x, c.z, c.y, sa, sb, shw, celdas)
+		if is_nan(y0):
+			continue
+		var vs: PackedVector3Array = vv if e[3] else v
+		var ns: PackedVector3Array = nv if e[3] else n
+		var ids_: PackedInt32Array = iv if e[3] else ix
+		var k0 := vs.size()
+		vs.append(Vector3(c.x, y0 + 0.02, c.z))
+		ns.append(Vector3.UP)
+		const LADOS := 20
+		for j in LADOS:
+			var ang := TAU * j / LADOS
+			var q := Vector3(c.x + cos(ang) * hw, 0.0, c.z + sin(ang) * hw)
+			var h := _h_asfalto_tesela(q.x, q.z, y0, sa, sb, shw, celdas)
+			q.y = (y0 if is_nan(h) else h) + 0.02
+			vs.append(q)
+			ns.append(Vector3.UP)
+		for j in LADOS:
+			ids_.append_array([k0, k0 + 1 + j, k0 + 1 + (j + 1) % LADOS])   # cara de arriba hacia arriba (como las franjas)
+
+
+## Altura de las calzadas de la tesela en (x, z) al nivel de y_ref (±1,5 m): la más baja de las que pisan el punto; si
+## ninguna, la de la más cercana (a menos de 6 m); NAN si no hay.
+static func _h_asfalto_tesela(x: float, z: float, y_ref: float, sa: PackedVector3Array, sb: PackedVector3Array,
+		shw: PackedFloat32Array, celdas: Dictionary) -> float:
+	var lista = celdas.get(Vector2i(floori(x / MaSuperficie.CELDA_MA), floori(z / MaSuperficie.CELDA_MA)))
+	if lista == null:
+		return NAN
+	var h_dentro := INF
+	var h_cerca := NAN
+	var d_cerca := 6.0
+	for s in lista:
+		var a := sa[s]
+		var b := sb[s]
+		var abx := b.x - a.x
+		var abz := b.z - a.z
+		var l2 := abx * abx + abz * abz
+		if l2 < 1e-6:
+			continue
+		var u := clampf(((x - a.x) * abx + (z - a.z) * abz) / l2, 0.0, 1.0)
+		var hh := a.y + (b.y - a.y) * u
+		if absf(hh - y_ref) > 1.5:
+			continue
+		var dd := Vector2(x - a.x - abx * u, z - a.z - abz * u).length() - shw[s]
+		if dd <= 0.0:
+			h_dentro = minf(h_dentro, hh)
+		elif dd < d_cerca:
+			d_cerca = dd
+			h_cerca = hh
+	return h_dentro if h_dentro < INF else h_cerca
 
 
 func _terreno(d: Dictionary, salto: int, material: Material) -> MeshInstance3D:
@@ -664,7 +830,7 @@ func _principal_bajo(p: Vector3, k_propio: int, sa: PackedVector3Array, sb: Pack
 			var nr := Vector2(-ab.y, ab.x).normalized()
 			if nr.dot(Vector2(p.x - cx, p.z - cz)) < 0.0:
 				nr = -nr
-			mejor = [Vector2(cx, cz), nr, shw[s]]
+			mejor = [Vector2(cx, cz), nr, shw[s], ks, q0.y + (q1.y - q0.y) * u]
 	return mejor
 
 
@@ -684,6 +850,18 @@ func _franja_ramal(pts: PackedVector3Array, a: int, b: int, hw: float, k: int, s
 		var pr := _principal_bajo(pts[i], k, sa, sb, shw, sk, celdas, hw + 0.5)
 		var borde_izq_libre := true
 		var borde_der_libre := true
+		var elev := ELEV
+		if not pr.is_empty() and absf(pts[i].y - float(pr[4])) < 0.6:
+			# a la misma altura que la principal (la boca de la salida o de la entrada): el ramal no se recorta, va 3 cm por
+			# debajo de ella. Recortado por secciones (cada 5 m) dejaba una cuña sin asfalto entre su borde recortado y el
+			# de la principal en cuanto ésta curva (las entradas y salidas de las glorietas, sobre todo)
+			var c0: Vector2 = pr[0]
+			var nr0: Vector2 = pr[1]
+			var hm0: float = pr[2]
+			borde_izq_libre = nr0.dot(Vector2(izq_p.x - c0.x, izq_p.z - c0.y)) >= hm0
+			borde_der_libre = nr0.dot(Vector2(der_p.x - c0.x, der_p.z - c0.y)) >= hm0
+			elev = ELEV - 0.03 - maxf(0.0, pts[i].y - float(pr[4]))
+			pr = []
 		if not pr.is_empty():
 			var c: Vector2 = pr[0]
 			var nr: Vector2 = pr[1]
@@ -700,8 +878,8 @@ func _franja_ramal(pts: PackedVector3Array, a: int, b: int, hw: float, k: int, s
 			elif dr < hm:
 				der_p = der_p.lerp(izq_p, clampf((hm - dr) / maxf(dl - dr, 0.01), 0.0, 1.0))
 				borde_der_libre = false
-		verts.append(izq_p + Vector3.UP * ELEV)
-		verts.append(der_p + Vector3.UP * ELEV)
+		verts.append(izq_p + Vector3.UP * elev)
+		verts.append(der_p + Vector3.UP * elev)
 		nor.append(Vector3.UP)
 		nor.append(Vector3.UP)
 		if i > a:
