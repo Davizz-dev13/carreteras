@@ -1,15 +1,38 @@
 {
 "zona": "gr8101",
-"fuente": "© colaboradores de OpenStreetMap (ODbL), vía Overpass API: highway=stop/give_way y traffic_sign=ES:R1/ES:R2",
+"fuente": "© colaboradores de OpenStreetMap (ODbL), vía Overpass API: highway=stop/give_way y traffic_sign=ES:R1/ES:R2 (0 junto a la ruta); más 2 ceda el paso cuya marca vial (triángulo / línea discontinua de ceda el paso) se ve en la ortofoto PNOA del IGN (campo 'fuente' de cada señal)",
 "descargado": "2026-10-31 17:52",
 "rumbo": "ángulo en radianes alrededor de Y (Godot) hacia el que mira la cara de la señal",
-"senales": [],
+"senales": [
+{
+"tipo": "R1",
+"x": 2609.39,
+"y": 860.04,
+"z": -10045.12,
+"rumbo": 0.945,
+"suelta": false,
+"fuente": "PNOA: marca vial de ceda el paso en la entrada de la glorieta (OSM no la tiene)"
+},
+{
+"tipo": "R1",
+"x": 2868.7,
+"y": 934.0,
+"z": -8296.72,
+"rumbo": -2.145,
+"suelta": false,
+"fuente": "PNOA: triángulo y línea de ceda el paso pintados en la boca de la Avenida Sierra de Caniles (OSM no la tiene)"
+}
+],
 "estadisticas": {
 "nodos_osm_zona": 22,
-"puestas": 0,
-"por_tipo": {},
+"puestas": 2,
+"por_tipo": {
+"R1": 2
+},
 "descartes": {
 "lejos_de_las_rutas": 22
-}
-}
+},
+"de_ortofoto_pnoa": 2
+},
+"revisado": "2026-11-01: revisados en la ortofoto PNOA los 8 cruces de la GR-8101 (km 26,7–29,5) y la entrada a la glorieta; solo esas 2 bocas tienen marca vial de ceda el paso visible. Sin fotos a pie de calle no se ponen más (ni límites de velocidad ni peligros: OSM no los tiene)."
 }

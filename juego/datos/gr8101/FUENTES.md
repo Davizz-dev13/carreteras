@@ -49,3 +49,24 @@ Preset con "orden" ("sur_norte"), así que se aplica la corrección del desfase 
   curva cerrada, sin visibilidad, el coche no da para pasar).
 - Criterio de adelantamiento del juego sin tráfico: línea discontinua en el 32,8 % de la ruta (sobre todo km 20–29,
   la parte baja hacia Caniles). Derivado, no son marcas reales.
+
+## Revisión de errores de mapeo (01-11-2026)
+Revisado en el juego (capturas) y contra la ortofoto PNOA (0,1 m, WMS pnoa-ma del IGN) y el MDT05:
+- Trazado: el eje del juego va sobre el asfalto de la foto en los 29,5 km (desvíos de ~1 m, dentro del error de OSM).
+- Glorieta final (Caniles): la calzada de la GR-8101 y sus 3 líneas se dibujaban hasta el centro del anillo y lo
+  partían. Ahora la ruta deja de dibujarse en el borde exterior de la glorieta (`dibujar` = 0 en los 2 últimos tramos
+  de 2 m; el recorrido no cambia).
+- Señales: OSM no tiene ninguna junto a la ruta. Se ponen 2 ceda el paso (R1) solo donde la marca vial pintada se ve
+  en la ortofoto: entrada de la GR-8101 a la glorieta y boca de la Avenida Sierra de Caniles (km 27,3). En los otros
+  cruces no se ve marca: no se pone nada.
+- Quitamiedos: OSM no tiene ninguno en la zona; en la ortofoto hay líneas finas junto al borde en algunos tramos
+  (km 1,5–2,9 izq., km 16,0–16,25 dcha.) que podrían ser biondas o el borde de la cuneta: sin foto a pie de carretera
+  no se puede confirmar, así que no se dibuja ninguno (regla: solo donde existen de verdad).
+- Puentes de las vías secundarias (5, enlace de la A-334 y caminos): tablero en recta entre las vías que llegan a sus
+  estribos (pipeline/rasante_puentes.py), sin escalones; antes salía del MDT (hasta 1,5 m de escalón).
+- Huecos de asfalto en los cruces oblicuos y en el enlace de la A-334: vienen del código común (scripts/cruces.gd),
+  no de los datos de la zona; se arreglan allí para todas las zonas.
+- Sin arreglar: el terreno es una malla de 20 m, así que las calles empinadas de Caniles y el tramo de las Trincheras
+  (km 27,7–28,1, taludes casi verticales a los dos lados según la Diputación) no pueden tener el relieve fino real;
+  las calles del pueblo quedan sobre un faldón de tierra. El tramo urbano de Caniles sigue a 90* (genérico): OSM no
+  tiene límite y no hay foto de la señal.
