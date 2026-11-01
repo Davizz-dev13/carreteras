@@ -1,7 +1,7 @@
 {
-"zona": "navacerrada",
+"zona": "nav_new",
 "fuente": "© colaboradores de OpenStreetMap (ODbL), vía Overpass API: highway=stop/give_way y traffic_sign=ES:R1/ES:R2",
-"descargado": "2026-10-31 17:49",
+"descargado": "2026-11-01 11:03",
 "rumbo": "ángulo en radianes alrededor de Y (Godot) hacia el que mira la cara de la señal",
 "senales": [
 {
@@ -33,17 +33,18 @@
 },
 {
 "tipo": "R2",
-"x": -4863.68,
-"y": 1056.28,
-"z": 8086.99,
-"rumbo": 0.179,
+"x": -4860.1,
+"y": 1056.0,
+"z": 8091.51,
+"rumbo": -0.09,
 "suelta": false,
-"osm": 9961566058
+"osm": 9961566058,
+"recolocada": "fuera de la calzada"
 },
 {
 "tipo": "R2",
 "x": -4858.97,
-"y": 1056.07,
+"y": 1055.58,
 "z": 8092.37,
 "rumbo": 1.534,
 "suelta": false,
@@ -52,7 +53,7 @@
 {
 "tipo": "R1",
 "x": -4856.81,
-"y": 1056.39,
+"y": 1055.72,
 "z": 8085.55,
 "rumbo": 0.531,
 "suelta": false,
@@ -70,7 +71,7 @@
 {
 "tipo": "R2",
 "x": -4761.33,
-"y": 1091.12,
+"y": 1090.86,
 "z": 7384.09,
 "rumbo": 0.802,
 "suelta": false,
@@ -133,7 +134,7 @@
 {
 "tipo": "R2",
 "x": -4078.4,
-"y": 1172.66,
+"y": 1173.05,
 "z": 5650.54,
 "rumbo": 0.395,
 "suelta": false,
@@ -195,12 +196,13 @@
 },
 {
 "tipo": "R1",
-"x": -3210.49,
-"y": 1188.01,
-"z": 5485.53,
-"rumbo": -3.044,
+"x": -3211.19,
+"y": 1188.02,
+"z": 5475.79,
+"rumbo": 2.793,
 "suelta": false,
-"osm": 7256066950
+"osm": 7256066950,
+"recolocada": "fuera de la calzada"
 },
 {
 "tipo": "R1",
@@ -312,21 +314,23 @@
 },
 {
 "tipo": "R2",
-"x": -1169.39,
-"y": 1237.15,
-"z": 6535.3,
-"rumbo": -2.626,
+"x": -1170.55,
+"y": 1237.28,
+"z": 6533.37,
+"rumbo": -2.585,
 "suelta": false,
-"osm": 5703422973
+"osm": 5703422973,
+"recolocada": "fuera de la calzada"
 },
 {
 "tipo": "R1",
-"x": -1154.02,
+"x": -1157.79,
 "y": 1237.31,
-"z": 6513.37,
-"rumbo": -2.683,
+"z": 6514.13,
+"rumbo": -3.134,
 "suelta": false,
-"osm": 970057543
+"osm": 970057543,
+"recolocada": "fuera de la calzada"
 },
 {
 "tipo": "R1",
@@ -366,12 +370,13 @@
 },
 {
 "tipo": "R1",
-"x": -457.13,
+"x": -454.22,
 "y": 1253.22,
-"z": -5974.85,
+"z": -5973.88,
 "rumbo": -0.196,
 "suelta": false,
-"osm": 6357016757
+"osm": 6357016757,
+"recolocada": "fuera de la calzada"
 },
 {
 "tipo": "R2",
@@ -393,39 +398,43 @@
 },
 {
 "tipo": "R1",
-"x": -436.56,
+"x": -439.58,
 "y": 1254.0,
-"z": -5939.49,
-"rumbo": 2.988,
+"z": -5940.1,
+"rumbo": 2.971,
 "suelta": false,
-"osm": 6357016756
+"osm": 6357016756,
+"recolocada": "fuera de la calzada"
 },
 {
 "tipo": "R1",
-"x": -421.19,
+"x": -422.28,
 "y": 1284.76,
-"z": 6325.16,
-"rumbo": 1.945,
+"z": 6322.31,
+"rumbo": 1.936,
 "suelta": false,
-"osm": 2410060340
+"osm": 2410060340,
+"recolocada": "fuera de la calzada"
 },
 {
 "tipo": "R2",
-"x": -367.13,
-"y": 1289.27,
-"z": 6318.92,
-"rumbo": -2.671,
+"x": -371.06,
+"y": 1289.22,
+"z": 6317.97,
+"rumbo": -2.652,
 "suelta": false,
-"osm": 2035718438
+"osm": 2035718438,
+"recolocada": "fuera de la calzada"
 },
 {
 "tipo": "R1",
-"x": -357.99,
+"x": -360.65,
 "y": 1186.0,
-"z": 7573.92,
-"rumbo": 0.732,
+"z": 7575.55,
+"rumbo": 0.738,
 "suelta": false,
-"osm": 9739905056
+"osm": 9739905056,
+"recolocada": "fuera de la calzada"
 },
 {
 "tipo": "R1",
@@ -438,12 +447,13 @@
 },
 {
 "tipo": "R1",
-"x": -331.4,
+"x": -333.45,
 "y": 1185.26,
-"z": 7549.24,
-"rumbo": 2.556,
+"z": 7547.78,
+"rumbo": 2.575,
 "suelta": false,
-"osm": 1301235550
+"osm": 1301235550,
+"recolocada": "fuera de la calzada"
 },
 {
 "tipo": "R2",
@@ -465,12 +475,13 @@
 },
 {
 "tipo": "R1",
-"x": -316.24,
+"x": -313.0,
 "y": 1292.94,
-"z": 6296.82,
-"rumbo": -0.301,
+"z": 6297.0,
+"rumbo": -0.347,
 "suelta": false,
-"osm": 383515534
+"osm": 383515534,
+"recolocada": "fuera de la calzada"
 },
 {
 "tipo": "R2",
@@ -538,7 +549,7 @@
 {
 "tipo": "R2",
 "x": -141.48,
-"y": 1280.58,
+"y": 1279.89,
 "z": 6304.88,
 "rumbo": 0.649,
 "suelta": false,
@@ -547,7 +558,7 @@
 {
 "tipo": "R2",
 "x": -140.12,
-"y": 1288.25,
+"y": 1288.11,
 "z": 6226.88,
 "rumbo": 0.624,
 "suelta": false,
@@ -556,7 +567,7 @@
 {
 "tipo": "R2",
 "x": -130.86,
-"y": 1287.59,
+"y": 1287.51,
 "z": 6228.1,
 "rumbo": -0.415,
 "suelta": false,
@@ -601,7 +612,7 @@
 {
 "tipo": "R2",
 "x": 9.58,
-"y": 1189.81,
+"y": 1189.5,
 "z": -9526.63,
 "rumbo": -1.533,
 "suelta": false,
@@ -744,12 +755,13 @@
 },
 {
 "tipo": "R1",
-"x": 970.27,
+"x": 967.09,
 "y": 1217.65,
-"z": 6313.89,
-"rumbo": 0.404,
+"z": 6314.82,
+"rumbo": 0.534,
 "suelta": false,
-"osm": 5646142838
+"osm": 5646142838,
+"recolocada": "fuera de la calzada"
 },
 {
 "tipo": "R1",
@@ -825,21 +837,23 @@
 },
 {
 "tipo": "R1",
-"x": 1319.76,
+"x": 1320.66,
 "y": 1854.59,
-"z": 167.05,
-"rumbo": 1.325,
+"z": 163.89,
+"rumbo": 1.169,
 "suelta": false,
-"osm": 977378076
+"osm": 977378076,
+"recolocada": "fuera de la calzada"
 },
 {
 "tipo": "R2",
-"x": 1329.13,
-"y": 1855.6,
-"z": 185.95,
-"rumbo": 2.459,
+"x": 1327.91,
+"y": 1855.54,
+"z": 183.64,
+"rumbo": 2.572,
 "suelta": false,
-"osm": 977377967
+"osm": 977377967,
+"recolocada": "fuera de la calzada"
 },
 {
 "tipo": "R1",
@@ -861,21 +875,23 @@
 },
 {
 "tipo": "R1",
-"x": 1353.86,
+"x": 1356.86,
 "y": 1856.0,
-"z": 201.99,
-"rumbo": -1.197,
+"z": 204.27,
+"rumbo": -0.58,
 "suelta": false,
-"osm": 4093207298
+"osm": 4093207298,
+"recolocada": "fuera de la calzada"
 },
 {
 "tipo": "R1",
-"x": 1358.22,
+"x": 1355.33,
 "y": 1855.3,
-"z": 170.41,
-"rumbo": -1.98,
+"z": 173.72,
+"rumbo": -2.109,
 "suelta": false,
-"osm": 977378205
+"osm": 977378205,
+"recolocada": "fuera de la calzada"
 },
 {
 "tipo": "R2",
@@ -888,12 +904,13 @@
 },
 {
 "tipo": "R2",
-"x": 1379.32,
-"y": 1853.32,
-"z": 289.57,
-"rumbo": 0.858,
+"x": 1380.35,
+"y": 1853.17,
+"z": 289.39,
+"rumbo": 0.485,
 "suelta": false,
-"osm": 13320457577
+"osm": 13320457577,
+"recolocada": "fuera de la calzada"
 },
 {
 "tipo": "R1",
@@ -1086,26 +1103,28 @@
 },
 {
 "tipo": "R1",
-"x": 4878.81,
-"y": 1828.48,
-"z": -3573.94,
-"rumbo": -0.049,
+"x": 4881.36,
+"y": 1827.99,
+"z": -3573.81,
+"rumbo": -0.05,
 "suelta": false,
-"osm": 1194690955
+"osm": 1194690955,
+"recolocada": "fuera de la calzada"
 },
 {
 "tipo": "R2",
-"x": 4881.87,
-"y": 1827.63,
-"z": -3584.62,
-"rumbo": -0.101,
+"x": 4884.21,
+"y": 1827.4,
+"z": -3584.39,
+"rumbo": -0.099,
 "suelta": false,
-"osm": 2266173701
+"osm": 2266173701,
+"recolocada": "fuera de la calzada"
 },
 {
 "tipo": "R2",
 "x": 4887.93,
-"y": 1827.5,
+"y": 1827.39,
 "z": -3581.89,
 "rumbo": 1.436,
 "suelta": false,
@@ -1128,5 +1147,6 @@
 "otro_tipo:variable_message": 2,
 "duplicada": 7
 }
-}
+},
+"recolocadas_fuera_de_calzada": 19
 }

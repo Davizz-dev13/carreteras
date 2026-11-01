@@ -26,6 +26,11 @@ PRESETS = {
         "rutas": [("Puerto de Navacerrada (M-601 → CL-601)", ["M-601", "CL-601"]),
                   ("M-601 Navacerrada → Puerto", ["M-601"]),
                   ("CL-601 Puerto → Valsaín", ["CL-601"])],
+        # revisión 01-11-2026: solo carreteras reales asfaltadas (fuera pistas y caminos sin asfaltar o cerrados) y
+        # los trozos cortos (< 20 m) que unen dos vías dibujadas o forman parte de una glorieta (antes faltaban
+        # glorietas enteras de los pueblos y los ramales cortos de los cruces)
+        "tipos": osm.TIPOS,
+        "vias_cortas_conectadas": True,
     },
     # A-308 Iznalloz – Darro (Granada). Solo la A-308 como ruta (las demás vías se dibujan pero no son rutas);
     # de oeste (Iznalloz) a este (Darro); vías OSM filtradas a carreteras reales asfaltadas (sin caminos/sendas);
@@ -242,6 +247,18 @@ def main():
 
     # resto de vías (sin ruta): solo para ver y circular por ellas
     vias_out = []
+    grado_nodo = defaultdict(int)   # nº de vías de OSM que pasan por cada nodo (para los trozos cortos que unen dos vías)
+    if preset.get("vias_cortas_conectadas"):
+        for w in ways:
+            for nd in set(w["nodes"]):
+                grado_nodo[nd] += 1
+
+    def corta_util(w):
+        """Trozo corto que no sobra: parte de una glorieta, o une otras vías por sus dos extremos."""
+        if w["tags"].get("junction") in ("roundabout", "circular"):
+            return True
+        return grado_nodo[w["nodes"][0]] >= 2 and grado_nodo[w["nodes"][-1]] >= 2
+
     arbol_rutas = cKDTree(np.vstack([np.column_stack([r["x"], r["y"]]) for r in procesadas])) if procesadas else None
     for w in ways:
         if w["id"] in ways_dibujadas: continue
@@ -254,7 +271,7 @@ def main():
         pts = recortar_a_rect([(x, y, 0) for x, y in zip(xs_, ys_)], xmin + 50, ymin + 50, xmax - 50, ymax - 50)
         if len(pts) < 2: continue
         L = sum(np.hypot(pts[k + 1][0] - pts[k][0], pts[k + 1][1] - pts[k][1]) for k in range(len(pts) - 1))
-        if L < 20: continue
+        if L < 20 and not (preset.get("vias_cortas_conectadas") and L >= 2 and corta_util(w)): continue
         r = R.procesar(pts, [w], mdt, suavizado_xy=2.0)
         X, Z = a_godot(r, E0, N0)
         vias_out.append({"x": np.round(X, 2).tolist(), "y": np.round(r["z"], 2).tolist(), "z": np.round(Z, 2).tolist(),
