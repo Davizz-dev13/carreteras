@@ -37,6 +37,7 @@ func _ready() -> void:
 		var tiempos := []
 		var us_tot := 0
 		var metidas := 0
+		var en_malla := 0
 		var largo_carretera := 0.0
 		var lin := {}
 		for pz in pzs:
@@ -64,12 +65,14 @@ func _ready() -> void:
 					n_vallas += 1
 					if absf(zv.y) < 0.5 and _metida(sup, m):
 						metidas += 1
+					if absf(zv.y) < 0.5 and _en_malla(sup, m):
+						en_malla += 1
 			nodo.free()
 		tiempos.sort()
 		print("QM_EST ", Quitamiedos.est, " us p50=%d p99=%d top5=%s" % [tiempos[tiempos.size() / 2], tiempos[int(tiempos.size() * 0.99)], str(tiempos.slice(tiempos.size() - 5))])
-		print("QM zona=%s carga=%d ms piezas=%d (%.0f ms) vallas=%d largo=%.1f km terminales=%d postes=%d us_max=%d us_medio=%d choque=%d metidas=%d" % [
+		print("QM zona=%s carga=%d ms piezas=%d (%.0f ms) vallas=%d largo=%.1f km terminales=%d postes=%d us_max=%d us_medio=%d choque=%d metidas=%d en_malla_glorieta=%d" % [
 				zona, t_carga, pzs.size(), ms_piezas, n_vallas, largo / 1000.0, na, n_post, us_max, us_tot / maxi(pzs.size(), 1),
-				Quitamiedos.choque_vivo.pa.size(), metidas])
+				Quitamiedos.choque_vivo.pa.size(), metidas, en_malla])
 		j.queue_free()
 		await get_tree().process_frame
 		await get_tree().process_frame
@@ -95,3 +98,23 @@ func _metida(sup: Superficie, p: Vector3) -> bool:
 		if d < sup.semiancho[k] - 0.2 and absf(q0.y + (q1.y - q0.y) * u - p.y) < 2.0:
 			return true
 	return false
+
+
+## ¿La onda cae sobre la malla de una glorieta (anillo, brazos, abocinamientos: GlorietaMalla) a más de 0,2 m del borde?
+## (el punto y sus 4 vecinos a 0,2 m dentro de algún triángulo)
+func _en_malla(sup: Superficie, p: Vector3) -> bool:
+	var lista = sup.celdas_t.get(Vector2i(floori(p.x / Superficie.CELDA), floori(p.z / Superficie.CELDA)))
+	if lista == null:
+		return false
+	for o in [Vector2.ZERO, Vector2(0.2, 0), Vector2(-0.2, 0), Vector2(0, 0.2), Vector2(0, -0.2)]:
+		var q: Vector2 = Vector2(p.x, p.z) + (o as Vector2)
+		var dentro := false
+		for k in lista:
+			if absf(sup.ta[k].y - p.y) > 2.0:
+				continue
+			if Geometry2D.point_is_inside_triangle(q, Vector2(sup.ta[k].x, sup.ta[k].z), Vector2(sup.tb[k].x, sup.tb[k].z), Vector2(sup.tc[k].x, sup.tc[k].z)):
+				dentro = true
+				break
+		if not dentro:
+			return false
+	return true

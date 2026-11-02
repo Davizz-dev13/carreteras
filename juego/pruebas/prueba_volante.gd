@@ -56,7 +56,7 @@ func _volante() -> Array:
 
 
 func _esperado() -> float:
-	return -j.coche.giro / Coche.GIRO_MAX * Catalogo.VOLANTE_TOPE
+	return -j.coche.fraccion_volante() * Catalogo.VOLANTE_TOPE
 
 
 func _correr() -> void:
@@ -103,6 +103,15 @@ func _correr() -> void:
 	v = _volante()
 	_ok(v[0] > 0.0 and absf(v[0] - _esperado()) < deg_to_rad(4.0), "mando a la izquierda: volante %.0f° antihorario (esperado %.0f°)" % [rad_to_deg(v[0]), rad_to_deg(_esperado())])
 	_eje(0, JOY_AXIS_LEFT_X, 0.0); await _frames(90)
+	# ---- mando a fondo a 90 km/h: las ruedas giran pocos grados, pero el volante se ve girado (tope a esa velocidad) ----
+	j.coche.v = 25.0
+	_eje(0, JOY_AXIS_LEFT_X, 1.0); await _frames(30)
+	v = _volante()
+	_ok(-rad_to_deg(v[0]) > 150.0, "mando a tope a 90 km/h: ruedas %.1f° → volante %.0f° (se ve girado)" % [rad_to_deg(j.coche.giro), -rad_to_deg(v[0])])
+	_eje(0, JOY_AXIS_LEFT_X, 0.5); await _frames(30)
+	v = _volante()
+	_ok(-rad_to_deg(v[0]) > 30.0 and absf(v[0] - _esperado()) < deg_to_rad(4.0), "mando a medias a 90 km/h: volante %.0f° (esperado %.0f°; el joystick tiene curva de respuesta)" % [-rad_to_deg(v[0]), -rad_to_deg(_esperado())])
+	_eje(0, JOY_AXIS_LEFT_X, 0.0); j.coche.v = 0.0; await _frames(90)
 	# ---- frenos: pilotos ----
 	var luces: Array = m.get_meta("luces_freno")
 	_ok(luces.size() >= 1, "pilotos traseros con material propio (%d)" % luces.size())

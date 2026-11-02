@@ -238,6 +238,21 @@ static func aplicar(cr: Cruces, rutas: Array, vias: Array, glorietas: Array) -> 
 						largo = minf(largo, tt_b[tt_b.size() - 1] * 0.5 - 0.5)
 				var resto := _partir(br, maxf(largo, 0.5))
 				br["malla"] = _malla_via(br, resto)
+				# Quitamiedos: el trozo del brazo que va en la malla (del borde del anillo al corte) también lleva bionda por
+				# fuera de su borde (con la isleta); sin esto la valla acababa en el corte, a LARGO m del anillo
+				var qp := PackedVector3Array()
+				var qa := PackedFloat32Array()
+				var bp: PackedVector3Array = br["poli"]
+				var bt: PackedFloat32Array = br["tt"]
+				var ba: PackedFloat32Array = br["anchos"]
+				for q in bp.size():
+					if bt[q] >= 0.0:
+						qp.append(bp[q])
+						qa.append(ba[q])
+				if qp.size() >= 2:
+					if not v.has("brazos_qm"):
+						v["brazos_qm"] = []
+					v["brazos_qm"].append({"poli": qp, "anchos": qa, "extremo": extremo})
 				if extremo == 1:
 					resto.reverse()
 				dib = resto

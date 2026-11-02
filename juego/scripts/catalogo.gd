@@ -302,7 +302,7 @@ func animar_volante(modelo: Node3D, frac: float, dt: float) -> void:
 	if modelo == null or not modelo.has_meta("volante"):
 		return
 	var objetivo := -clampf(frac, -1.0, 1.0) * VOLANTE_TOPE      # a la derecha = horario visto desde el asiento
-	var k := 1.0 - exp(-maxf(dt, 0.0) * 18.0)
+	var k := 1.0 - exp(-maxf(dt, 0.0) * 30.0)      # suavizado corto (≈33 ms): sigue al mando sin retraso visible
 	var ang := lerpf(float(modelo.get_meta("volante_ang")), objetivo, k)
 	modelo.set_meta("volante_ang", ang)
 	var base: Transform3D = modelo.get_meta("volante_base")

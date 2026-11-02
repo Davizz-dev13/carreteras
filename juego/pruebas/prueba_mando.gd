@@ -141,6 +141,9 @@ static func prueba_levas(p) -> void:
 	await p._frames(3)
 	p._ok(not caja.manual and caja.texto_marcha().begins_with("D"), "R1 mantenido 1 s → automático (%s)" % caja.texto_marcha())
 	# teclado: G baja (y pasa a manual), T sube, T mantenida → automático
+	# (desde el punto fijo: acelerando 20 s en línea recta desde donde quedara el coche llegaba a una bionda)
+	var toques0: int = j.toques_bionda
+	await p._parar()
 	p._eje(JOY_AXIS_TRIGGER_RIGHT, 1.0)
 	t = 0.0
 	while j.coche.v < 75.0 / 3.6 and t < 20.0:
@@ -152,7 +155,7 @@ static func prueba_levas(p) -> void:
 	await p._frames(2)
 	var g1: int = caja.marcha
 	p._tecla(KEY_G, true); await p._frames(2); p._tecla(KEY_G, false); await p._frames(2)
-	p._ok(caja.manual and caja.marcha == g1 - 1, "tecla G → manual, %s (antes D%d, %d km/h)" % [caja.texto_marcha(), g1, j.coche.v * 3.6])
+	p._ok(caja.manual and caja.marcha == g1 - 1, "tecla G → manual, %s (antes D%d, %d km/h, %d toques de bionda)" % [caja.texto_marcha(), g1, j.coche.v * 3.6, j.toques_bionda - toques0])
 	p._tecla(KEY_T, true); await p._frames(2); p._tecla(KEY_T, false); await p._frames(2)
 	p._ok(caja.manual and caja.marcha == g1, "tecla T → %s" % caja.texto_marcha())
 	p._tecla(KEY_T, true); await p._frames(60); p._tecla(KEY_T, false); await p._frames(2)

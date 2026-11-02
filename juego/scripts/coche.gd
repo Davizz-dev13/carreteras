@@ -22,6 +22,7 @@ var ficha: Ficha                # especificaciones reales de la versión elegida
 var v := 0.0                    # m/s (negativa = marcha atrás)
 var rumbo := 0.0                # rad (rotación en Y; avance = -Z local)
 var giro := 0.0                 # ángulo actual de las ruedas
+var g_max_vel := GIRO_MAX       # ángulo máximo de las ruedas a la velocidad actual (volante de la cabina)
 var en_carretera := true
 var derrapando := false
 var id_via := -1
@@ -174,6 +175,12 @@ func paso_fisica(dt: float) -> void:
 	v = v_nueva
 	# --- dirección ---
 	var objetivo := 0.0
+	# tope de la dirección a esta velocidad (85 % del agarre lateral, ver abajo): el volante de la cabina enseña qué
+	# parte de él se está usando (con el mando a fondo, el volante a fondo también a 100 km/h, como en los juegos de
+	# conducción; si se dibujara el ángulo de las ruedas, a esa velocidad apenas se movería unos grados)
+	var u_fr0 := clampf(a_pedal / maxf(mu * G, 0.1), 0.0, 1.0)
+	var a850 := 0.85 * mu * G * maxf(sqrt(maxf(1.0 - u_fr0 * u_fr0, 0.0)), ABS_LAT_DEL + 0.1)
+	g_max_vel = minf(GIRO_MAX, atan(a850 * lb / maxf(v * v, 0.01)) + gradiente_subviraje() * a850)
 	if giro_directo:
 		objetivo = clampf(volante, -GIRO_MAX, GIRO_MAX)
 		giro = move_toward(giro, objetivo, 1.8 * dt)
@@ -218,7 +225,7 @@ func paso_fisica(dt: float) -> void:
 	position.x += avance.x
 	position.z += avance.z
 	Catalogo.animar_ruedas(modelo, v * dt, giro)
-	Catalogo.animar_volante(modelo, giro / GIRO_MAX, dt)
+	Catalogo.animar_volante(modelo, fraccion_volante(), dt)
 	Catalogo.luces_freno(modelo, freno > 0.05)
 	odometro += absf(v) * dt
 	choque_t = maxf(0.0, choque_t - dt)
@@ -379,3 +386,8 @@ func _aplicar_base() -> void:
 	if modelo and modelo.has_node("carroceria"):
 		var cuerpo: Node3D = modelo.get_node("carroceria")
 		cuerpo.rotation = Vector3(clampf(a_long * 0.004, -0.035, 0.035), 0.0, clampf(-a_lat_actual * 0.005, -0.04, 0.04))
+
+
+## Parte del volante girada (-1..1): el ángulo de las ruedas respecto al tope de dirección a esta velocidad
+func fraccion_volante() -> float:
+	return clampf(giro / maxf(g_max_vel, 0.02), -1.0, 1.0)

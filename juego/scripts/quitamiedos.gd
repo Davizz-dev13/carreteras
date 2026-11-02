@@ -77,7 +77,9 @@ static func _construir_lineas(rutas: Array, vias: Array) -> Array:
 		var pu := PackedByteArray()
 		var i := 0
 		while i < r.n:
-			var dib := r.dibujar[i] == 1 and r.tunel[i] == 0 and not (r.oculto.size() == r.n and r.oculto[i] == 1)
+			# los brazos de glorieta (Ruta.oculto fuera del anillo: van en la malla de la glorieta, con la anchura de la
+			# ruta ensanchada por la isleta) llevan bionda hasta HUELGO_GLORIETA m del anillo; sobre el anillo, no
+			var dib := r.dibujar[i] == 1 and r.tunel[i] == 0 and not (r.oculto.size() == r.n and r.oculto[i] == 1 and r.anillo[i] == 1)
 			if dib:
 				c.append(r.pts[i]); hw.append(r.ancho[i] * 0.5); pu.append(r.puente[i])
 			if (not dib or i + paso >= r.n) and c.size() >= 2:
@@ -91,14 +93,19 @@ static func _construir_lineas(rutas: Array, vias: Array) -> Array:
 			continue
 		var mi_id := id
 		id += 1
-		if v.get("oculta_glorieta", false):
+		var con_brazos: bool = v.has("brazos_qm") and not v.get("gemela", false)
+		if v.get("oculta_glorieta", false) and not con_brazos:
 			continue
 		var pts: PackedVector3Array = v.get("pts_dib", v["pts"])
-		if pts.size() < 2:
-			continue
 		var anchos := PackedFloat32Array()
 		if v.has("anchos_dib") and (v["anchos_dib"] as PackedFloat32Array).size() == pts.size():
 			anchos = v["anchos_dib"]
+		if con_brazos:
+			var lb := _con_brazos(v, pts, anchos)
+			pts = lb[0]
+			anchos = lb[1]
+		if pts.size() < 2:
+			continue
 		var c := PackedVector3Array()
 		var hw := PackedFloat32Array()
 		var pu := PackedByteArray()
@@ -140,6 +147,39 @@ static func _construir_lineas(rutas: Array, vias: Array) -> Array:
 			if junto.size() == 1:
 				out[li]["sigue"][junto.keys()[0]] = true
 	return out
+
+
+## Eje de una vía con los trozos de sus brazos de glorieta que van en la malla (GlorietaTipo: brazos_qm, del anillo al
+## corte): [brazo del principio] + lo que se dibuja + [brazo del final], con sus anchos (la isleta incluida)
+static func _con_brazos(v: Dictionary, pts: PackedVector3Array, anchos: PackedFloat32Array) -> Array:
+	var ini = null
+	var fin = null
+	for bq in v["brazos_qm"]:
+		if int(bq["extremo"]) == 0:
+			ini = bq
+		else:
+			fin = bq
+	var np := PackedVector3Array()
+	var na := PackedFloat32Array()
+	if ini != null:
+		np.append_array(ini["poli"])
+		na.append_array(ini["anchos"])
+	if not v.get("oculta_glorieta", false):
+		for k in pts.size():
+			if not np.is_empty() and np[np.size() - 1].distance_to(pts[k]) < 0.3:
+				continue
+			np.append(pts[k])
+			na.append(anchos[k] if not anchos.is_empty() else float(v["ancho"]))
+	if fin != null:
+		var fp: PackedVector3Array = fin["poli"]
+		var fa: PackedFloat32Array = fin["anchos"]
+		for kk in fp.size():
+			var k := fp.size() - 1 - kk
+			if not np.is_empty() and np[np.size() - 1].distance_to(fp[k]) < 0.3:
+				continue
+			np.append(fp[k])
+			na.append(fa[k])
+	return [np, na]
 
 
 ## Trozos de streaming [{linea, lado, i0, i1, id, caja: Rect2}] de ≤ TROZO_M m por lado de cada calzada
