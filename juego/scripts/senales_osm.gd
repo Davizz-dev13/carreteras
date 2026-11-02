@@ -1,5 +1,7 @@
-## Señales de tráfico REALES de OpenStreetMap (STOP y ceda el paso en los cruces junto a la ruta), de
-## datos/<zona>/senales.json (pipeline/senales.py). Sin datos no se dibuja ninguna.
+## Señales de tráfico REALES de OpenStreetMap (STOP y ceda el paso en los cruces junto a la ruta) y ceda el paso en
+## cada entrada a glorieta, de datos/<zona>/senales.json (pipeline/senales_cruces.py). Sin datos no se dibuja ninguna.
+## Con cada señal van sus marcas viales ("marcas"): línea de detención o de ceda el paso en el carril que entra y el
+## triángulo de ceda el paso; una malla por pieza de streaming, a ras de la calzada.
 ## Barato para la gráfica: piezas de streaming de 250 m; en cada una, un MultiMesh por tipo de señal con una malla
 ## low-poly (poste + placa + trasera) y un único material con un atlas de 256 px; sin sombras y visibles a ≤ 250 m.
 class_name SenalesOsm
@@ -11,8 +13,11 @@ const TIPOS := ["R2", "R1"]   # fila del atlas: R2 (STOP) arriba, R1 (ceda el pa
 const LADO := 0.9             # m (placa de carretera convencional)
 const BAJO := 1.4             # m del suelo al borde inferior de la placa
 
+const ALTO_MARCA := 0.06      # m sobre la calzada (como las demás marcas: sin parpadeo contra el asfalto)
+
 static var _mallas: Array = []
 static var _mat: StandardMaterial3D
+static var _mat_marca: StandardMaterial3D
 
 
 ## Señales del archivo de la zona → piezas [{senales: [[tipo_idx, Transform3D], …], caja: Rect2}]
@@ -37,6 +42,26 @@ static func piezas(dir_datos: String) -> Array:
 		if not celdas.has(clave):
 			celdas[clave] = []
 		celdas[clave].append([ti, Transform3D(Basis(Vector3.UP, float(s["rumbo"])), p)])
+	# marcas viales: polígonos (línea = 4 puntos, triángulo = 3) a la altura de la calzada
+	var marcas := {}
+	for m in d.get("marcas", []):
+		var poli := PackedVector3Array()
+		for q in m.get("p", []):
+			var v := Vector3(float(q[0]), float(q[1]), float(q[2]))
+			if Ajustes.superficie != null:
+				var h: float = Ajustes.superficie.consultar(v.x, v.z, v.y).x
+				if is_finite(h) and absf(h - v.y) < 2.0:
+					v.y = h
+			v.y += ALTO_MARCA
+			poli.append(v)
+		if poli.size() < 3:
+			continue
+		var clave := Vector2i(floori(poli[0].x / CELDA), floori(poli[0].z / CELDA))
+		if not marcas.has(clave):
+			marcas[clave] = []
+		marcas[clave].append(poli)
+		if not celdas.has(clave):
+			celdas[clave] = []
 	var out := []
 	for clave in celdas:
 		var mn := Vector2(INF, INF)
@@ -45,7 +70,12 @@ static func piezas(dir_datos: String) -> Array:
 			var o: Vector3 = e[1].origin
 			mn = Vector2(minf(mn.x, o.x), minf(mn.y, o.z))
 			mx = Vector2(maxf(mx.x, o.x), maxf(mx.y, o.z))
-		out.append({"senales": celdas[clave], "caja": Rect2(mn - Vector2(2, 2), mx - mn + Vector2(4, 4))})
+		for poli in marcas.get(clave, []):
+			for o in poli:
+				mn = Vector2(minf(mn.x, o.x), minf(mn.y, o.z))
+				mx = Vector2(maxf(mx.x, o.x), maxf(mx.y, o.z))
+		out.append({"senales": celdas[clave], "marcas": marcas.get(clave, []),
+				"caja": Rect2(mn - Vector2(2, 2), mx - mn + Vector2(4, 4))})
 	return out
 
 
@@ -71,12 +101,39 @@ static func construir(pz: Dictionary) -> Node3D:
 		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		mi.visibility_range_end = DIST_VISIBLE
 		raiz.add_child(mi)
+	var marcas: Array = pz.get("marcas", [])
+	if not marcas.is_empty():
+		# líneas y triángulos de la pieza en una sola malla (abanico desde el primer punto; normales hacia arriba)
+		var v := PackedVector3Array()
+		var nr := PackedVector3Array()
+		for poli in marcas:
+			for k in range(1, poli.size() - 1):
+				for q in [poli[0], poli[k + 1], poli[k]]:
+					v.append(q)
+					nr.append(Vector3.UP)
+		var arr := []
+		arr.resize(Mesh.ARRAY_MAX)
+		arr[Mesh.ARRAY_VERTEX] = v
+		arr[Mesh.ARRAY_NORMAL] = nr
+		var malla := ArrayMesh.new()
+		malla.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arr)
+		var mi := MeshInstance3D.new()
+		mi.mesh = malla
+		mi.material_override = _mat_marca
+		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		mi.visibility_range_end = DIST_VISIBLE
+		raiz.add_child(mi)
 	return raiz
 
 
 static func _preparar() -> void:
 	if _mat != null:
 		return
+	_mat_marca = StandardMaterial3D.new()
+	_mat_marca.albedo_color = Color(0.92, 0.92, 0.9)
+	_mat_marca.roughness = 0.6
+	_mat_marca.metallic_specular = 0.1
+	_mat_marca.cull_mode = BaseMaterial3D.CULL_DISABLED
 	_mat = StandardMaterial3D.new()
 	_mat.albedo_texture = load("res://modelos/senales_es.png")
 	_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA_SCISSOR

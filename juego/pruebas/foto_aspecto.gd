@@ -33,9 +33,16 @@ func _ready() -> void:
 				var sc := sk - float(s.get("d", 9.0))
 				var lat := float(s.get("lat", 0.0))
 				var pc := r.punto(sc) + r.derecha(sc) * lat
+				if s.has("carril"):     # a vista de conductor por su carril (isleta, anillo y desvíos incluidos)
+					var dc := int(s["carril"])
+					sd = sk + dc * float(s.get("mira", 40.0))
+					sc = sk - dc * float(s.get("d", 9.0))
+					pc = r.punto_carril(sc, dc)
 				pc.y = Ajustes.superficie.consultar(pc.x, pc.z, pc.y).x
 				pos = pc + Vector3.UP * float(s.get("h", 2.2))
 				obj = r.punto(sd) + r.derecha(sd) * float(s.get("lat_mira", lat))
+				if s.has("carril"):
+					obj = r.punto_carril(sd, int(s["carril"]))
 				obj.y = Ajustes.superficie.consultar(obj.x, obj.z, obj.y).x + float(s.get("h_mira", 0.5))
 				fw = (obj - pos); fw.y = 0.0; fw = fw.normalized()
 			else:

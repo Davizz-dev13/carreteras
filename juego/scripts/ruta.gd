@@ -123,15 +123,20 @@ func tiene_carriles() -> bool:
 ## Posición lateral (+ = derecha de la ruta) del carril del sentido d; adel = 0 su carril, 1 el carril de adelantar
 func lateral_carril(s: float, d: int, adel: float = 0.0) -> float:
 	var lat := 0.0
+	var h_isla: float = valor(isla, s) if isla.size() == n else 0.0
 	if car_ida.is_empty():
-		lat = d * valor(ancho, s) * 0.25 * (1.0 - 2.0 * adel)
+		lat = d * (valor(ancho, s) - 2.0 * h_isla) * 0.25 * (1.0 - 2.0 * adel)
 	elif d > 0:
 		lat = lerpf(valor(lat_ida, s), valor(lat_ida_adel, s), adel)
 	else:
 		lat = lerpf(valor(lat_vuelta, s), valor(lat_vuelta_adel, s), adel)
-	# en el arco de una glorieta (un solo sentido) el carril va centrado en el anillo
+	# junto a una glorieta los dos sentidos se separan por la isleta (carril de entrada y de salida)
+	if h_isla > 0.0:
+		lat += h_isla if lat >= lateral_eje(s) else -h_isla
+	# en el arco de una glorieta (un solo sentido) el carril va por el anillo (centrado, o el exterior si hay dos)
 	if not peso_anillo.is_empty():
-		lat *= 1.0 - valor(peso_anillo, s)
+		var lg: float = valor(lat_glorieta, s) if lat_glorieta.size() == n else 0.0
+		lat = lerpf(lat, lg, valor(peso_anillo, s))
 	return lat
 
 
@@ -304,7 +309,13 @@ var s_trafico_min := 0.0                 # el tráfico aparece/desaparece entre 
 var s_trafico_max := 1e12
 var arcos_glorieta: Array = []           # {g, a, b, sentido (+1: la ruta lo recorre antihorario)} (verificación)
 
-const DESVIO_MARGEN := 18.0              # m fuera del borde exterior del anillo donde el sentido contrario deja la ruta
+const DESVIO_MARGEN := 12.0              # m fuera del borde exterior del anillo donde el sentido contrario deja la ruta
+										 # (ya en su carril de entrada, junto a la isleta, unos metros antes de la línea de ceda)
+var oculto := PackedByteArray()          # 1 = trozo dentro del anillo de una glorieta: no se dibuja (el anillo es la calzada)
+var isla := PackedFloat32Array()         # semiancho de la isleta separadora de cada brazo de glorieta (GlorietaTipo); 0 = no hay
+var lat_glorieta := PackedFloat32Array() # lateral del carril sobre el arco del anillo (en anillos de 2 carriles, el exterior)
+var sin_talud := PackedByteArray()      # 1 = sin talud (puentes; y junto a una glorieta, donde están los abocinamientos)
+var bocas_glorieta: Array = []           # {g, i (primera muestra fuera del borde del anillo), dir (+1: sale en s creciente)}
 
 
 func cargar_glorietas(glorietas: Array) -> void:
@@ -314,6 +325,12 @@ func cargar_glorietas(glorietas: Array) -> void:
 	peso_anillo.resize(n); peso_anillo.fill(0.0)
 	desvios.clear()
 	arcos_glorieta.clear()
+	oculto.resize(n); oculto.fill(0)
+	isla.resize(n); isla.fill(0.0)
+	lat_glorieta.resize(n); lat_glorieta.fill(0.0)
+	bocas_glorieta.clear()
+	var pendientes := []     # desvíos por crear (cuando ya estén las isletas: el desvío sale del carril de entrada)
+	var cerca := []          # [info del anillo, muestras de la ruta junto a él y a su altura]
 	for gi in glorietas.size():
 		var g: Dictionary = glorietas[gi]
 		var xs: Array = g["x"]
@@ -346,6 +363,8 @@ func cargar_glorietas(glorietas: Array) -> void:
 		radio /= float(m)
 		var exterior := radio + hw + 0.5
 		var umbral := maxf(2.5, hw * 0.6)
+		var inf := GlorietaTipo.info(g)
+		var junto := PackedInt32Array()
 		# muestras de la ruta sobre el anillo (y dentro de su borde exterior)
 		var i0 := -1
 		var run := []
@@ -355,6 +374,8 @@ func cargar_glorietas(glorietas: Array) -> void:
 			var dc := Vector2(q.x - c.x, q.z - c.z).length()
 			if dc < exterior and absf(q.y - c.y) < 8.0:
 				dentro_glorieta[i] = 1
+			if dc < exterior + 20.0 and absf(q.y - c.y) < 3.0:
+				junto.append(i)
 			if absf(dc - radio) < umbral and absf(q.y - c.y) < 8.0 and _dist_poli(q, anill) < umbral:
 				if i0 < 0:
 					i0 = i
@@ -384,7 +405,17 @@ func cargar_glorietas(glorietas: Array) -> void:
 			arcos_glorieta.append({"g": gi, "a": a, "b": b, "sentido": sentido})
 			for k in range(a, b + 1):
 				anillo[k] = 1
-			_crear_desvio(gi, anill, c, radio, hw, exterior, a, b, sentido)
+				# carril exterior del anillo (a la derecha del que lo recorre antihorario) si tiene dos carriles
+				lat_glorieta[k] = sentido * hw * 0.25 if hw >= 4.0 else 0.0
+			pendientes.append([gi, anill, c, radio, hw, exterior, a, b, sentido])
+			if inf["ok"]:
+				_bocas(gi, inf, a, b)
+		if inf["ok"] and not junto.is_empty():
+			cerca.append([inf, junto])
+	_isletas()
+	_ocultar_en_anillos(cerca)
+	for pd in pendientes:
+		_crear_desvio(pd[0], pd[1], pd[2], pd[3], pd[4], pd[5], pd[6], pd[7], pd[8])
 	# peso suavizado para el lateral del carril
 	# el carril se centra en el anillo DENTRO del arco (rampa de ~20 m desde donde la ruta entra en el anillo y hasta
 	# donde lo deja): antes de entrar sigue en su carril, sin acercarse a la salida del sentido contrario
@@ -553,6 +584,80 @@ func _crear_desvio(gi: int, anill: PackedVector3Array, c: Vector3, radio: float,
 			"a": a, "b": b, "radio": radio, "c": c})
 	for k in range(mini(i_ini, i_fin) + 1, maxi(i_ini, i_fin)):
 		desvio_idx[k] = idx
+
+
+## Bocas de la ruta en un anillo: primera muestra fuera del borde exterior antes del arco (entrada) y después (salida)
+func _bocas(gi: int, inf: Dictionary, a: int, b: int) -> void:
+	for lado in [[a, -1], [b, 1]]:
+		var i: int = lado[0]
+		var paso_i: int = lado[1]
+		var cuenta := 0
+		while i + paso_i >= 0 and i + paso_i < n and cuenta < 60 and GlorietaTipo.fuera_de_borde(inf, pts[i]) < 0.0:
+			i += paso_i
+			cuenta += 1
+		if GlorietaTipo.fuera_de_borde(inf, pts[i]) >= 0.0 and cuenta > 0:
+			bocas_glorieta.append({"g": gi, "i": i, "dir": paso_i, "c": inf["c"]})
+
+
+## Isleta separadora (GlorietaTipo): los dos sentidos se separan en los 25 m antes del anillo; la calzada se ensancha
+## lo mismo para que cada carril conserve su anchura. Entre la boca y el arco (ya en el anillo) sigue abierta.
+func _isletas() -> void:
+	for bo in bocas_glorieta:
+		var i0: int = bo["i"]
+		var dr: int = bo["dir"]
+		var h0 := GlorietaTipo.semiancho_isla(0.0)
+		# hacia dentro: hasta el arco
+		var k := i0 - dr
+		var cuenta := 0
+		while k >= 0 and k < n and anillo[k] == 0 and cuenta < 30:
+			isla[k] = maxf(isla[k], h0)
+			k -= dr
+			cuenta += 1
+		# hacia fuera: se cierra en ISLA_LARGO m
+		k = i0
+		var t := 0.0
+		while k >= 0 and k < n and t <= GlorietaTipo.ISLA_LARGO:
+			if dentro_glorieta[k] == 1 and k != i0:
+				break
+			isla[k] = maxf(isla[k], GlorietaTipo.semiancho_isla(t))
+			if k + dr >= 0 and k + dr < n:
+				t += pts[k].distance_to(pts[k + dr])
+			k += dr
+	for i in n:
+		if isla[i] > 0.0:
+			ancho[i] += 2.0 * isla[i]
+	# sin talud en la boca (dentro del anillo y en los metros del abocinamiento): quedaba como una solapa sobre el asfalto
+	sin_talud = puente.duplicate()
+	for bo in bocas_glorieta:
+		var i0: int = bo["i"]
+		var dr: int = bo["dir"]
+		var k := i0
+		var t := 0.0
+		while k >= 0 and k < n and t <= GlorietaTipo.ABOCINADO + 3.0:
+			sin_talud[k] = 1
+			if k + dr >= 0 and k + dr < n:
+				t += pts[k].distance_to(pts[k + dr])
+			k += dr
+		k = i0 - dr
+		while k >= 0 and k < n and dentro_glorieta[k] == 1:
+			sin_talud[k] = 1
+			k -= dr
+
+
+## Trozos de la calzada de la ruta enteros dentro del anillo (sus dos bordes): no se dibujan; el anillo, de anchura
+## constante, es la calzada (antes la ruta pasaba por encima del anillo con su propia anchura y sus propios bordes)
+func _ocultar_en_anillos(cerca: Array) -> void:
+	for par in cerca:
+		var inf: Dictionary = par[0]
+		var lista: PackedInt32Array = par[1]
+		var dentro := {}
+		for i in lista:
+			var der := _der_i(i) * (ancho[i] * 0.5)
+			if GlorietaTipo.fuera_de_borde(inf, pts[i] + der) < -0.2 and GlorietaTipo.fuera_de_borde(inf, pts[i] - der) < -0.2:
+				dentro[i] = true
+		for i in lista:
+			if dentro.has(i) and dentro.has(i + 1):
+				oculto[i] = 1
 
 
 func _der_i(i: int) -> Vector3:

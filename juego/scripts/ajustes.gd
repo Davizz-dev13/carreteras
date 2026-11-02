@@ -86,6 +86,7 @@ func cargar() -> void:
 	for d in car["rutas"]:
 		rutas.append(Ruta.desde_json(d))
 	glorietas = car.get("glorietas", [])
+	GlorietaTipo.normalizar(glorietas)    # anchura del anillo según la glorieta tipo (glorieta_tipo.gd)
 	_lineas_adelantar()
 	_cargar_carriles()
 	for r in rutas:

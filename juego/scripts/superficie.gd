@@ -27,6 +27,19 @@ func construir(rutas: Array[Ruta], vias: Array) -> void:
 		var p: PackedVector3Array = v["pts"]
 		for i in p.size() - 1:
 			_anadir(p[i], p[i + 1], v["ancho"] * 0.5, id)
+	# glorietas: el anillo entero, con la anchura de la glorieta tipo (sus trozos de OSM ya no se dibujan)
+	for g in Ajustes.glorietas:
+		var inf := GlorietaTipo.info(g)
+		if not inf["ok"]:
+			continue
+		var id := nombres.size()
+		nombres.append("Glorieta")
+		var xs: Array = g["x"]
+		var m := xs.size()
+		for i in m:
+			var j := (i + 1) % m
+			_anadir(Vector3(float(xs[i]), float(g["y"][i]), float(g["z"][i])), Vector3(float(xs[j]), float(g["y"][j]), float(g["z"][j])),
+					float(inf["hw"]) + GlorietaTipo.BORDE_EXTRA, id)
 
 
 func _anadir(p: Vector3, q: Vector3, hw: float, id: int) -> void:

@@ -252,19 +252,32 @@ func _piezas_ruta(r: Ruta) -> void:
 			if r.dentro_glorieta[i] == 1:
 				borde[i] = 0
 				patron[i] = 0
+	# isleta separadora junto a una glorieta (GlorietaTipo): sin eje; la isleta lleva su propio contorno y cebreado
+	var eje_ok := borde.duplicate()
+	if r.isla.size() == r.n:
+		for i in r.n:
+			if r.isla[i] > 0.0:
+				eje_ok[i] = 0
+				patron[i] = 0
+	# trozos dentro del anillo de una glorieta (Ruta.oculto): no se dibujan, la calzada es el anillo
+	var dib := r.dibujar.duplicate()
+	if r.oculto.size() == r.n:
+		for i in r.n:
+			if r.oculto[i] == 1:
+				dib[i] = 0
 	var i := 0
 	while i < r.n - 1:
-		if r.dibujar[i] == 0:
+		if dib[i] == 0:
 			i += 1
 			continue
 		var j := i
-		while j < r.n - 1 and r.dibujar[j] == 1:
+		while j < r.n - 1 and dib[j] == 1:
 			j += 1
 		var a := i
 		while a < j:
 			var b := mini(a + TROZO, j)
 			var c := _caja(r.pts, a, b)
-			_pieza(T_RUTA, 0, c.position.x - 10, c.position.y - 10, c.end.x + 10, c.end.y + 10, {"ruta": r, "a": a, "b": b, "patron": patron, "borde": borde, "continua": continua})
+			_pieza(T_RUTA, 0, c.position.x - 10, c.position.y - 10, c.end.x + 10, c.end.y + 10, {"ruta": r, "a": a, "b": b, "patron": patron, "borde": borde, "continua": continua, "eje_ok": eje_ok})
 			a = b
 		i = j
 
@@ -282,16 +295,25 @@ func _piezas_extra() -> void:
 
 
 func _piezas_via(v: Dictionary) -> void:
-	var pts: PackedVector3Array = v["pts"]
+	# glorieta tipo: los trozos de OSM del anillo no se dibujan (el anillo es una sola calzada) y los brazos acaban
+	# recortados en su borde, ensanchados por la isleta (GlorietaTipo.aplicar)
+	if v.get("oculta_glorieta", false):
+		return
+	var pts: PackedVector3Array = v.get("pts_dib", v["pts"])
 	if pts.size() < 2 or v["tunel"] == 1:
 		return
 	var anchos := PackedFloat32Array()
-	anchos.resize(pts.size())
-	anchos.fill(float(v["ancho"]))
+	if v.has("anchos_dib"):
+		anchos = v["anchos_dib"]
+	else:
+		anchos.resize(pts.size())
+		anchos.fill(float(v["ancho"]))
 	var sin_talud := PackedByteArray()
 	if int(v.get("puente", 0)) == 1:
 		sin_talud.resize(pts.size())
 		sin_talud.fill(1)
+	elif v.has("sin_talud_dib"):
+		sin_talud = v["sin_talud_dib"]
 	var a := 0
 	while a < pts.size() - 1:
 		var b := mini(a + TROZO, pts.size() - 1)
@@ -611,7 +633,7 @@ func _trozo_ruta(pz: Dictionary) -> Node3D:
 	var v := PackedVector3Array(); var n := PackedVector3Array(); var ix := PackedInt32Array()
 	var tv := PackedVector3Array(); var tn := PackedVector3Array(); var ti := PackedInt32Array()
 	var uv := PackedVector2Array(); var tuv := PackedVector2Array()
-	_franja(r.pts, r.ancho, a, b, 0.0, 0.0, 0.05, v, n, ix, PackedByteArray(), true, r.puente, tv, tn, ti, uv, tuv)
+	_franja(r.pts, r.ancho, a, b, 0.0, 0.0, 0.05, v, n, ix, PackedByteArray(), true, r.sin_talud if r.sin_talud.size() == r.n else r.puente, tv, tn, ti, uv, tuv)
 	var raiz := Node3D.new()
 	raiz.add_child(_instancia(_malla([[v, n, ix, mundo.mat_asfalto, uv], [tv, tn, ti, mundo.mat_talud, tuv]]), DIST_CALZADA))
 	var mv := PackedVector3Array(); var mn := PackedVector3Array(); var mi := PackedInt32Array()
@@ -637,7 +659,7 @@ func _marcas_norma(pz: Dictionary, mv: PackedVector3Array, mn: PackedVector3Arra
 	_linea(r.pts, r.ancho, a, b, -1.0, 0.075, 0.08, mv, mn, mi, borde, todo, r.paso)
 	_linea(r.pts, r.ancho, a, b, 1.0, 0.075, 0.08, mv, mn, mi, borde, todo, r.paso)
 	if not r.tiene_carriles():
-		_linea(r.pts, r.ancho, a, b, 0.0, 0.075, 0.085, mv, mn, mi, borde, cont, r.paso)
+		_linea(r.pts, r.ancho, a, b, 0.0, 0.075, 0.085, mv, mn, mi, pz.get("eje_ok", borde), cont, r.paso)
 		return
 	var eje := PackedVector3Array(); eje.resize(r.n)
 	var sep_i := PackedVector3Array(); sep_i.resize(r.n)
@@ -652,15 +674,16 @@ func _marcas_norma(pz: Dictionary, mv: PackedVector3Array, mn: PackedVector3Arra
 		var t := r.pts[mini(i + 1, r.n - 1)] - r.pts[maxi(i - 1, 0)]
 		var der := Vector3(-t.z, 0.0, t.x).normalized()
 		eje[i] = r.pts[i] + der * r.lat_eje[i]
-		sep_i[i] = r.pts[i] + der * (r.lat_ida[i] + r.lat_ida_adel[i]) * 0.5
-		sep_v[i] = r.pts[i] + der * (r.lat_vuelta[i] + r.lat_vuelta_adel[i]) * 0.5
+		var hi: float = r.isla[i] if r.isla.size() == r.n else 0.0    # isleta de glorieta: los carriles se separan
+		sep_i[i] = r.pts[i] + der * ((r.lat_ida[i] + r.lat_ida_adel[i]) * 0.5 + hi)
+		sep_v[i] = r.pts[i] + der * ((r.lat_vuelta[i] + r.lat_vuelta_adel[i]) * 0.5 - hi)
 		if r.car_ida[i] != r.car_vuelta[i]:
 			cont_eje[i] = 1     # 2+1: línea continua en el eje (ver adelantar.json, supuesto_2+1)
 		perm_i[i] = 1 if (r.car_ida[i] >= 2 and borde[i] == 1) else 0
 		perm_v[i] = 1 if (r.car_vuelta[i] >= 2 and borde[i] == 1) else 0
 		hay_i = hay_i or r.car_ida[i] >= 2
 		hay_v = hay_v or r.car_vuelta[i] >= 2
-	_linea(eje, r.ancho, a, b, 0.0, 0.075, 0.085, mv, mn, mi, borde, cont_eje, r.paso)
+	_linea(eje, r.ancho, a, b, 0.0, 0.075, 0.085, mv, mn, mi, pz.get("eje_ok", borde), cont_eje, r.paso)
 	if hay_i: _linea(sep_i, r.ancho, a, b, 0.0, 0.075, 0.085, mv, mn, mi, perm_i, nada, r.paso)
 	if hay_v: _linea(sep_v, r.ancho, a, b, 0.0, 0.075, 0.085, mv, mn, mi, perm_v, nada, r.paso)
 

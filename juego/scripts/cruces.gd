@@ -52,6 +52,10 @@ static func preparar(rutas: Array, vias: Array) -> Dictionary:
 	var t_an := Time.get_ticks_msec()
 	c._anillos(Ajustes.glorietas)
 	c.stats["ms_anillos"] = Time.get_ticks_msec() - t_an
+	# glorieta tipo: brazos con isleta y abocinamiento, trozos del anillo ocultos, líneas de ceda (GlorietaTipo)
+	var t_gt := Time.get_ticks_msec()
+	c.stats.merge(GlorietaTipo.aplicar(c, rutas, vias, Ajustes.glorietas))
+	c.stats["ms_glorieta_tipo"] = Time.get_ticks_msec() - t_gt
 	c._excavar_terreno(rutas, vias)
 	c.stats["ms"] = Time.get_ticks_msec() - t0
 	return c.stats
@@ -642,7 +646,8 @@ func _parches(nodos: Array) -> void:
 ## por debajo de los trozos que la forman. Los trozos son tiras rectas que acaban en borde recto: donde se juntan con
 ## ángulo quedaba una muesca en V por fuera y el borde exterior salía en polígono; el anillo, liso, tapa las dos cosas.
 func _anillos(lista: Array) -> void:
-	for g in lista:
+	for gi in lista.size():
+		var g: Dictionary = lista[gi]
 		var xs: Array = g["x"]
 		var ys: Array = g["y"]
 		var zs: Array = g["z"]
@@ -684,7 +689,7 @@ func _anillos(lista: Array) -> void:
 					fuera.append(q)
 				else:
 					dentro.append(q)
-		var pc := {"c": Vector3(c.x, c.y - PARCHE_BAJO, c.z), "borde": fuera, "interior": dentro, "ruta": false}
+		var pc := {"c": Vector3(c.x, c.y - PARCHE_BAJO, c.z), "borde": fuera, "interior": dentro, "ruta": false, "gi": gi}
 		_marcas_anillo(p, c, hw, pc)
 		parches.append(pc)
 		stats["anillos"] += 1
