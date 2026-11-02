@@ -831,7 +831,8 @@ func _zoom(f: float, en: Vector2) -> void:
 
 
 func _mover_con_mando(dt: float) -> void:
-	var mov := Vector2(Input.get_joy_axis(0, JOY_AXIS_LEFT_X), Input.get_joy_axis(0, JOY_AXIS_LEFT_Y))
+	var pad := Mando.pad_actual()           # el mando que se está usando (no siempre el nº 0 en Windows)
+	var mov := Vector2(Mando.eje(pad, JOY_AXIS_LEFT_X), Mando.eje(pad, JOY_AXIS_LEFT_Y))
 	var tec := Vector2(float(Input.is_physical_key_pressed(KEY_RIGHT) or Input.is_physical_key_pressed(KEY_D)) - float(Input.is_physical_key_pressed(KEY_LEFT) or Input.is_physical_key_pressed(KEY_A)),
 			float(Input.is_physical_key_pressed(KEY_DOWN) or Input.is_physical_key_pressed(KEY_S)) - float(Input.is_physical_key_pressed(KEY_UP) or Input.is_physical_key_pressed(KEY_W)))
 	if tec != Vector2.ZERO:
@@ -842,7 +843,7 @@ func _mover_con_mando(dt: float) -> void:
 	if Input.is_physical_key_pressed(KEY_MINUS) or Input.is_physical_key_pressed(KEY_KP_SUBTRACT) or Input.is_physical_key_pressed(KEY_PAGEDOWN):
 		m_px = clampf(m_px * pow(2.0, 1.5 * dt), 2.0, 220.0)
 		_vista()
-	var z := Input.get_joy_axis(0, JOY_AXIS_TRIGGER_RIGHT) - Input.get_joy_axis(0, JOY_AXIS_TRIGGER_LEFT)
+	var z := Mando.eje(pad, JOY_AXIS_TRIGGER_RIGHT) - Mando.eje(pad, JOY_AXIS_TRIGGER_LEFT)
 	var cambio := false
 	if mov.length() > 0.2:
 		centro += mov * m_px * 700.0 * dt

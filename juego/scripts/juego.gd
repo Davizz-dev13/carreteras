@@ -466,33 +466,53 @@ var pad_volante := 0.0            # -1..1 tras zona muerta y curva
 var pad_gas := 0.0                # 0..1 (R2)
 var pad_freno := 0.0              # 0..1 (L2)
 var pad_mano := false             # ✕ freno de mano
-var pad_gatillo_neg := {}         # eje -> true si ese gatillo da −1 en reposo (algunos mandos no estándar)
+var pad_gatillo_neg := {}         # (mando, eje) -> true si ese gatillo da −1 en reposo (algunos mandos no estándar)
 var pad_aviso_t := 0.0
 var l_mando := Label.new()
 
 
 func _mando_iniciar() -> void:
 	Input.joy_connection_changed.connect(_al_cambiar_mando)
-	var pads := Input.get_connected_joypads()
-	if not pads.is_empty():
-		_al_cambiar_mando(pads[0], true)
+	var pad := Mando.pad_actual()          # el último que se tocó (p. ej. en otra zona); si no, el primero conectado
+	if pad >= 0:
+		_al_cambiar_mando(pad, true)
+
+
+## Cada evento pasa por Mando.registrar: el mando que da una pulsación o un movimiento de verdad pasa a ser el que se
+## lee (en Windows el nº 0 a menudo es un mando virtual de DS4Windows/Steam u otro aparato, no el del jugador).
+func _input(ev: InputEvent) -> void:
+	var d := Mando.registrar(ev)
+	if d >= 0 and d != pad_id:
+		_usar_mando(d)
+
+
+func _usar_mando(d: int) -> void:
+	pad_id = d
+	pad_nombre = Mando.nombre(d)
+	l_mando.text = "Mando conectado (%s)" % pad_nombre
+	l_ayuda.text = AYUDA_MANDO
+	l_mando.visible = true
+	pad_aviso_t = 5.0
+	print("Mando en uso: %d %s" % [d, pad_nombre])
 
 
 func _al_cambiar_mando(id: int, conectado: bool) -> void:
 	if conectado:
 		if pad_id < 0 or not Input.get_connected_joypads().has(pad_id):
 			pad_id = id
-		pad_nombre = Input.get_joy_name(pad_id)
-		l_mando.text = "Mando conectado" + (" (%s)" % pad_nombre if pad_nombre != "" else "")
-	elif id == pad_id:
-		var pads := Input.get_connected_joypads()
-		pad_id = pads[0] if not pads.is_empty() else -1
-		l_mando.text = "Mando desconectado" if pad_id < 0 else "Mando conectado"
+		pad_nombre = Mando.nombre(pad_id)
+		l_mando.text = "Mando conectado (%s)" % pad_nombre
+	elif id == pad_id or id == Mando.activo:
+		Mando.olvidar(id)
+		pad_id = Mando.pad_actual()
+		pad_nombre = Mando.nombre(pad_id)
+		l_mando.text = "Mando desconectado" if pad_id < 0 else "Mando conectado (%s)" % pad_nombre
 		pad_gas = 0.0
 		pad_freno = 0.0
 		pad_volante = 0.0
 		pad_mano = false
 	else:
+		Mando.olvidar(id)              # se desconecta otro (no el que se lee)
 		return
 	l_ayuda.text = AYUDA_MANDO if pad_id >= 0 else AYUDA_TECLADO
 	l_mando.visible = true
@@ -512,7 +532,7 @@ func _aviso_mando(dt: float) -> void:
 func _leer_mando() -> bool:
 	if pad_id < 0:
 		return false
-	pad_x = Input.get_joy_axis(pad_id, JOY_AXIS_LEFT_X)
+	pad_x = Mando.eje(pad_id, JOY_AXIS_LEFT_X)
 	pad_volante = curva_joystick(pad_x)
 	pad_gas = _gatillo(JOY_AXIS_TRIGGER_RIGHT)
 	pad_freno = _gatillo(JOY_AXIS_TRIGGER_LEFT)
@@ -530,10 +550,11 @@ static func curva_joystick(x: float) -> float:
 
 
 func _gatillo(eje: JoyAxis) -> float:
-	var g := Input.get_joy_axis(pad_id, eje)
+	var g := Mando.eje(pad_id, eje)
+	var clave := Vector2i(pad_id, eje)
 	if g < -0.2:
-		pad_gatillo_neg[eje] = true      # este mando da el gatillo de −1 (suelto) a +1 (a fondo)
-	if pad_gatillo_neg.get(eje, false):
+		pad_gatillo_neg[clave] = true    # este mando da el gatillo de −1 (suelto) a +1 (a fondo)
+	if pad_gatillo_neg.get(clave, false):
 		g = (g + 1.0) * 0.5
 	g = clampf(g, 0.0, 1.0)
 	if g <= PAD_ZONA_GATILLO:

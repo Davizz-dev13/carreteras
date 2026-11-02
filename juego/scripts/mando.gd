@@ -29,10 +29,75 @@ var mira := Vector2.ZERO        # x = giro (rad, + = hacia la izquierda), y = ca
 var _sube_t := 0.0              # s que lleva mantenida la leva de subir
 
 
-## Primer mando conectado (−1 si no hay)
+# ---- qué mando se lee (compartido por los tramos, Madrid y el mapa grande) ----
+# En Windows es muy normal que el mando nº 0 NO sea el que tiene el jugador en la mano: DS4Windows, Steam Input o el
+# DualSense crean un mando Xbox virtual al lado del real, y cascos, volantes o teclados RGB se apuntan como mandos.
+# Los botones llegan como eventos de cualquier mando, pero los ejes se leían solo del nº 0 → gatillos y joystick
+# muertos. Ahora el mando en uso es el último que ha dado una pulsación o un movimiento de verdad (> UMBRAL_USO);
+# el primero conectado solo es la suposición inicial. Se decide en _input (Mando.registrar) con cada evento.
+const UMBRAL_USO := 0.3
+static var activo := -1          # mando en uso (−1 = aún ninguno: se usa el primero conectado)
+static var _ejes := {}           # dispositivo -> {eje: último valor visto}: para notar cuándo se mueve de verdad
+
+
+## Llamar desde _input con cada evento. Si el evento es de verdad (botón pulsado, o eje que se mueve > UMBRAL_USO)
+## y de otro mando, ese pasa a ser el mando en uso y lo devuelve; si no, devuelve −1.
+static func registrar(ev: InputEvent) -> int:
+	if ev is InputEventJoypadMotion:
+		var d: int = ev.device
+		if not _ejes.has(d):
+			_ejes[d] = {}
+		var eje: int = ev.axis
+		var v: float = ev.axis_value
+		var antes: float = _ejes[d].get(eje, 0.0)
+		_ejes[d][eje] = v
+		var de_verdad := absf(v) > UMBRAL_USO and absf(v - antes) > 0.2
+		if eje == JOY_AXIS_TRIGGER_LEFT or eje == JOY_AXIS_TRIGGER_RIGHT:
+			de_verdad = v > UMBRAL_USO and v - antes > 0.2      # un gatillo que da −1 en reposo no cuenta como uso
+		if de_verdad:
+			return _usar(d)
+	elif ev is InputEventJoypadButton and ev.pressed:
+		return _usar(ev.device)
+	return -1
+
+
+static func _usar(d: int) -> int:
+	if d == activo:
+		return -1
+	activo = d
+	return d
+
+
+## El mando se ha desconectado: se olvida (si era el que estaba en uso, vuelve a la suposición inicial)
+static func olvidar(d: int) -> void:
+	_ejes.erase(d)
+	if d == activo:
+		activo = -1
+
+
+## Mando en uso: el último que ha dado señales de vida; si aún no ha tocado ninguno, el primero conectado (−1 si no hay)
 static func pad_actual() -> int:
+	if activo >= 0:
+		return activo
 	var pads := Input.get_connected_joypads()
 	return pads[0] if not pads.is_empty() else -1
+
+
+## Valor de un eje del mando `pad`. Input guarda el estado de cada mando por separado (también el de los eventos de
+## Input.parse_input_event), así que se lee de ahí: la tabla de eventos (_ejes) solo sirve para ver quién se mueve, y
+## podría quedarse vieja si se suelta un gatillo mientras no hay partida (en el menú principal).
+static func eje(pad: int, a: JoyAxis) -> float:
+	if pad < 0:
+		return 0.0
+	return Input.get_joy_axis(pad, a)
+
+
+## Nombre del mando para los avisos ("" si no hay)
+static func nombre(pad: int) -> String:
+	if pad < 0:
+		return ""
+	var n := Input.get_joy_name(pad)
+	return n if n != "" else "mando %d" % pad
 
 
 ## R2/L2 analógicos (0..1 con holgura), joystick izquierdo con zona muerta y curva suave, ✕ freno de mano.
@@ -45,7 +110,7 @@ func leer(pad: int) -> bool:
 		x_bruto = 0.0
 		mano = false
 		return false
-	x_bruto = Input.get_joy_axis(pad, JOY_AXIS_LEFT_X)
+	x_bruto = eje(pad, JOY_AXIS_LEFT_X)
 	var m := absf(x_bruto)
 	var u := clampf((m - ZONA_VOLANTE) / (1.0 - ZONA_VOLANTE), 0.0, 1.0) if m > ZONA_VOLANTE else 0.0
 	volante = signf(x_bruto) * (0.45 * u + 0.55 * u * u * u)
@@ -55,11 +120,12 @@ func leer(pad: int) -> bool:
 	return gas > 0.05 or freno > 0.05 or absf(x_bruto) > 0.3 or mano
 
 
-func _gatillo(pad: int, eje: JoyAxis) -> float:
-	var g := Input.get_joy_axis(pad, eje)
+func _gatillo(pad: int, a: JoyAxis) -> float:
+	var g := eje(pad, a)
+	var clave := Vector2i(pad, a)
 	if g < -0.2:
-		_gatillo_neg[eje] = true          # este mando da el gatillo de −1 (suelto) a +1 (a fondo)
-	if _gatillo_neg.get(eje, false):
+		_gatillo_neg[clave] = true        # este mando da el gatillo de −1 (suelto) a +1 (a fondo)
+	if _gatillo_neg.get(clave, false):
 		g = (g + 1.0) * 0.5
 	g = clampf(g, 0.0, 1.0)
 	if g <= ZONA_GATILLO:
@@ -79,8 +145,8 @@ func actualizar_mira(pad: int, dt: float, cabina: bool) -> void:
 	var x := 0.0
 	var y := 0.0
 	if pad >= 0:
-		x = zona(Input.get_joy_axis(pad, JOY_AXIS_RIGHT_X))
-		y = zona(Input.get_joy_axis(pad, JOY_AXIS_RIGHT_Y))
+		x = zona(eje(pad, JOY_AXIS_RIGHT_X))
+		y = zona(eje(pad, JOY_AXIS_RIGHT_Y))
 	var gmax := GIRO_MAX_CABINA if cabina else GIRO_MAX
 	var obj := Vector2(-x * gmax, -y * CABECEO_MAX)
 	mira = mira.lerp(obj, 1.0 - exp(-RAPIDEZ * dt))

@@ -47,6 +47,7 @@ var mapa: MaMapa                # minimapa, mapa grande con M y GPS (ma_mapa.gd)
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
+	Input.joy_connection_changed.connect(_al_cambiar_mando)
 	var cargando := Label.new()
 	cargando.text = "Cargando la Comunidad de Madrid…"
 	cargando.add_theme_font_size_override("font_size", 26)
@@ -496,8 +497,6 @@ func _choques(dt: float) -> void:
 func _unhandled_input(ev: InputEvent) -> void:
 	if not cargado:
 		return
-	if ev is InputEventJoypadMotion or ev is InputEventJoypadButton:
-		pad_id = ev.device                     # el último mando que se ha movido es el que se lee
 	if ev is InputEventJoypadButton and ev.pressed:
 		_boton_mando(ev.button_index)
 		return
@@ -546,14 +545,24 @@ func _leva(d: int) -> void:
 	Mando.leva(coche.caja, d)
 
 
-var pad_id := -1        # último mando que ha mandado algo (−1 = el primero conectado, si hay)
+## Cada evento pasa por Mando.registrar (aquí y no en _unhandled_input, para que ni el menú ni un control con foco
+## se lo coman): el mando que da una pulsación o un movimiento de verdad (> 0,3) es el que se lee. Antes cualquier
+## movimiento, aunque fuera la deriva de un mando que nadie toca, cambiaba de mando.
+func _input(ev: InputEvent) -> void:
+	var d := Mando.registrar(ev)
+	if d >= 0:
+		print("Mando en uso: %d %s" % [d, Mando.nombre(d)])
 
 
+## Se desconecta un mando: si era el que se leía, vuelve al primero conectado
+func _al_cambiar_mando(id: int, conectado: bool) -> void:
+	if not conectado:
+		Mando.olvidar(id)
+
+
+## Mando que se lee: el último que se ha tocado de verdad; si aún ninguno, el primero conectado (−1 si no hay)
 func _pad() -> int:
-	var pads := Input.get_connected_joypads()
-	if pads.is_empty() or pads.has(pad_id):
-		return pad_id
-	return pads[0]
+	return Mando.pad_actual()
 
 
 var _salir_t := 0.0     # OPTIONS pulsado una vez: s que queda para confirmar la salida al menú

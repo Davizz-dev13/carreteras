@@ -25,6 +25,7 @@ const PARTIDAS := ["res://escenas/juego.tscn", "res://escenas/madrid.tscn"]
 var motivo_debil := ""         # por qué se puso "bajo" de serie (vacío = no se decidió solo)
 var bajada_hecha := false      # la bajada automática por FPS ya ocurrió una vez
 var _info := {}
+var _pad_escrito := -2         # mando en uso cuando se escribió diagnostico.txt (para reescribirlo si cambia)
 var _escena: Node = null
 var _t_escena := 0.0
 var _muestras := PackedFloat32Array()
@@ -57,6 +58,7 @@ func _ready() -> void:
 			_info["gpu"], _info["fabricante"], _info["tipo"], _info["ram_gb"], _info["nucleos"], Paisaje.graficos,
 			(" (de serie: " + motivo_debil + ")") if motivo_debil != "" else ""])
 	_escribir_diagnostico()
+	Input.joy_connection_changed.connect(_al_cambiar_mando)
 	get_tree().node_added.connect(_al_anadir)
 	_aplicar_viewport()
 
@@ -167,7 +169,12 @@ func _integrada_por_nombre(g: String) -> bool:
 	return false
 
 
+func _al_cambiar_mando(_id: int, _conectado: bool) -> void:
+	_escribir_diagnostico.call_deferred()
+
+
 func _escribir_diagnostico() -> void:
+	_pad_escrito = Mando.pad_actual()
 	var f := FileAccess.open("user://diagnostico.txt", FileAccess.WRITE)
 	if f == null:
 		return
@@ -176,6 +183,14 @@ func _escribir_diagnostico() -> void:
 	for k in ["so", "cpu", "nucleos", "ram_gb", "gpu", "fabricante", "tipo", "driver", "metodo", "version_api"]:
 		f.store_line("%s: %s" % [k, str(_info[k])])
 	f.store_line("graficos: %s · motivo de serie: %s · bajada por FPS: %s" % [Paisaje.graficos, motivo_debil, bajada_hecha])
+	# mandos: todos los que ve el juego y cuál se lee (en Windows el nº 0 puede ser uno virtual, p. ej. de DS4Windows)
+	var pads := Input.get_connected_joypads()
+	var en_uso := _pad_escrito
+	f.store_line("mandos conectados: %d · en uso: %s" % [pads.size(), ("nº %d (%s)%s" % [en_uso, Mando.nombre(en_uso),
+			"" if Mando.activo >= 0 else ", supuesto: aún no se ha tocado ninguno"]) if en_uso >= 0 else "ninguno"])
+	for i in pads:
+		f.store_line("  mando nº %d: %s · GUID %s · %s%s" % [i, Input.get_joy_name(i), Input.get_joy_guid(i),
+				str(Input.get_joy_info(i)), "  ← EN USO" if i == en_uso else ""])
 
 
 # ------------------------------------------------------------------ Gráficos bajo en lo que se va creando
@@ -238,6 +253,8 @@ func _process(dt: float) -> void:
 			_capa.visible = false
 	if OS.has_feature("web"):
 		return
+	if Mando.pad_actual() != _pad_escrito:
+		_escribir_diagnostico()          # cambió el mando en uso: que el diagnóstico lo diga
 	# en "bajo", el plano lejano se queda en 8 km aunque otro script lo alargue después de crear la cámara
 	if not graficos_altos():
 		var cam := get_viewport().get_camera_3d()
