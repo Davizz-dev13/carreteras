@@ -145,6 +145,7 @@ static func quad(a: Vector3, b: Vector3, hw: float, mv: PackedVector3Array, mi: 
 ## separadora de cada brazo de doble sentido, añade los abocinamientos (parches) y la línea de ceda de cada entrada.
 static func aplicar(cr: Cruces, rutas: Array, vias: Array, glorietas: Array) -> Dictionary:
 	var st := {"glorietas_tipo": 0, "trozos_anillo_ocultos": 0, "brazos": 0, "abocinados": 0, "isletas": 0, "cedas": 0}
+	GlorietaMalla.reiniciar()
 	var infos := []
 	var rej := {}
 	for gi in glorietas.size():
@@ -187,6 +188,8 @@ static func aplicar(cr: Cruces, rutas: Array, vias: Array, glorietas: Array) -> 
 		for gi in cand:
 			var inf: Dictionary = infos[gi]
 			for extremo in [0, 1]:
+				if dib.size() < 2:
+					break
 				var p_ext: Vector3 = dib[0] if extremo == 0 else dib[dib.size() - 1]
 				if absf(p_ext.y - (inf["c"] as Vector3).y) > 3.0:
 					continue
@@ -223,16 +226,31 @@ static func aplicar(cr: Cruces, rutas: Array, vias: Array, glorietas: Array) -> 
 					continue
 				br["entra"] = 1 if extremo == 1 else -1     # sentido de dibujo de OSM: hacia el anillo = entrada
 				br["ruta"] = false
-				br["elev"] = 0.04
-				var nuevo: PackedVector3Array = br["poli"]
+				br["elev"] = 0.0
+				br["via"] = v
+				# la malla de la glorieta (GlorietaMalla) se queda con los primeros LARGO m del brazo; la vía se dibuja
+				# desde el corte. Una vía entre dos glorietas se reparte a medias.
+				var tt_b: PackedFloat32Array = br["tt"]
+				var largo := minf(GlorietaMalla.LARGO, tt_b[tt_b.size() - 1] - 1.0)
+				var otro: Vector3 = dib[dib.size() - 1] if extremo == 0 else dib[0]
+				for gj in rej.get(Vector2i(floori(otro.x / 100.0), floori(otro.z / 100.0)), []):
+					if infos[gj]["ok"] and absf(otro.y - (infos[gj]["c"] as Vector3).y) < 3.0 and fuera_de_borde(infos[gj], otro) < 15.0:
+						largo = minf(largo, tt_b[tt_b.size() - 1] * 0.5 - 0.5)
+				var resto := _partir(br, maxf(largo, 0.5))
+				br["malla"] = _malla_via(br, resto)
 				if extremo == 1:
-					nuevo.reverse()
-				dib = nuevo
-				extremos.append([br["x0"], br["doble"]])
+					resto.reverse()
+				dib = resto
+				extremos.append([br["x0"], false])
+				if dib.size() < 2:
+					break
 				hay = true
 				if not brazos.has(gi):
 					brazos[gi] = []
 				brazos[gi].append(br)
+		if hay and dib.size() < 2:
+			v["oculta_glorieta"] = true      # la vía entera es brazo de glorieta: va en su malla
+			continue
 		if hay and dib.size() >= 2:
 			# anchos con la isleta de cada extremo recortado (distancia por la vía desde su cruce con el borde)
 			var hw_v := float(v["ancho"]) * 0.5
@@ -268,6 +286,7 @@ static func aplicar(cr: Cruces, rutas: Array, vias: Array, glorietas: Array) -> 
 			v["anchos_dib"] = anchos
 			v["sin_talud_dib"] = st_dib
 	# --- la ruta: sus bocas (Ruta.bocas_glorieta; la calzada ya va ensanchada por la isleta y oculta dentro del anillo)
+	var mv_ruta := {}     # gi -> [mv, mi]: eje de los brazos de la ruta entre el corte y la isleta
 	for r in rutas:
 		for bo in r.bocas_glorieta:
 			var gi: int = bo["g"]
@@ -292,6 +311,7 @@ static func aplicar(cr: Cruces, rutas: Array, vias: Array, glorietas: Array) -> 
 			if br.is_empty():
 				continue
 			br["ruta"] = true
+			br["malla"] = _malla_ruta(r, inf, i0, dr, mv_ruta)
 			br["elev"] = 0.0
 			br["entra"] = 0
 			if not brazos.has(gi):
@@ -320,55 +340,131 @@ static func aplicar(cr: Cruces, rutas: Array, vias: Array, glorietas: Array) -> 
 			quedan.append(pc)
 	Cruces.parches.clear()
 	Cruces.parches.append_array(quedan)
+	var contornos_gi := []
 	for gi in brazos:
 		var inf: Dictionary = infos[gi]
 		var lista: Array = brazos[gi]
+		# calzada gemela: la otra calzada de una autovía que la ruta ya lleva en su anchura (la M-406) asoma junto al
+		# anillo como otra vía; era otro brazo con su isleta encima del de la ruta (cintas cruzadas). Fuera.
+		var lista2 := []
+		for br in lista:
+			if not br["ruta"]:
+				var gemela := false
+				var o_mejor := {}
+				for o in lista:
+					if o["ruta"] and (br["u"] as Vector3).dot(o["u"]) > cos(deg_to_rad(45.0)):
+						if (br["x0"] as Vector3).distance_to(o["x0"]) < float(br["w"]) + float(o["w"]) + 8.0 \
+								or _acaba_en_ruta(rutas, inf, br["via"]):
+							if not gemela or (br["u"] as Vector3).dot(o["u"]) > (br["u"] as Vector3).dot(o_mejor["u"]):
+								o_mejor = o
+							gemela = true
+				if gemela:
+					# su señal de ceda y su triángulo (senales.json) pasan a la entrada del brazo de la ruta (SenalesOsm)
+					GlorietaMalla.gemelas.append({"x0": br["x0"], "ruta_x0": o_mejor["x0"], "u": o_mejor["u"],
+							"w": float(o_mejor["w"]), "h": float(o_mejor["h"])})
+					_ocultar_gemela(inf, br["via"])
+					st["gemelas"] = int(st.get("gemelas", 0)) + 1
+					continue
+			lista2.append(br)
+		lista = lista2
 		st["brazos"] += lista.size()
 		var de_ruta := false
 		for br in lista:
 			de_ruta = de_ruta or br["ruta"]
 		var pc: Dictionary = pc_anillo.get(gi, {})
-		if not pc.is_empty() and de_ruta:
-			pc["ruta"] = true          # el anillo de una glorieta de la ruta, con el asfalto de la ruta
 		var mv := PackedVector3Array()
 		var mi := PackedInt32Array()
-		var bocas := []      # [ángulo de, ángulo hasta] de cada brazo en el borde exterior (abocinamientos incluidos)
+		var bocas := []      # [ángulo de, ángulo hasta] de cada brazo en el borde exterior
+		var mallas := []
 		for br in lista:
 			var th0 := angulo(inf["c"], br["x0"])
 			var o_min := 0.0
 			var o_max := 0.0
 			for lado in [-1.0, 1.0]:
-				var pf := _abocinado(cr, inf, br, lado, lista)
-				if not pf.is_empty():
-					pf["ruta"] = de_ruta
-					Cruces.parches.append(pf)
-					st["abocinados"] += 1
-				# la línea de borde se corta solo en la boca (entre las dos esquinas del brazo); sigue por los abocinados
 				var u: Vector3 = br["u"]
 				var th_lado := angulo(inf["c"], (br["x0"] as Vector3) + Vector3(-u.z, 0.0, u.x) * lado * float(br["w"]))
 				var off := wrapf(th_lado - th0, -PI, PI)
 				o_min = minf(o_min, off)
 				o_max = maxf(o_max, off)
 			bocas.append([th0 + o_min, th0 + o_max])
-		# líneas del anillo de la plantilla: borde exterior cortado solo en la boca de cada brazo, borde interior
-		# entero y separación de carriles discontinua si hay dos (sustituyen a las de Cruces._marcas_anillo, que se
-		# cortaban donde pisaban los trozos de OSM y las vías antes de recortarlas)
-		if not pc.is_empty():
-			pc["bocas"] = bocas          # (para las pruebas: ángulos de las bocas)
-			_marcas_anillo_tipo(inf, pc, bocas, mv, mi)
+			if br.has("malla") and not (br["malla"] as Dictionary).is_empty():
+				mallas.append(br["malla"])
+		# UNA malla para anillo + brazos + abocinamientos (GlorietaMalla), con su línea de borde exterior
+		var gm := GlorietaMalla.construir(inf, glorietas[gi], mallas)
+		if gm.is_empty():
+			st["mallas_fallidas"] = int(st.get("mallas_fallidas", 0)) + 1
+			continue
+		st["mallas"] = int(st.get("mallas", 0)) + 1
+		var bi := []
+		for br in lista:
+			var pcorte: Vector3 = br["x0"] + (br["u"] as Vector3) * 30.0
+			if br.has("malla") and not (br["malla"] as Dictionary).is_empty():
+				pcorte = ((br["malla"]["izq"][0] as Vector3) + (br["malla"]["der"][0] as Vector3)) * 0.5
+			bi.append([br["x0"], br["u"], br["ruta"], br["doble"], pcorte])
+		GlorietaMalla.brazos_info[gi] = bi
+		if pc.is_empty():
+			pc = {"c": inf["c"], "borde": PackedVector3Array(), "gi": gi}
+			Cruces.parches.append(pc)
+		var cont: PackedVector2Array = gm["contorno"]
+		var caja := PackedVector3Array()
+		for q in cont:
+			caja.append(Vector3(q.x, (inf["c"] as Vector3).y, q.y))
+		pc["caja"] = caja
+		pc["tris"] = [gm["verts"], gm["idx"]]
+		pc["bordillo"] = gm["bordillo"]
+		pc["talud"] = gm["talud"]
+		pc["muestras"] = gm["muestras"]
+		pc["ruta"] = de_ruta
+		pc["bocas"] = bocas          # (para las pruebas: ángulos de las bocas)
+		contornos_gi.append([cont, inf["c"]])
+		# líneas: borde interior y separación de carriles del anillo, borde exterior del contorno, isletas, cedas, ejes
+		if pc.has("interior"):
+			_marcas_anillo_tipo(inf, pc, bocas, mv, mi, false)
+		_juntar(mv, mi, gm["mv"], gm["mi"])
+		if mv_ruta.has(gi):
+			_juntar(mv, mi, mv_ruta[gi][0], mv_ruta[gi][1])
 		for br in lista:
 			if br["doble"] and _isla_marcas(br, mv, mi):
 				st["isletas"] += 1
 			if _linea_ceda(inf, br, mv, mi):
 				st["cedas"] += 1
-		if not pc.is_empty() and not mv.is_empty():
+		if not mv.is_empty():
+			(gm["alt"] as GlorietaMalla.Alturas).ajustar_marcas(mv)
 			pc["marcas"] = [mv, mi]
+	# discos de nodo que caen dentro de la malla de una glorieta: sobran (asomaban como círculos más claros)
+	var rej_c := {}
+	for k in contornos_gi.size():
+		var cg: Vector3 = contornos_gi[k][1]
+		var kc := Vector2i(floori(cg.x / 100.0), floori(cg.z / 100.0))
+		for dx in [-1, 0, 1]:
+			for dz in [-1, 0, 1]:
+				var kk := kc + Vector2i(dx, dz)
+				if not rej_c.has(kk):
+					rej_c[kk] = []
+				rej_c[kk].append(k)
+	var quedan2 := []
+	for o in Cruces.parches:
+		if not o.has("gi"):
+			var oc: Vector3 = o["c"]
+			var fuera := true
+			for k in rej_c.get(Vector2i(floori(oc.x / 100.0), floori(oc.z / 100.0)), []):
+				if absf(oc.y - (contornos_gi[k][1] as Vector3).y) < 4.0 and Geometry2D.is_point_in_polygon(Vector2(oc.x, oc.z), contornos_gi[k][0]):
+					fuera = false
+					break
+			if not fuera:
+				st["discos_quitados"] = int(st.get("discos_quitados", 0)) + 1
+				continue
+		quedan2.append(o)
+	Cruces.parches.clear()
+	Cruces.parches.append_array(quedan2)
+	for k in GlorietaMalla.ms:
+		st["us_" + k] = GlorietaMalla.ms[k]
 	return st
 
 
 ## Líneas del anillo (15 cm): borde exterior (a 30 cm del borde del carril) salvo en las bocas, borde interior y, con
 ## dos carriles, separación discontinua (3,5 m de trazo cada 12,5 m). Alturas: las del parche del anillo.
-static func _marcas_anillo_tipo(inf: Dictionary, pc: Dictionary, bocas: Array, mv: PackedVector3Array, mi: PackedInt32Array) -> void:
+static func _marcas_anillo_tipo(inf: Dictionary, pc: Dictionary, bocas: Array, mv: PackedVector3Array, mi: PackedInt32Array, exterior := true) -> void:
 	var fuera: PackedVector3Array = pc["borde"]
 	var dentro: PackedVector3Array = pc["interior"]
 	var n := fuera.size()
@@ -376,7 +472,7 @@ static func _marcas_anillo_tipo(inf: Dictionary, pc: Dictionary, bocas: Array, m
 		return
 	var hw: float = inf["hw"]
 	var c: Vector3 = inf["c"]
-	var lineas := [[hw - 0.3, 0.0, true], [-(hw - 0.3), 0.0, false]]
+	var lineas := [[hw - 0.3, 0.0, true], [-(hw - 0.3), 0.0, false]] if exterior else [[-(hw - 0.3), 0.0, false]]
 	if hw >= 4.0:
 		lineas.append([0.0, 12.5, false])
 	for ln in lineas:
@@ -658,3 +754,196 @@ static func _linea_ceda(inf: Dictionary, br: Dictionary, mv: PackedVector3Array,
 		quad(qa, qb, 0.2, mv, mi)
 		s += 1.2
 	return true
+
+
+## Junta marcas (vértices e índices) en mv/mi
+static func _juntar(mv: PackedVector3Array, mi: PackedInt32Array, v2: PackedVector3Array, i2: PackedInt32Array) -> void:
+	var b0 := mv.size()
+	mv.append_array(v2)
+	for t in i2:
+		mi.append(b0 + t)
+
+
+## Parte un brazo de vía a 'largo' m del borde del anillo: el brazo se queda con lo de dentro (para la malla de la
+## glorieta) y devuelve lo de fuera, que empieza en el punto de corte (la vía se sigue dibujando desde ahí)
+static func _partir(br: Dictionary, largo: float) -> PackedVector3Array:
+	var poli: PackedVector3Array = br["poli"]
+	var tt: PackedFloat32Array = br["tt"]
+	var anchos: PackedFloat32Array = br["anchos"]
+	var hs: PackedFloat32Array = br["hs"]
+	var p2 := PackedVector3Array()
+	var a2 := PackedFloat32Array()
+	var h2 := PackedFloat32Array()
+	var t2 := PackedFloat32Array()
+	var resto := PackedVector3Array()
+	for k in poli.size():
+		if resto.is_empty() and (tt[k] < largo - 0.05 or k == 0):
+			p2.append(poli[k])
+			a2.append(anchos[k])
+			h2.append(hs[k])
+			t2.append(tt[k])
+		elif resto.is_empty():
+			var f := clampf((largo - tt[k - 1]) / maxf(tt[k] - tt[k - 1], 1e-4), 0.0, 1.0)
+			var q := poli[k - 1].lerp(poli[k], f)
+			p2.append(q)
+			a2.append(lerpf(anchos[k - 1], anchos[k], f))
+			h2.append(semiancho_isla(largo) if br["doble"] else 0.0)
+			t2.append(largo)
+			resto.append(q)
+			if poli[k].distance_to(q) > 0.05:
+				resto.append(poli[k])
+		else:
+			resto.append(poli[k])
+	br["poli"] = p2
+	br["centros"] = p2
+	br["anchos"] = a2
+	br["hs"] = h2
+	br["tt"] = t2
+	return resto
+
+
+## Bordes del trozo de vía que va en la malla (del corte hacia el anillo), con la altura de la franja de la vía
+static func _malla_via(br: Dictionary, resto: PackedVector3Array) -> Dictionary:
+	var poli: PackedVector3Array = br["poli"]
+	var anchos: PackedFloat32Array = br["anchos"]
+	var izq := PackedVector3Array()
+	var der := PackedVector3Array()
+	var n := poli.size()
+	if n < 2:
+		return {}
+	for kk in n:
+		var k := n - 1 - kk
+		var t: Vector3
+		if k == n - 1 and resto.size() >= 2:
+			t = resto[1] - resto[0]          # como la franja de la vía en su primer punto
+		else:
+			t = poli[mini(k + 1, n - 1)] - poli[maxi(k - 1, 0)]
+		var nrm := Vector3(-t.z, 0.0, t.x).normalized()
+		var h := anchos[k] * 0.5
+		var up := Vector3(0.0, 0.04, 0.0)
+		izq.append(poli[k] - nrm * h + up)
+		der.append(poli[k] + nrm * h + up)
+	return {"izq": izq, "der": der, "ruta": false, "corte": [Vector2(izq[0].x, izq[0].z), Vector2(der[0].x, der[0].z)]}
+
+
+## Brazo de la ruta en la malla: de la muestra a GlorietaMalla.LARGO m del borde (o la mitad del camino a la siguiente
+## glorieta / el final de la ruta) hasta dentro del anillo. La franja de la ruta se oculta en ese trozo (Ruta.oculto).
+## mv_ruta[gi] recibe el eje entre el corte y la punta de la isleta.
+static func _malla_ruta(r: Ruta, inf: Dictionary, i0: int, dr: int, mv_ruta: Dictionary) -> Dictionary:
+	var largo := GlorietaMalla.LARGO
+	var kk := i0
+	var tl := 0.0
+	while tl < largo + 0.5:
+		if kk + dr < 0 or kk + dr >= r.n:
+			largo = minf(largo, tl)
+			break
+		if r.dentro_glorieta[kk + dr] == 1 and fuera_de_borde(inf, r.pts[kk + dr]) > 3.0:
+			largo = minf(largo, tl * 0.5)       # otra glorieta: a medias
+			break
+		tl += r.pts[kk].distance_to(r.pts[kk + dr])
+		kk += dr
+	var ic := i0
+	var tc := 0.0
+	while tc < largo - 0.01 and ic + dr >= 0 and ic + dr < r.n:
+		tc += r.pts[ic].distance_to(r.pts[ic + dr])
+		ic += dr
+	# hacia dentro: la franja se oculta hasta el arco (ya estaba oculta dentro del anillo)
+	var iin := i0
+	var cuenta := 0
+	while iin - dr >= 0 and iin - dr < r.n and cuenta < 25 and r.anillo[iin] == 0:
+		iin -= dr
+		cuenta += 1
+	if ic == i0:
+		return {}
+	for k in range(mini(ic, iin), maxi(ic, iin)):
+		r.oculto[k] = 1
+	var izq := PackedVector3Array()
+	var der := PackedVector3Array()
+	var k := ic
+	var up := Vector3(0.0, GlorietaMalla.ELEV, 0.0)
+	while true:
+		var dq := _der_ruta(r, k) * (r.ancho[k] * 0.5)
+		izq.append(r.pts[k] - dq + up)
+		der.append(r.pts[k] + dq + up)
+		if k == i0:
+			break
+		k -= dr
+	# y desde la boca, recto hacia dentro hasta que la sección entera esté sobre el anillo (la ruta, que sobre el arco
+	# es más ancha que el anillo, no se usa: asomaba por fuera del anillo como una cuña)
+	var u := Vector3(r.pts[i0].x - r.pts[i0 - dr].x, 0.0, r.pts[i0].z - r.pts[i0 - dr].z).normalized() if i0 - dr >= 0 and i0 - dr < r.n else Vector3.ZERO
+	if u != Vector3.ZERO:
+		var hw0 := r.ancho[i0] * 0.5
+		var ro := r_borde(inf, angulo(inf["c"], r.pts[i0]))
+		var sag := ro - sqrt(maxf(ro * ro - hw0 * hw0, 0.0)) + 1.5
+		var dq := _der_ruta(r, i0) * hw0
+		var cen := r.pts[i0] + up
+		var paso := maxf(fuera_de_borde(inf, cen), 0.0) + sag
+		izq.append(cen - u * paso - dq)
+		der.append(cen - u * paso + dq)
+	# eje continuo desde el corte hasta la punta de la isleta (la franja de la ruta lo lleva hasta el corte)
+	var gi := -1
+	for bo in r.bocas_glorieta:
+		if int(bo["i"]) == i0 and int(bo["dir"]) == dr:
+			gi = int(bo["g"])
+	if gi >= 0:
+		if not mv_ruta.has(gi):
+			mv_ruta[gi] = [PackedVector3Array(), PackedInt32Array()]
+		k = ic
+		while k != i0 and r.isla[k - dr] < 0.05:
+			var a := r.pts[k] + _der_ruta(r, k) * r.lateral_eje(k * r.paso) + Vector3(0.0, GlorietaMalla.ELEV + GlorietaMalla.MARCA, 0.0)
+			var b := r.pts[k - dr] + _der_ruta(r, k - dr) * r.lateral_eje((k - dr) * r.paso) + Vector3(0.0, GlorietaMalla.ELEV + GlorietaMalla.MARCA, 0.0)
+			quad(a, b, 0.075, mv_ruta[gi][0], mv_ruta[gi][1])
+			k -= dr
+	return {"izq": izq, "der": der, "ruta": true, "corte": [Vector2(izq[0].x, izq[0].z), Vector2(der[0].x, der[0].z)]}
+
+
+## Derecha horizontal de la ruta en la muestra i (como la franja: diferencia centrada)
+static func _der_ruta(r: Ruta, i: int) -> Vector3:
+	var t := r.pts[mini(i + 1, r.n - 1)] - r.pts[maxi(i - 1, 0)]
+	return Vector3(-t.z, 0.0, t.x).normalized()
+
+
+## Calzada gemela de la ruta junto a una glorieta: no se dibuja junto al anillo (corta, entera fuera)
+static func _ocultar_gemela(inf: Dictionary, v: Dictionary) -> void:
+	v["gemela"] = true   # Superficie: lo que no se dibuja no es calzada
+	var pts: PackedVector3Array = v.get("pts_dib", v["pts"])
+	var largo := 0.0
+	for k in range(1, pts.size()):
+		largo += pts[k - 1].distance_to(pts[k])
+	if largo < 300.0:
+		v["oculta_glorieta"] = true
+		return
+	var lim := GlorietaMalla.LARGO + 15.0
+	var a := 0
+	while a < pts.size() and fuera_de_borde(inf, pts[a]) < lim:
+		a += 1
+	var b := pts.size() - 1
+	while b > a and fuera_de_borde(inf, pts[b]) < lim:
+		b -= 1
+	if b - a < 1:
+		v["oculta_glorieta"] = true
+		return
+	v["pts_dib"] = pts.slice(a, b + 1)
+	if v.has("anchos_dib"):
+		v["anchos_dib"] = (v["anchos_dib"] as PackedFloat32Array).slice(a, b + 1)
+	if v.has("sin_talud_dib"):
+		v["sin_talud_dib"] = (v["sin_talud_dib"] as PackedByteArray).slice(a, b + 1)
+
+
+## ¿Acaba la vía (por el extremo lejos del anillo) dentro de la calzada de una ruta? (la otra calzada de la autovía,
+## que Cruces ya cortó donde la ruta la tapa)
+static func _acaba_en_ruta(rutas: Array, inf: Dictionary, v: Dictionary) -> bool:
+	var pts: PackedVector3Array = v.get("pts_dib", v["pts"])
+	if pts.size() < 2:
+		return true
+	var q := pts[0] if fuera_de_borde(inf, pts[0]) > fuera_de_borde(inf, pts[pts.size() - 1]) else pts[pts.size() - 1]
+	var c: Vector3 = inf["c"]
+	for rr in rutas:
+		var r: Ruta = rr
+		for i in r.n:
+			var p := r.pts[i]
+			if absf(p.x - c.x) > 300.0 or absf(p.z - c.z) > 300.0:
+				continue
+			if Vector2(p.x - q.x, p.z - q.z).length() < r.ancho[i] * 0.5 + 2.5 and absf(p.y - q.y) < 3.0:
+				return true
+	return false

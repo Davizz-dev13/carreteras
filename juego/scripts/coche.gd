@@ -218,6 +218,8 @@ func paso_fisica(dt: float) -> void:
 	position.x += avance.x
 	position.z += avance.z
 	Catalogo.animar_ruedas(modelo, v * dt, giro)
+	Catalogo.animar_volante(modelo, giro / GIRO_MAX, dt)
+	Catalogo.luces_freno(modelo, freno > 0.05)
 	odometro += absf(v) * dt
 	choque_t = maxf(0.0, choque_t - dt)
 	_apoyar(dt)

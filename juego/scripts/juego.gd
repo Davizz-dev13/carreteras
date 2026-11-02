@@ -5,6 +5,8 @@ var mundo := Mundo.new()
 var coche := Coche.new()
 var trafico := Trafico.new()
 var cam := Camera3D.new()
+var retrovisor := Retrovisor.new()   # espejo interior con imagen (retrovisor.gd)
+const NEAR_CABINA := 0.08       # plano cercano en la cámara de cabina (m)
 var ruta: Ruta
 var dir := 1                 # sentido de marcha respecto a la ruta
 var s_ini := 0.0
@@ -85,6 +87,8 @@ func _ready() -> void:
 	dir = 1 if s_fin > s_ini else -1
 	piloto = Ajustes.piloto
 	add_child(coche)
+	retrovisor.preparar(coche)
+	add_child(retrovisor)
 	sonido.coche = coche
 	coche.add_child(sonido)               # motor con las rpm reales de la caja (sonido_motor.gd)
 	trafico.iniciar(ruta, Ajustes.trafico)
@@ -180,8 +184,11 @@ func _simular(dt: float) -> void:
 	trafico.actualizar(dt, s_coche, lat_coche, coche.v * dir, lado_jug if en_ruta else 0)
 	colisiones.mover_sueltos(dt)
 	colisiones.resolver(dt, prev_jug)
+	Quitamiedos.asegurar_choque(coche.position)    # bionda de los trozos de alrededor, aunque aún no se hayan dibujado
 	if biondas != null and not biondas.vacia() and Biondas.resolver(coche, [biondas]) > 0.0:
 		toques_bionda += 1
+		if Ajustes.args.has("traza_bionda") and toques_bionda % 30 == 1:
+			print("BIONDA_TOQUE t=%.1f s=%.0f lat=%.2f v=%.1f" % [tiempo, s_coche, lat_coche, coche.v])
 	choques = colisiones.golpes
 	_adelantamiento(dt)
 	_adelantar_auto(dt)
@@ -663,6 +670,7 @@ func reiniciar_camara() -> void:
 
 
 func _camara(dt: float) -> void:
+	retrovisor.actualizar(Ajustes.camara == 1)
 	var tc := coche.get_global_transform_interpolated()
 	var pos := tc.origin
 	var fw := -tc.basis.z
@@ -679,9 +687,11 @@ func _camara(dt: float) -> void:
 		cam.global_transform = Transform3D(b, pos + b * asiento)
 		mando.girar_cabeza(cam)                 # joystick derecho: mirar alrededor
 		cam.fov = 75.0
+		cam.near = NEAR_CABINA     # el techo queda a ~18 cm de los ojos: con 0,2 m se recortaba al mirar arriba
 		cam_iniciada = true
 		return
 	cam.fov = 70.0
+	cam.near = 0.2
 	if Ajustes.args.has("foto"):
 		# foto del coche (verificación / README): cámara en órbita a `foto` grados del morro
 		var ang := deg_to_rad(float(Ajustes.args["foto"]))

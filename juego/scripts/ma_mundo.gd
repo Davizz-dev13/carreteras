@@ -100,6 +100,7 @@ func preparar(d: MaDatos) -> void:
 	mat_edificio.metallic_specular = 0.2
 	mat_edificio.cull_mode = BaseMaterial3D.CULL_DISABLED
 	ruido = _ruido()
+	Quitamiedos.material()   # mallas y material de la bionda creados aquí (hilo principal), no en los hilos de las teselas
 	malla_conifera = _malla_arbol(true)
 	malla_frondosa = _malla_arbol(false)
 	norma = Ajustes.args.get("aspecto", "1") == "1" and Rendimiento.graficos_altos()   # Gráficos bajo: materiales sencillos
@@ -298,7 +299,7 @@ func construir_tesela(t: Vector2i, lod: int) -> Dictionary:
 	var u_v := PackedVector2Array(); var u_vv := PackedVector2Array(); var u_tv := PackedVector2Array()   # UV (aspecto)
 	var mv := PackedVector3Array(); var mn := PackedVector3Array(); var mi := PackedInt32Array()
 	var uv := PackedVector3Array(); var un := PackedVector3Array(); var ui := PackedInt32Array()
-	var bv := PackedVector3Array(); var bn := PackedVector3Array(); var bi := PackedInt32Array()
+	var inst_bionda := {"vallas": [], "abat": [], "postes": []}
 	var pedidas_bionda := []
 	var ramales := []
 	for pz in d["piezas"]:
@@ -331,10 +332,11 @@ func construir_tesela(t: Vector2i, lod: int) -> Dictionary:
 			_marcas(tr, pts, a, b, ancho, mv, mn, mi, rec)
 			# biondas (quitamiedos) en autopistas y autovías: arcén derecho y mediana (APROXIMACIÓN: OSM casi nunca
 			# dice dónde hay; en las vías rápidas españolas van casi siempre en la mediana y en terraplenes/puentes)
-			if via_rapida and not tunel and int(tr["enlace"]) == 0:
-				pedidas_bionda.append([pts, a, b, ancho * 0.5 + 0.7, k, rec])
-				if int(tr["s"]) != 0:
-					pedidas_bionda.append([pts, a, b, -(ancho * 0.5 + 0.7), k])
+			# David (2 nov): "quitamiedos en todos los km": en las vías rápidas, a los dos lados de cada calzada (arcén
+			# y mediana; en las de doble sentido, los dos bordes) y en las carreteras interurbanas (Biondas.interurbana)
+			if not tunel and int(tr["rot"]) == 0 and (via_rapida or MaMundo.interurbana(tr)):
+				pedidas_bionda.append([pts, a, b, ancho * 0.5 + 0.7, k, rec, puente])
+				pedidas_bionda.append([pts, a, b, -(ancho * 0.5 + 0.7), k, rec, puente])
 	# biondas: se cortan donde otra calzada (enlace, ramal, vía paralela) llega a menos de 0,6 m de la valla, para no
 	# cruzar las salidas y entradas; las mismas líneas son las paredes del choque (biondas.gd)
 	var celdas_sup := MaSuperficie.indice(sa, sb, shw)
@@ -356,20 +358,21 @@ func construir_tesela(t: Vector2i, lod: int) -> Dictionary:
 			_marcas_ramal(tr, pts, rm[1], rm[2], ancho, k, sa, sb, shw, sk, celdas_sup, mv, mn, mi)
 			# los ramales en puente llevan pretil/bionda a los dos lados (siempre lo tienen); se corta igual que las demás
 			# donde llega otra calzada (la principal de la que sale el ramal)
-			if puente and int(tr["c"]) <= 1:
-				pedidas_bionda.append([pts, rm[1], rm[2], ancho * 0.5 + 0.6, k])
-				pedidas_bionda.append([pts, rm[1], rm[2], -(ancho * 0.5 + 0.6), k])
+			if int(tr["c"]) <= 1 or MaMundo.interurbana(tr):   # todos los ramales de vías rápidas e interurbanas
+				pedidas_bionda.append([pts, rm[1], rm[2], ancho * 0.5 + 0.6, k, [], puente])
+				pedidas_bionda.append([pts, rm[1], rm[2], -(ancho * 0.5 + 0.6), k, [], puente])
 	# discos en los nodos (trozos de una glorieta, empalmes, bocas): cada tramo acaba en borde recto y donde dos se
 	# juntan con ángulo quedaba una muesca sin asfalto en el lado de fuera (se veía en todas las glorietas)
 	_discos_nodos(d, sa, sb, shw, celdas_sup, v, n, ix, vv, nv, iv)
 	var choque := Biondas.new()
 	for pb in pedidas_bionda:
-		_bionda(pb[0], pb[1], pb[2], pb[3], bv, bn, bi, _continuaciones(int(pb[4])), int(pb[4]), sa, sb, shw, sk, celdas_sup, choque,
-				pb[5] if pb.size() > 5 else [])
+		_bionda(pb[0], pb[1], pb[2], pb[3], inst_bionda, _continuaciones(int(pb[4])), int(pb[4]), sa, sb, shw, sk, celdas_sup, choque,
+				pb[5] if pb.size() > 5 else [], pb[6] if pb.size() > 6 else false)
+	_instanciar_biondas(inst_bionda, raiz)
 	# los discos de los nodos van después de las franjas en las mismas listas: sin UV (sin rodadas ni borde sucio)
 	while u_v.size() < v.size(): u_v.append(Vector2.ZERO)
 	while u_vv.size() < vv.size(): u_vv.append(Vector2.ZERO)
-	var mallas := [[v, n, ix, mat_asfalto, u_v], [vv, nv, iv, mat_asfalto_v, u_vv], [tv, tn, ti, mat_talud, u_tv], [uv, un, ui, mat_tunel], [bv, bn, bi, mat_bionda]]
+	var mallas := [[v, n, ix, mat_asfalto, u_v], [vv, nv, iv, mat_asfalto_v, u_vv], [tv, tn, ti, mat_talud, u_tv], [uv, un, ui, mat_tunel]]
 	var talud_idx := -1
 	var cuenta_sup := 0
 	for s in mallas:
@@ -1231,15 +1234,20 @@ static func _marcas(tr: Dictionary, pts: PackedVector3Array, a: int, b: int, anc
 			_franja(pts, a, b, 0.075 if norma else 0.07, lat, 0.085, mv, mn, mi, false, PackedVector3Array(), PackedVector3Array(), PackedInt32Array(), periodo)
 
 
-## Bionda: banda vertical de 0,45 a 0,8 m sobre la calzada a `lat` m del eje (+ derecha), sin postes. Se corta donde
-## otra calzada de la tesela (que no sea la continuación del mismo tramo) pasa a menos de 0,6 m de la valla y a menos
-## de 3 m de altura; cada trozo que queda es también pared de choque (`choque`).
-static func _bionda(pts: PackedVector3Array, a: int, b: int, lat: float, v: PackedVector3Array, n: PackedVector3Array, ix: PackedInt32Array,
+## Bionda (quitamiedos de doble onda con postes, la misma de las zonas: quitamiedos.gd) a `lat` m del eje (+ derecha).
+## Se corta donde otra calzada de la tesela (que no sea la continuación del mismo tramo) pasa a menos de 0,6 m de la
+## valla si va casi paralela (ramal que sale, mediana) o a menos de HUELGO_BOCA m si llega de lado (boca de un cruce),
+## y a menos de 3 m de altura. Huecos de una muestra se cierran y trozos de menos de 4 muestras se quitan; cada tramo
+## que queda acaba en abatimiento (baja a enterrarse abriéndose 0,5 m). Cada vano normal es también pared de choque.
+## Las piezas se apuntan en `inst` ({vallas, abat, postes}: ver Quitamiedos._instancias) y se instancian por celdas.
+const HUELGO_BOCA := 3.5
+static func _bionda(pts: PackedVector3Array, a: int, b: int, lat: float, inst: Dictionary,
 		ignorar: Dictionary, k_propio: int, sa: PackedVector3Array, sb: PackedVector3Array, shw: PackedFloat32Array, sk: PackedInt32Array,
-		celdas: Dictionary, choque: Biondas, rec := []) -> void:
+		celdas: Dictionary, choque: Biondas, rec := [], puente := false) -> void:
 	var np := pts.size()
-	var ant := Vector3.ZERO
-	var ant_libre := false
+	var pos := PackedVector3Array()
+	var hacia := PackedVector3Array()
+	var lib := PackedByteArray()
 	for i in range(a, b + 1):
 		var t := pts[mini(i + 1, np - 1)] - pts[maxi(i - 1, 0)]
 		var der := Vector3(-t.z, 0.0, t.x).normalized()
@@ -1253,23 +1261,78 @@ static func _bionda(pts: PackedVector3Array, a: int, b: int, lat: float, v: Pack
 				metido = true
 			else:
 				p += der * signf(lat) * maxf(e, 0.0)
-		var libre := not metido and not _otra_calzada(p, k_propio, ignorar, sa, sb, shw, sk, celdas)
-		if libre:
-			v.append_array([p + Vector3.UP * 0.45, p + Vector3.UP * 0.8])
-			n.append_array([-der * signf(lat), -der * signf(lat)])
-			if ant_libre:
-				var k := v.size() - 4
-				ix.append_array([k, k + 2, k + 1, k + 1, k + 2, k + 3])
-				choque.anadir(ant, p, -Vector2(der.x, der.z) * signf(lat))
-		ant = p
-		ant_libre = libre
+		pos.append(p)
+		hacia.append(-der * signf(lat))
+		lib.append(0 if metido or _otra_calzada(p, k_propio, ignorar, sa, sb, shw, sk, celdas, Vector3(t.x, 0.0, t.z)) else 1)
+	lib = Quitamiedos.huecos(lib, true, true)
+	var n := lib.size()
+	for k in n:
+		if lib[k] == 0:
+			continue
+		var empieza := k == 0 or lib[k - 1] == 0
+		var acaba := k == n - 1 or lib[k + 1] == 0
+		if not empieza and not acaba:
+			inst["postes"].append([pos[k], hacia[k], puente])
+		if k + 1 < n and lib[k + 1] == 1:
+			var p := pos[k]
+			var q := pos[k + 1]
+			var sig_fin := k + 2 >= n or lib[k + 2] == 0
+			if empieza:
+				inst["abat"].append([p - hacia[k] * Quitamiedos.ABRE - Vector3.UP * Quitamiedos.ALTO, q, hacia[k + 1]])
+			elif sig_fin:
+				inst["abat"].append([p, q - hacia[k + 1] * Quitamiedos.ABRE - Vector3.UP * Quitamiedos.ALTO, hacia[k]])
+			else:
+				inst["vallas"].append([p, q, hacia[k]])
+				var h := (hacia[k] + hacia[k + 1]).normalized()
+				choque.anadir(p + hacia[k] * 0.23, q + hacia[k + 1] * 0.23, Vector2(h.x, h.z))
+
+
+## Carretera interurbana (lleva bionda): nacional, autonómica o local (primary/secondary/tertiary) a ≥ 80 km/h y cuyo
+## nombre no es de calle. APROXIMACIÓN: OSM no dice si va por ciudad; los 90 km/h son casi siempre el valor por defecto,
+## así que lo que decide es el nombre (las travesías, calles y avenidas con matrícula M-xxx se quedan sin bionda)
+const NOMBRES_URBANOS := ["Calle", "Avenida", "Paseo", "Travesía", "Plaza", "Glorieta", "Ronda", "Bulevar", "Callejón",
+		"Cuesta", "Carrera", "Costanilla", "Pasaje", "Camino", "Rotonda", "Puerta", "Corredera", "Calleja"]
+static func interurbana(tr: Dictionary) -> bool:
+	var c := int(tr["c"])
+	if c < 2 or c > 4 or int(tr["v"]) < 80 or int(tr["rot"]) == 1:
+		return false
+	var nom := str(tr.get("nombre", ""))
+	for u in NOMBRES_URBANOS:
+		if nom.begins_with(u):
+			return false
+	return true
+
+
+## Biondas de la tesela como MultiMesh (vallas, abatimientos, postes) por celdas de CELDA_BIONDA m, para que cada
+## grupo tenga su propia distancia de dibujado (si fuera uno por tesela de 2 km se dibujarían todas o ninguna)
+const CELDA_BIONDA := 250.0
+static func _instanciar_biondas(inst: Dictionary, raiz: Node3D) -> void:
+	var grupos := {}
+	for clave in ["vallas", "abat", "postes"]:
+		for e in inst[clave]:
+			var p: Vector3 = e[0]
+			var c := Vector2i(floori(p.x / CELDA_BIONDA), floori(p.z / CELDA_BIONDA))
+			if not grupos.has(c):
+				grupos[c] = [[], [], []]
+			grupos[c][["vallas", "abat", "postes"].find(clave)].append(e)
+	for c in grupos:
+		var nodo := Node3D.new()
+		nodo.name = "Biondas_%d_%d" % [c.x, c.y]
+		Quitamiedos.instanciar(nodo, grupos[c][0], grupos[c][1], grupos[c][2])
+		raiz.add_child(nodo)
 
 
 static func _otra_calzada(p: Vector3, k_propio: int, ignorar: Dictionary, sa: PackedVector3Array, sb: PackedVector3Array,
-		shw: PackedFloat32Array, sk: PackedInt32Array, celdas: Dictionary) -> bool:
-	var lista = celdas.get(Vector2i(floori(p.x / MaSuperficie.CELDA_MA), floori(p.z / MaSuperficie.CELDA_MA)))
-	if lista == null:
-		return false
+		shw: PackedFloat32Array, sk: PackedInt32Array, celdas: Dictionary, dir := Vector3.ZERO) -> bool:
+	# celdas de p ± 2,5 m: el índice tiene los segmentos con hw + 1,5 m de margen y la boca pide hasta hw + HUELGO_BOCA
+	var lista := PackedInt32Array()
+	var c0 := Vector2i(floori((p.x - 2.5) / MaSuperficie.CELDA_MA), floori((p.z - 2.5) / MaSuperficie.CELDA_MA))
+	var c1 := Vector2i(floori((p.x + 2.5) / MaSuperficie.CELDA_MA), floori((p.z + 2.5) / MaSuperficie.CELDA_MA))
+	for cx in range(c0.x, c1.x + 1):
+		for cz in range(c0.y, c1.y + 1):
+			var l = celdas.get(Vector2i(cx, cz))
+			if l != null:
+				lista.append_array(l)
 	for s in lista:
 		var ks := sk[s]
 		if ks == k_propio:
@@ -1280,6 +1343,12 @@ static func _otra_calzada(p: Vector3, k_propio: int, ignorar: Dictionary, sa: Pa
 		var q0 := sa[s]
 		var q1 := sb[s]
 		var ab := Vector2(q1.x - q0.x, q1.z - q0.z)
+		# calzada que llega de lado (boca de un cruce o de un ramal que cruza): la bionda se deja antes, con sitio
+		# para la esquina; las casi paralelas (ramal que se separa, la otra calzada de la mediana) siguen con 0,6 m
+		if margen > 0.0 and dir != Vector3.ZERO and ab.length_squared() > 1e-6:
+			var cs := absf(ab.normalized().dot(Vector2(dir.x, dir.z).normalized()))
+			if cs < 0.9:
+				margen = HUELGO_BOCA
 		var l2 := ab.length_squared()
 		var u := 0.0
 		if l2 > 1e-6:

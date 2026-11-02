@@ -158,15 +158,31 @@ func _montar_gltf(raiz: Node3D, escena: PackedScene, f: Ficha, color: Color, m3d
 					r["rueda"] = rodar
 					if nombre.begins_with("rueda_"):
 						r["malla"] = mi
+		elif nombre == "volante":
+			# volante (solo LOD0): pivote en el centro del aro con su Z local a lo largo de la columna de dirección
+			# (hacia el conductor); animar_volante lo gira sobre ese eje. Va dentro de la carrocería para inclinarse con ella.
+			var pv_vol := Node3D.new()
+			pv_vol.name = "volante"
+			pv_vol.transform = Transform3D(t.basis.orthonormalized(), t.origin * esc)
+			mi.transform = Transform3D(Basis.from_scale(t.basis.get_scale() * esc), Vector3.ZERO)
+			pv_vol.add_child(mi)
+			cuerpo.add_child(pv_vol)
+			raiz.set_meta("volante", pv_vol)
+			raiz.set_meta("volante_base", pv_vol.transform)
+			raiz.set_meta("volante_ang", 0.0)
 		else:
 			mi.transform = Transform3D(t.basis.scaled(Vector3.ONE * esc), t.origin * esc)
 			cuerpo.add_child(mi)
+			if nombre == "espejo_interior":
+				raiz.set_meta("espejo", mi)           # retrovisor.gd le pone la imagen de la cámara trasera
 			# la pintura de la carrocería: el color elegido con barniz
 			for i in mi.mesh.get_surface_count():
 				var mat := mi.mesh.surface_get_material(i)
 				if mat and mat.resource_name.begins_with("pintura"):
 					mi.set_surface_override_material(i, material_carroceria(color))
 	n.free()
+	if raiz.get_meta("lod", 0) == 0:
+		_materiales_jugador(raiz)
 	# el tráfico lejano no se dibuja (a más de 600 m un coche ocupa unos pocos píxeles)
 	if m3d.get("ruta_lod1", "") != "" and esc > 0.0:
 		for gi in raiz.find_children("*", "GeometryInstance3D", true, false):
@@ -207,6 +223,90 @@ func animar_ruedas(modelo: Node3D, avance: float, giro: float) -> void:
 			piv.rotation.y = -giro
 		if r["rueda"]:
 			(r["rueda"] as Node3D).rotation.x = ang
+
+
+## Coche del jugador (LOD0): las piezas que no son chapa ni cristal pasan al material con oclusión por vértice
+## (coche_ao.gdshader; el modelo trae la oclusión en COLOR_0) y los pilotos traseros reciben un material propio que se
+## enciende al frenar (luces_freno).
+const MATERIALES_AO := ["chrome", "plasticblack", "silver", "reflect", "plasticGlossy", "alumimium", "leather",
+	"interiorTex", "interiorPlastic", "interiorB", "interiorA", "grey", "black", "metal_dark"]
+const PILOTO_ENCENDIDO := 1.2     # energía de los pilotos de posición (la del modelo)
+const PILOTO_FRENO := 8.0         # al frenar: se ven de día
+const TULIPA_FRENO := 22.0        # emisión de la tulipa roja al frenar (la del modelo es 0,1 de rojo: queda 2,2)
+var _materiales_ao := {}
+var _shader_ao: Shader = null
+
+func _materiales_jugador(raiz: Node3D) -> void:
+	var pilotos := []
+	for gi in raiz.find_children("*", "MeshInstance3D", true, false):
+		var mi := gi as MeshInstance3D
+		if mi.mesh == null or not mi.mesh is ArrayMesh:
+			continue
+		var arr := mi.mesh as ArrayMesh
+		for i in arr.get_surface_count():
+			if mi.get_surface_override_material(i) != null:
+				continue
+			var mat := arr.surface_get_material(i) as BaseMaterial3D
+			if mat == null:
+				continue
+			var nombre := mat.resource_name
+			if nombre in MATERIALES_AO and arr.surface_get_format(i) & Mesh.ARRAY_FORMAT_COLOR:
+				mi.set_surface_override_material(i, _material_ao(mat))
+			elif nombre.begins_with("glass_red_Illum"):
+				var luz := mat.duplicate() as BaseMaterial3D
+				luz.emission_energy_multiplier = PILOTO_ENCENDIDO
+				mi.set_surface_override_material(i, luz)
+				pilotos.append([luz, PILOTO_ENCENDIDO, PILOTO_FRENO])
+			elif nombre == "glass_red":
+				# la tulipa roja que cubre los pilotos: casi apagada; al frenar brilla entera (y la tercera luz de freno)
+				var tulipa := mat.duplicate() as BaseMaterial3D
+				tulipa.emission_enabled = true
+				tulipa.emission_energy_multiplier = 1.0
+				mi.set_surface_override_material(i, tulipa)
+				pilotos.append([tulipa, 1.0, TULIPA_FRENO])
+	raiz.set_meta("luces_freno", pilotos)
+	raiz.set_meta("frenando", false)
+
+
+func _material_ao(base: BaseMaterial3D) -> Material:
+	if _materiales_ao.has(base):
+		return _materiales_ao[base]
+	if _shader_ao == null:
+		_shader_ao = load("res://scripts/coche_ao.gdshader")
+	var m := ShaderMaterial.new()
+	m.shader = _shader_ao
+	m.resource_name = base.resource_name + "_ao"
+	m.set_shader_parameter("albedo", base.albedo_color)
+	if base.albedo_texture:
+		m.set_shader_parameter("textura", base.albedo_texture)
+	m.set_shader_parameter("metallic", base.metallic)
+	m.set_shader_parameter("roughness", base.roughness)
+	m.set_shader_parameter("specular", base.metallic_specular)
+	_materiales_ao[base] = m
+	return m
+
+
+## Pilotos traseros del coche del jugador: más intensos mientras se frena
+func luces_freno(modelo: Node3D, frenando: bool) -> void:
+	if modelo == null or not modelo.has_meta("luces_freno") or bool(modelo.get_meta("frenando")) == frenando:
+		return
+	modelo.set_meta("frenando", frenando)
+	for l in modelo.get_meta("luces_freno"):
+		(l[0] as BaseMaterial3D).emission_energy_multiplier = l[2] if frenando else l[1]
+
+
+## Volante de la cabina: gira sobre el eje de la columna con la dirección. frac = ángulo de las ruedas / máximo
+## (-1 izquierda … +1 derecha). Desmultiplicación real: 450° de tope a tope (±225°), suavizado ligero.
+const VOLANTE_TOPE := deg_to_rad(225.0)
+func animar_volante(modelo: Node3D, frac: float, dt: float) -> void:
+	if modelo == null or not modelo.has_meta("volante"):
+		return
+	var objetivo := -clampf(frac, -1.0, 1.0) * VOLANTE_TOPE      # a la derecha = horario visto desde el asiento
+	var k := 1.0 - exp(-maxf(dt, 0.0) * 18.0)
+	var ang := lerpf(float(modelo.get_meta("volante_ang")), objetivo, k)
+	modelo.set_meta("volante_ang", ang)
+	var base: Transform3D = modelo.get_meta("volante_base")
+	(modelo.get_meta("volante") as Node3D).transform = Transform3D(base.basis * Basis(Vector3.BACK, ang), base.origin)
 
 
 func _caja(n: Node) -> AABB:

@@ -839,6 +839,10 @@ func _excavar_terreno(rutas: Array, vias: Array) -> void:
 			_secciones(muestras, pts[i], _tan(pts, i), hw)
 	for pc in parches:
 		var c0: Vector3 = pc["c"]
+		if pc.has("muestras"):
+			# glorieta en una sola malla (GlorietaMalla): sus vértices y su contorno 80 cm hacia fuera
+			muestras.append_array(pc["muestras"])
+			continue
 		if pc.has("interior"):
 			for q in pc["interior"]:
 				muestras.append(q - Vector3(0.0, MARGEN_TERRENO, 0.0))

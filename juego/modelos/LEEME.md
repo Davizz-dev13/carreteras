@@ -14,8 +14,10 @@
   - LOD0 (v3.1): las normales se copian del modelo original (suavizado a 35°, modificador Data Transfer) sobre la malla reducida, para que la chapa no salga abollada; llantas en grafito oscuro como en el original;
   - el `.gltf` del LOD0 lleva la geometría partida en dos `.bin` de menos de 3 MB (GitHub) y las texturas aparte (`arteon_lod0_tire.png`, `arteon_lod0_interiorTex.png`).
 
+- Postproceso del LOD0 (`postproceso_arteon.py`, sin Blender): volante como pieza aparte que gira con la dirección (nodo `volante`, eje en la columna), cristal del retrovisor interior aparte (`espejo_interior`, el juego le pone la imagen de una cámara trasera), oclusión ambiental por vértice en las piezas del interior y los embellecedores (`COLOR_0`, la usa `scripts/coche_ao.gdshader`), matrículas españolas (`matricula_es.png`, 520 × 110 mm) y parabrisas/ventanillas delanteras con tintado claro. Geometría nueva en `arteon_lod0_2.bin`.
+
 Uso: `SOLO_LOD0=1 blender -b --factory-startup --python convertir_arteon.py -- scene.gltf arteon_lod0.glb lod1_no_usado.glb info.json 4.866 2.836` y después se pasa el `.glb` a `.gltf` con la geometría en `.bin` de < 3 MB
-(el `.gltf` original se descarga de Sketchfab). El LOD1 final se hace a partir del LOD0 con `simplificar_lod1.py`:
+(el `.gltf` original se descarga de Sketchfab). Después: `python3 postproceso_arteon.py arteon_lod0.gltf matricula_es.png`. El LOD1 final se hace a partir del LOD0 con `simplificar_lod1.py`:
 `blender -b --python simplificar_lod1.py -- arteon_lod0.gltf (+ arteon_lod0_0.bin, arteon_lod0_1.bin) arteon_lod1.glb 0.36`.
 
 ### Texto de atribución original

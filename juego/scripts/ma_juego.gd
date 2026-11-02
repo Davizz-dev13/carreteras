@@ -14,6 +14,8 @@ var red: MaRed
 var trafico := MaTrafico.new()
 var coche: Coche
 var cam := Camera3D.new()
+var retrovisor := Retrovisor.new()   # espejo interior con imagen (retrovisor.gd)
+const NEAR_CABINA := 0.08       # plano cercano en la cámara de cabina (m)
 var piloto := true
 var cargado := false
 var tiempo := 0.0
@@ -67,6 +69,8 @@ func _ready() -> void:
 	mundo.preparar(datos)
 	coche = Coche.new()
 	add_child(coche)
+	retrovisor.preparar(coche)
+	add_child(retrovisor)
 	sonido.coche = coche
 	coche.add_child(sonido)               # motor con las rpm reales de la caja (sonido_motor.gd)
 	piloto = Ajustes.piloto
@@ -638,6 +642,7 @@ func _process(dt: float) -> void:
 
 
 func _camara(dt: float) -> void:
+	retrovisor.actualizar(Ajustes.camara == 1)
 	var tc := coche.get_global_transform_interpolated()
 	var pos := tc.origin
 	var fw := -tc.basis.z
@@ -648,8 +653,10 @@ func _camara(dt: float) -> void:
 		cam.global_transform = Transform3D(tc.basis, pos + tc.basis * Vector3(float(o[0]), float(o[1]), float(o[2])))
 		mando.girar_cabeza(cam)                 # joystick derecho: mirar alrededor
 		cam.fov = 75.0
+		cam.near = NEAR_CABINA     # el techo queda a ~18 cm de los ojos: con 0,2 m se recortaba al mirar arriba
 		return
 	cam.fov = 70.0
+	cam.near = 0.2
 	var objetivo := pos - fw * (6.0 + coche.ficha.largo) + Vector3.UP * 3.2
 	var suelo := Ajustes.superficie.consultar(objetivo.x, objetivo.z, objetivo.y).x
 	objetivo.y = maxf(objetivo.y, suelo + 1.5)

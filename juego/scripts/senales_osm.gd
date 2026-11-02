@@ -34,6 +34,26 @@ static func piezas(dir_datos: String) -> Array:
 		if ti < 0:
 			continue
 		var p := Vector3(float(s["x"]), float(s["y"]), float(s["z"]))
+		var rumbo := float(s["rumbo"])
+		# ceda de la otra calzada de una autovía que la ruta ya lleva (GlorietaTipo la quita): a la entrada del brazo
+		# de la ruta, en el arcén derecho del que entra, 2 m antes de la línea, mirando a quien llega
+		var ge := _gemela_cerca(p, 25.0) if str(s.get("acceso", "")).begins_with("glorieta") else {}
+		if not ge.is_empty():
+			var u: Vector3 = ge["u"]
+			var nrm := Vector3(-u.z, 0.0, u.x)
+			# 6 m antes del anillo, se busca el borde del asfalto (el abocinamiento lo ensancha) y se planta 1,2 m fuera
+			var base: Vector3 = (ge["ruta_x0"] as Vector3) + u * 6.0
+			var lat := float(ge["w"])
+			if Ajustes.superficie != null:
+				lat = float(ge["h"]) + 0.5
+				while lat < float(ge["w"]) + 25.0:
+					var qq := base - nrm * (lat + 0.5)
+					if Ajustes.superficie.consultar(qq.x, qq.z, base.y).y < 0.5:
+						break
+					lat += 0.5
+			p = base - nrm * (lat + 1.2)
+			p.y = base.y
+			rumbo = atan2(u.x, u.z)
 		if Ajustes.superficie != null:
 			var suelo: float = Ajustes.superficie.consultar(p.x, p.z, p.y).x
 			if is_finite(suelo) and absf(suelo - p.y) < 6.0:
@@ -41,12 +61,29 @@ static func piezas(dir_datos: String) -> Array:
 		var clave := Vector2i(floori(p.x / CELDA), floori(p.z / CELDA))
 		if not celdas.has(clave):
 			celdas[clave] = []
-		celdas[clave].append([ti, Transform3D(Basis(Vector3.UP, float(s["rumbo"])), p)])
+		celdas[clave].append([ti, Transform3D(Basis(Vector3.UP, rumbo), p)])
 	# marcas viales: polígonos (línea = 4 puntos, triángulo = 3) a la altura de la calzada
 	var marcas := {}
 	for m in d.get("marcas", []):
 		var poli := PackedVector3Array()
-		for q in m.get("p", []):
+		var pts_m: Array = m.get("p", [])
+		if str(m.get("tipo", "")) == "triangulo" and pts_m.size() == 3:
+			var cm := Vector3.ZERO
+			for q in pts_m:
+				cm += Vector3(float(q[0]), float(q[1]), float(q[2])) / 3.0
+			var ge := {}
+			if Ajustes.superficie != null and Ajustes.superficie.consultar(cm.x, cm.z, cm.y).y < 0.5:
+				ge = _gemela_cerca(cm, 30.0)   # solo si se ha quedado fuera del asfalto
+			if not ge.is_empty():
+				# triángulo de ceda en el centro del carril de entrada del brazo de la ruta, 7 m antes de la línea,
+				# con la punta hacia quien llega
+				var u: Vector3 = ge["u"]
+				var nrm := Vector3(-u.z, 0.0, u.x)
+				var mc: Vector3 = (ge["ruta_x0"] as Vector3) - nrm * ((float(ge["w"]) + float(ge["h"])) * 0.5) + u * 7.0
+				mc.y = cm.y
+				pts_m = [[(mc + u * 1.6).x, mc.y, (mc + u * 1.6).z], [(mc - u * 1.6 + nrm * 0.6).x, mc.y, (mc - u * 1.6 + nrm * 0.6).z],
+						[(mc - u * 1.6 - nrm * 0.6).x, mc.y, (mc - u * 1.6 - nrm * 0.6).z]]
+		for q in pts_m:
 			var v := Vector3(float(q[0]), float(q[1]), float(q[2]))
 			if Ajustes.superficie != null:
 				var h: float = Ajustes.superficie.consultar(v.x, v.z, v.y).x
@@ -186,3 +223,12 @@ static func _preparar() -> void:
 				st.set_uv(gris)
 				st.add_vertex(l[j])
 		_mallas.append(st.commit())
+
+
+## Calzada gemela quitada junto a una glorieta (GlorietaMalla.gemelas) cuya boca está a menos de 25 m de p
+static func _gemela_cerca(p: Vector3, radio: float) -> Dictionary:
+	for ge in GlorietaMalla.gemelas:
+		var x0: Vector3 = ge["x0"]
+		if Vector2(p.x - x0.x, p.z - x0.z).length() < radio and absf(p.y - x0.y) < 6.0:
+			return ge
+	return {}

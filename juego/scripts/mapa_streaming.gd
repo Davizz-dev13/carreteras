@@ -336,7 +336,7 @@ func _piezas_parches() -> void:
 		var mn := Vector2(INF, INF)
 		var mx := Vector2(-INF, -INF)
 		for pc in grupos[cl]:
-			for q in pc["borde"]:
+			for q in pc.get("caja", pc["borde"]):
 				mn = Vector2(minf(mn.x, q.x), minf(mn.y, q.z))
 				mx = Vector2(maxf(mx.x, q.x), maxf(mx.y, q.z))
 		_pieza(T_VIA, 0, mn.x - 4, mn.y - 4, mx.x + 4, mx.y + 4, {"parches": grupos[cl]})
@@ -346,6 +346,15 @@ func _piezas_parches() -> void:
 static func tri_parche(pc: Dictionary, verts: PackedVector3Array, nor: PackedVector3Array, idx: PackedInt32Array) -> void:
 	var borde: PackedVector3Array = pc["borde"]
 	var k0 := verts.size()
+	if pc.has("tris"):
+		# glorieta en una sola malla (GlorietaMalla): anillo + brazos + abocinamientos ya triangulados
+		var tv: PackedVector3Array = pc["tris"][0]
+		verts.append_array(tv)
+		for q in tv.size():
+			nor.append(Vector3.UP)
+		for t in (pc["tris"][1] as PackedInt32Array):
+			idx.append(k0 + t)
+		return
 	if pc.has("interior"):
 		# anillo de glorieta: banda cerrada entre el borde de dentro y el de fuera
 		var dentro: PackedVector3Array = pc["interior"]
@@ -380,6 +389,18 @@ static func tri_parche(pc: Dictionary, verts: PackedVector3Array, nor: PackedVec
 		idx.append_array([k0, k0 + 1 + k, k0 + 1 + (k + 1) % m])
 
 
+static var _bordillo_mat: StandardMaterial3D = null
+
+
+static func _mat_bordillo() -> StandardMaterial3D:
+	if _bordillo_mat == null:
+		_bordillo_mat = StandardMaterial3D.new()
+		_bordillo_mat.albedo_color = Color(0.72, 0.71, 0.68)
+		_bordillo_mat.roughness = 0.95
+		_bordillo_mat.cull_mode = BaseMaterial3D.CULL_DISABLED
+	return _bordillo_mat
+
+
 func _trozo_parches(pz: Dictionary) -> Node3D:
 	var v := PackedVector3Array(); var n := PackedVector3Array(); var ix := PackedInt32Array()
 	var v2 := PackedVector3Array(); var n2 := PackedVector3Array(); var ix2 := PackedInt32Array()
@@ -397,7 +418,30 @@ func _trozo_parches(pz: Dictionary) -> Node3D:
 				mn.append(Vector3.UP)
 			for t in (pc["marcas"][1] as PackedInt32Array):
 				mi.append(b0 + t)
+	# bordillos de las islas centrales de las glorietas (GlorietaMalla)
+	var bv := PackedVector3Array(); var bn := PackedVector3Array(); var bi := PackedInt32Array()
+	for pc in pz["parches"]:
+		if pc.has("bordillo"):
+			var b0 := bv.size()
+			bv.append_array(pc["bordillo"][0])
+			bn.append_array(pc["bordillo"][1])
+			for t in (pc["bordillo"][2] as PackedInt32Array):
+				bi.append(b0 + t)
 	var sup := [[v, n, ix, mundo.mat_asfalto], [v2, n2, ix2, mundo.mat_asfalto2]]
+	if not bi.is_empty():
+		sup.append([bv, bn, bi, _mat_bordillo()])
+	# taludes alrededor de las glorietas (GlorietaMalla)
+	var tv := PackedVector3Array(); var tn := PackedVector3Array(); var ti := PackedInt32Array(); var tuv := PackedVector2Array()
+	for pc in pz["parches"]:
+		if pc.has("talud"):
+			var b0 := tv.size()
+			tv.append_array(pc["talud"][0])
+			tn.append_array(pc["talud"][1])
+			tuv.append_array(pc["talud"][3])
+			for t in (pc["talud"][2] as PackedInt32Array):
+				ti.append(b0 + t)
+	if not ti.is_empty():
+		sup.append([tv, tn, ti, mundo.mat_talud, tuv])
 	if not mv.is_empty():
 		sup.append([mv, mn, mi, mundo.mat_marca])
 	return _instancia(_malla(sup), DIST_CALZADA)

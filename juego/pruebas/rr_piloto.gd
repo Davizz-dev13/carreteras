@@ -35,6 +35,7 @@ func _ready() -> void:
 				j._reiniciar(true)
 				var fuera := 0.0
 				var t := 0.0
+				var b0: int = j.toques_bionda
 				var donde := ""
 				while t < 90.0 and (j.s_coche - s1) * d < 0.0:
 					j._simular(1.0 / 60.0)
@@ -44,7 +45,7 @@ func _ready() -> void:
 							donde = "s=%.0f lat=%.1f desv=%d pos=(%.0f, %.0f)" % [j.s_coche, j.lat_coche, r.desvio_en(j.s_coche, d), j.coche.position.x, j.coche.position.z]
 						fuera += 1.0 / 60.0
 				var caso := {"ruta": ri, "g": ar["g"], "dir": d, "fuera_s": snappedf(fuera, 0.1), "choques": j.choques,
-						"derrapes": j.derrapes, "donde": donde, "llega": (j.s_coche - s1) * d >= 0.0, "t": snappedf(t, 0.1)}
+						"derrapes": j.derrapes, "biondas": j.toques_bionda - b0, "donde": donde, "llega": (j.s_coche - s1) * d >= 0.0, "t": snappedf(t, 0.1)}
 				res.append(caso)
 				print("CASO ", JSON.stringify(caso))
 		j.queue_free()
