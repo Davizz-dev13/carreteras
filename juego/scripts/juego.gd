@@ -17,6 +17,16 @@ var piloto := true
 var colisiones := Colisiones.new()
 var toques_bionda := 0           # pasos de física con el coche tocando una bionda (pruebas)
 var biondas: Biondas             # choque contra los quitamiedos reales de la zona (quitamiedos.gd + biondas.gd)
+# v6: el piloto se recoloca solo (maniobra.gd) si queda cruzado, mirando al revés o encajado contra la bionda o un coche
+var recol: Maniobra = null
+var t_recol := 0.0
+var t_atasco_pil := 0.0
+var _man_i := 0.0
+var recolocaciones := 0          # maniobras empezadas (pruebas)
+var recol_fallidas := 0          # maniobras que no lo consiguieron en T_RECOL_MAX s: vuelve a la carretera como con R
+var desv_pil := 0.0              # m (+ derecha de la ruta) para rodear un coche averiado que tapa el carril
+var rodeo_jug := {}              # el "coche" del piloto para la lógica de rodeo del tráfico (trafico.gd)
+const T_RECOL_MAX := 40.0
 # adelantamiento a petición (tecla O): 0 = no, 1 = esperando hueco, 2 = saliendo/pasando, 3 = volviendo a su carril
 var adel_estado := 0
 var adel_carril := 0.0          # 0 = carril propio … 1 = carril contrario (suavizado)
@@ -227,6 +237,7 @@ func _simular(dt: float) -> void:
 
 ## Teclado, mando o piloto automático
 func _mandos(_dt: float) -> void:
+	_dt = maxf(_dt, 1.0 / 60.0)
 	# teclado (igual que siempre; las flechas se leen como teclas para que el joystick no las active a saltos)
 	var acel := 1.0 if (Input.is_physical_key_pressed(KEY_W) or Input.is_physical_key_pressed(KEY_UP)) else 0.0
 	var fren := 1.0 if (Input.is_physical_key_pressed(KEY_S) or Input.is_physical_key_pressed(KEY_DOWN)) else 0.0
@@ -257,10 +268,13 @@ func _mandos(_dt: float) -> void:
 		_cancelar_adelantamiento("")
 	if piloto:
 		if coche.caja.manual: coche.caja.automatico()   # el piloto conduce siempre en automático
+		if _recolocar_piloto(_dt):
+			return
 		coche.giro_directo = true
 		coche.volante = _volante_piloto()
 		_control_velocidad(_tope_limite(_velocidad_objetivo()))
 		return
+	recol = null
 	coche.giro_directo = false
 	coche.volante = vol
 	if fren > 0.0 and coche.v < 0.3 and not mano:
@@ -281,6 +295,8 @@ func _volante_piloto() -> float:
 	var mira := clampf(absf(coche.v) * 0.75, 7.0, 26.0)
 	var s := s_coche + dir * mira * ruta.escala_carril(s_coche, dir)
 	var obj := ruta.punto_carril(s, dir, adel_carril)    # en una glorieta, en sentido contrario: por el resto del anillo
+	if desv_pil != 0.0:
+		obj += ruta.derecha(s) * desv_pil                 # rodeando un coche averiado
 	var fw := coche.adelante()
 	var der := Vector3(-fw.z, 0.0, fw.x)
 	var d := obj - coche.position
@@ -289,6 +305,92 @@ func _volante_piloto() -> float:
 	var ld := maxf(sqrt(x * x + z * z), 1.0)
 	var alfa := atan2(x, z)
 	return atan(2.0 * coche.ficha.batalla * sin(alfa) / ld)
+
+
+## v6: recolocación del piloto. Si el coche ha quedado cruzado (> 60° respecto a su carril, a poca velocidad) o el piloto
+## pide gas y no avanza (encajado contra la bionda o un coche), maniobra hacia delante y marcha atrás (maniobra.gd) hasta
+## quedar alineado en su carril, y sigue. Devuelve true mientras maniobra (ya ha puesto volante, gas y freno).
+func _recolocar_piloto(dt: float) -> bool:
+	var s := s_coche
+	var ct3 := ruta.marcha_carril(s, dir)
+	var ct := Vector2(ct3.x, ct3.z).normalized()
+	var fw3 := coche.adelante()
+	var f2 := Vector2(fw3.x, fw3.z).normalized()
+	if recol == null:
+		var quiere := coche.acelerador > 0.15 and coche.freno <= 0.0 and not coche.marcha_atras
+		t_atasco_pil = t_atasco_pil + dt if quiere and absf(coche.v) < 0.4 else 0.0
+		var cruzado := absf(Maniobra.angulo(f2, ct)) > 1.05 and absf(coche.v) < 6.0
+		if not (t_atasco_pil > 1.2 or cruzado):
+			return false
+		recol = Maniobra.new()
+		recol.empezar()
+		t_recol = 0.0
+		_man_i = 0.0
+		recolocaciones += 1
+		_cancelar_adelantamiento("")
+	t_recol += dt
+	var cp3 := ruta.punto_carril(s, dir)
+	var mp3 := ruta.punto_carril(s + dir * 7.0 * ruta.escala_carril(s, dir), dir)
+	var p := Vector2(coche.position.x, coche.position.z)
+	var fi := coche.ficha
+	var bloq := func(q: Vector2, q0: Vector2) -> bool: return _ocupado_jugador(q, q0, recol.forzar)
+	var libre := func(sentido: int, giro: float) -> float: return Maniobra.libre(p, f2, sentido, giro, fi.largo, fi.ancho, fi.batalla, bloq)
+	var r := recol.paso(p, f2, coche.v, Vector2(cp3.x, cp3.z), ct, Vector2(mp3.x, mp3.z), libre, fi.batalla, dt)
+	if r["hecho"]:
+		recol = null
+		t_atasco_pil = 0.0
+		coche.marcha_atras = false
+		return false
+	if t_recol > T_RECOL_MAX:
+		# no lo ha conseguido: a la carretera, como con R (último recurso)
+		recol = null
+		recol_fallidas += 1
+		t_atasco_pil = 0.0
+		_reiniciar(false)
+		return true
+	coche.giro_directo = true
+	coche.volante = float(r["giro"])
+	_velocidad_maniobra(float(r["v"]) * int(r["marcha"]), dt)
+	return true
+
+
+## Gas, freno y marcha atrás para ir a vt m/s (negativa = marcha atrás) maniobrando; antes de cambiar de sentido, para
+func _velocidad_maniobra(vt: float, dt: float) -> void:
+	var atras := vt < 0.0
+	var cur := coche.v
+	if absf(vt) < 0.05 or (atras and cur > 0.1) or (not atras and cur < -0.1):
+		coche.acelerador = 0.0
+		coche.freno = 0.6
+		_man_i = 0.0
+		return
+	coche.marcha_atras = atras
+	var e := absf(vt) - absf(cur)
+	_man_i = clampf(_man_i + e * dt * 0.8, 0.0, 0.6)
+	if e > -0.3:
+		coche.acelerador = clampf(0.12 + e * 0.35 + _man_i, 0.0, 1.0)
+		coche.freno = 0.0
+	else:
+		coche.acelerador = 0.0
+		coche.freno = clampf(-e * 0.3, 0.0, 0.5)
+
+
+## ¿Choca el coche del jugador maniobrando en el punto q (desde q0)? Bionda, un coche del tráfico o salirse de la
+## calzada más de 1,5 m hacia fuera
+func _ocupado_jugador(q: Vector2, q0: Vector2, forzar := false) -> bool:
+	if biondas != null and not biondas.vacia() and biondas.bloquea(q, q0, coche.position.y):
+		return true
+	var pr := ruta.proyectar(Vector3(q.x, 0.0, q.y), s_coche, 14.0)
+	if absf(pr.y) > ruta.valor(ruta.ancho, pr.x) * 0.5 + (3.5 if forzar else 1.5):
+		var pr0 := ruta.proyectar(Vector3(q0.x, 0.0, q0.y), s_coche, 14.0)
+		if absf(pr.y) > absf(pr0.y) + 0.02:
+			return true
+	var fi := trafico.ficha_trafico
+	for o in trafico.cerca_de(Vector3(q.x, coche.position.y, q.y), 6.0):
+		var on: Node3D = o["nodo"]
+		var fo := -on.basis.z
+		if Maniobra.dentro(q, Vector2(on.position.x, on.position.z), Vector2(fo.x, fo.z).normalized(), fi.largo, fi.ancho):
+			return true
+	return false
 
 
 ## Velocidad del piloto: la elegida, limitada por curvas (si se adapta) y por el coche de delante (IDM)
@@ -315,7 +417,7 @@ func _control_velocidad(v0: float) -> void:
 	var hueco := 1e4
 	var v_lider := v0
 	for c in trafico.coches:
-		if c["dir"] != dir: continue
+		if c["dir"] != dir or c.get("suelto", false): continue     # los sueltos (golpeados) se miran abajo, según dónde estén de verdad
 		if adel_carril > 0.45 and (adel_estado == 2 or not ADEL_HUECO_VUELTA): continue     # adelantando por el carril contrario: los de nuestro sentido van al lado
 		var d: float = (c["s"] - s_coche) * dir
 		if d > 0.0 and d - trafico.largo < hueco:
@@ -325,8 +427,33 @@ func _control_velocidad(v0: float) -> void:
 	# glorieta (donde la ruta no sirve para medir huecos), los que se cruzan en la trayectoria
 	var en_desvio := ruta.desvio_en(s_coche, dir) >= 0
 	var fw2 := Vector2(coche.adelante().x, coche.adelante().z).normalized()
+	# v6: un coche suelto (golpeado, maniobrando o averiado) frena al piloto solo si tapa su carril; si lleva rato
+	# quieto, lo rodea como el tráfico (trafico.gd _rodear) en vez de esperar detrás para siempre
+	rodeo_jug["dir"] = dir
+	rodeo_jug["s"] = s_coche
+	rodeo_jug["desv"] = desv_pil
+	rodeo_jug["nodo"] = coche
+	var obst := {}
+	var g_obst := 1e4
 	for c in trafico.coches:
-		if not (c.get("suelto", false) or (en_desvio and c["dir"] != dir and not c.get("cede_jug", false))):
+		if c.get("suelto", false):
+			var go := trafico._hueco_obstaculo(rodeo_jug, c)
+			if go < g_obst:
+				g_obst = go
+				obst = c
+	if en_desvio or adel_estado != 0:
+		obst = {}
+	trafico._rodear(rodeo_jug, obst, g_obst, 1.0 / 60.0)
+	desv_pil = move_toward(desv_pil, float(rodeo_jug.get("desv_obj", 0.0)), (0.3 * absf(coche.v) + 0.25) / 60.0)
+	if rodeo_jug.has("rodea") or absf(desv_pil) > 0.3:
+		v0 = minf(v0, Trafico.V_RODEO)
+		if g_obst < 1e4 and g_obst > 1.2:
+			g_obst = maxf(g_obst, 6.0)       # rodeándolo: avanza despacio mientras se abre
+	if g_obst < hueco:
+		hueco = g_obst
+		v_lider = 0.0
+	for c in trafico.coches:
+		if not (en_desvio and c["dir"] != dir and not c.get("cede_jug", false)) or c.get("suelto", false):
 			continue
 		var pq: Vector3 = (c["nodo"] as Node3D).position
 		var rel := Vector2(pq.x - coche.position.x, pq.z - coche.position.z)

@@ -60,6 +60,8 @@ func actualizar(dt: float, jug: Vector3, jug_paso: Array, jug_d: float, jug_v: f
 		var p: Vector3 = (c["nodo"] as Node3D).position
 		if p.distance_to(jug) > R_FUERA or not mundo.activas.has(mundo.datos.clave_tesela(p)):
 			_quitar(i)
+		elif float(c["v"]) < 0.1 and not (c["sig"] as Array).is_empty() and int(c["sig"][0]) < 0 and p.distance_to(jug) > 250.0:
+			_quitar(i)      # v6: parado al final de una vía sin salida (borde de lo cargado), lejos de la vista: se reutiliza
 	_t_aparecer -= dt
 	if _t_aparecer <= 0.0 and coches.size() < objetivo():
 		_t_aparecer = 0.15

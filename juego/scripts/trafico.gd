@@ -14,6 +14,12 @@ const B_COMODA := 2.2         # IDM: frenada cómoda (m/s²)
 const T_SEG := 1.5            # IDM: tiempo de seguridad (s)
 const S0 := 3.0               # IDM: distancia mínima parado (m)
 var pos_jug := Vector3(INF, INF, INF)   # posición del jugador (la pone juego.gd): también se le cede el paso
+const RETIRAR_AVERIADO := 400.0  # m del jugador a partir de los que se retira un coche averiado (fuera de la vista)
+const V_RODEO := 7.0             # m/s (25 km/h) como mucho rodeando un obstáculo
+const LIBRE_RODEO := 120.0       # m del carril contrario que tienen que estar libres para invadirlo al rodear
+var retirados_averiados := 0     # (pruebas)
+var reincorporados := 0          # coches que han vuelto a su carril tras un golpe (pruebas)
+var rodeos := 0                  # veces que un coche ha empezado a rodear un obstáculo (pruebas)
 const A_LAT := 2.6            # aceleración lateral de referencia (m/s²); cada conductor lleva la suya (alat)
 
 ## --- Velocidad deseada de cada conductor (ver README, «Tráfico: velocidades») ---
@@ -92,18 +98,21 @@ func actualizar(dt: float, s_jug: float, lat_jug: float, v_jug: float, dir_jug_c
 ## (antes se miraba Engine.get_process_frames() < 5, que en las pruebas sin ventana no avanza y hacía aparecer coches
 ## a 60 m del jugador durante toda la prueba)
 var _llenado_inicial := true
+var _s_jug := 0.0
+var _dir_jug := 0
 func _actualizar(dt: float, s_jug: float, lat_jug: float, v_jug: float, dir_jug_carril: int) -> void:
+	_s_jug = s_jug
+	_dir_jug = dir_jug_carril
 	# --- aparecer / desaparecer ---
 	for i in range(coches.size() - 1, -1, -1):
 		var c: Dictionary = coches[i]
-		# coche suelto tras un golpe y ya parado: se retira a los 10 s (si no, el piloto se quedaba atascado detrás)
-		if c.get("suelto", false):
-			var vs: Vector2 = c.get("v2", Vector2.ZERO)
-			c["t_parado"] = float(c.get("t_parado", 0.0)) + dt if vs.length() < 0.3 else 0.0
-			if float(c["t_parado"]) > 10.0:
-				c["nodo"].queue_free()
-				coches.remove_at(i)
-				continue
+		# v6: un coche golpeado ya no desaparece a los 10 s (se veía esfumarse): se recoloca solo (colisiones.gd) y, si
+		# ha quedado averiado, se queda como obstáculo y solo se retira cuando el jugador está lejos (fuera de la vista)
+		if c.get("averiado", false) and c.get("estado", "") == "averiado" and absf(c["s"] - s_jug) > RETIRAR_AVERIADO:
+			c["nodo"].queue_free()
+			coches.remove_at(i)
+			retirados_averiados += 1
+			continue
 		if absf(c["s"] - s_jug) > RADIO + 250.0 or c["s"] < maxf(0.0, ruta.s_trafico_min - 1.0) or c["s"] > minf(ruta.longitud(), ruta.s_trafico_max + 1.0):
 			c["nodo"].queue_free()
 			coches.remove_at(i)
@@ -142,12 +151,27 @@ func _actualizar(dt: float, s_jug: float, lat_jug: float, v_jug: float, dir_jug_
 		var s: float = c["s"]
 		var hueco := 1e4
 		var v_lider: float = c["v0"]
+		var obst := {}
+		var g_obst := 1e4
 		for o in coches:
-			if o == c or o["dir"] != dir: continue
+			if o == c: continue
+			# coches sueltos tras un golpe (de cualquier sentido) y los que vienen de frente rodeando algo: obstáculo
+			# solo si de verdad tapan el carril (antes uno parado en el arcén hacía cola detrás para siempre)
+			if o.get("suelto", false) or (o["dir"] != dir and absf(float(o.get("desv", 0.0))) > 0.5):
+				var go := _hueco_obstaculo(c, o)
+				if go < g_obst:
+					g_obst = go
+					obst = o
+				continue
+			if o["dir"] != dir: continue
 			var d: float = (o["s"] - s) * dir
 			if d > 0.0 and d - largo < hueco:
 				hueco = d - largo
 				v_lider = o["v"]
+		_rodear(c, obst, g_obst, dt)
+		if g_obst < hueco:
+			hueco = g_obst
+			v_lider = 0.0
 		# el jugador también es un "líder" si va por este carril
 		if dir_jug_carril == dir:
 			var d: float = (s_jug - s) * dir
@@ -175,14 +199,35 @@ func _actualizar(dt: float, s_jug: float, lat_jug: float, v_jug: float, dir_jug_
 		if c.get("fijo", false):
 			continue          # coche de prueba (verificación): mantiene su velocidad
 		var v0: float = minf(c["v0"], c["vc"])
+		if c.has("rodea") or absf(float(c.get("desv", 0.0))) > 0.3:
+			v0 = minf(v0, V_RODEO)
 		var v: float = c["v"]
 		var a := idm(v, v0, hueco, v - v_lider)
 		a = maxf(a, -9.0)
 		c["v"] = maxf(0.0, v + a * dt)
+		# rodeando: aunque esté parado detrás del obstáculo, avanza muy despacio mientras se abre (si cabe)
+		if c.has("rodea") and g_obst < 1e4 and g_obst > 1.2:
+			c["v"] = maxf(c["v"], 0.8)
 	for c in coches:
 		if c.get("suelto", false):
 			continue          # tras un choque se mueve como cuerpo libre (Colisiones.mover_sueltos)
 		c["s"] += c["v"] * c["dir"] * dt * ruta.escala_carril(c["s"], c["dir"])
+		# desplazamiento lateral para rodear (sube con lo que avanza, y un poco aunque vaya muy despacio)
+		var dobj: float = c.get("desv_obj", 0.0)
+		var desv: float = c.get("desv", 0.0)
+		var paso_lat: float = (0.3 * float(c["v"]) + 0.25) * dt
+		var nd := move_toward(desv, dobj, paso_lat)
+		c["desv_vel"] = (nd - desv) / dt
+		c["desv"] = nd
+		if c.has("desf"):
+			var df: Vector3 = c["desf"]
+			df *= exp(-1.5 * dt)
+			c["dyaw"] = float(c.get("dyaw", 0.0)) * exp(-1.5 * dt)
+			if df.length() < 0.02 and absf(float(c["dyaw"])) < 0.01:
+				c.erase("desf")
+				c.erase("dyaw")
+			else:
+				c["desf"] = df
 		_colocar(c)
 		Catalogo.animar_ruedas(c["modelo"], c["v"] * dt, 0.0)
 
@@ -259,6 +304,17 @@ func _colocar(c: Dictionary) -> void:
 	# punto_carril: el carril de su sentido; en una glorieta, el sentido contrario va por el resto del anillo
 	var p := ruta.punto_carril(s, dir) + Vector3.UP * 0.05
 	var t := ruta.marcha_carril(s, dir)
+	var desv: float = c.get("desv", 0.0)
+	if desv != 0.0:
+		# rodeando un obstáculo: desplazado hacia un lado (+ = derecha de la ruta) y girado lo que se abre
+		p += ruta.derecha(s) * desv
+		var yaw := clampf(float(c.get("desv_vel", 0.0)) / maxf(float(c["v"]), 1.0), -0.45, 0.45)
+		t = (t + ruta.derecha(s) * yaw).normalized()
+	if c.has("desf"):
+		p += c["desf"]       # recién reincorporado tras un golpe: llega a su carril poco a poco (sin saltos)
+		var dy: float = c.get("dyaw", 0.0)
+		var der_t := Vector3(-t.z, 0.0, t.x).normalized()
+		t = (t.normalized() * cos(dy) + der_t * sin(dy)).normalized()      # y endereza los últimos grados
 	var nodo: Node3D = c["nodo"]
 	nodo.position = p
 	nodo.basis = Basis.looking_at(t, Vector3.UP)
@@ -357,3 +413,130 @@ func _cerca_de_desvio(s: float) -> bool:
 		if s >= float(dv["s_lo"]) - 15.0 and s <= float(dv["s_hi"]) + 15.0:
 			return true
 	return false
+
+
+# ---------------------------------------------------------------- v6: obstáculos y coches que se recolocan tras un golpe
+## Extensión en planta de un coche girado respecto a la ruta en s: [semiancho a lo ancho de la vía, semilargo a lo largo]
+func _extension(o: Dictionary) -> Vector2:
+	var on: Node3D = o["nodo"]
+	var fo := -on.basis.z
+	var tg := ruta.tangente(float(o["s"]))
+	var cr := absf(fo.x * tg.x + fo.z * tg.z) / maxf(Vector2(fo.x, fo.z).length(), 1e-4)
+	var sn := sqrt(maxf(0.0, 1.0 - cr * cr))
+	var an := ficha_trafico.ancho
+	return Vector2(sn * largo * 0.5 + cr * an * 0.5, cr * largo * 0.5 + sn * an * 0.5)
+
+
+## Lateral (m, + derecha de la ruta) del centro de un coche: el que ha medido la colisión si va suelto
+func _lat_de(o: Dictionary) -> float:
+	if o.get("suelto", false) and o.has("lat"):
+		return float(o["lat"])
+	return ruta.lateral_carril(float(o["s"]), int(o["dir"])) + float(o.get("desv", 0.0))
+
+
+## Hueco (m) desde el morro de c hasta el obstáculo o si tapa el carril por el que va c; 1e4 si no lo tapa o está lejos
+func _hueco_obstaculo(c: Dictionary, o: Dictionary) -> float:
+	var dir: int = c["dir"]
+	var s: float = c["s"]
+	var so: float = o["s"]
+	var d := (so - s) * dir
+	if d <= 0.0 or d > 150.0:
+		return 1e4
+	var ext := _extension(o)
+	var an := ficha_trafico.ancho
+	if ruta.desvio_en(s, dir) >= 0 or ruta.desvio_en(so, dir) >= 0:
+		# en el desvío de una glorieta la ruta no sirve para medir: delante y de lado en planta
+		var cn: Node3D = c["nodo"]
+		var on: Node3D = o["nodo"]
+		var t3 := ruta.marcha_carril(s, dir)
+		var fw := Vector2(t3.x, t3.z).normalized()
+		var rel := Vector2(on.position.x - cn.position.x, on.position.z - cn.position.z)
+		var ade := rel.dot(fw)
+		if ade <= 0.0 or ade > 30.0 or absf(rel.dot(Maniobra.derecha(fw))) > ext.x + an * 0.5 + 0.3:
+			return 1e4
+		return maxf(ade - largo * 0.5 - ext.y, 0.1)
+	var lat_c := ruta.lateral_carril(so, dir) + float(c.get("desv", 0.0))
+	if absf(_lat_de(o) - lat_c) >= ext.x + an * 0.5 + 0.25:
+		return 1e4
+	return maxf(d - largo * 0.5 - ext.y, 0.1)
+
+
+## Rodear un obstáculo parado (averiado, o quieto desde hace rato) que tapa el carril: se abre hacia el lado que pida
+## menos desplazamiento, sin salirse de la calzada (+ arcén); si eso invade el carril contrario, solo cuando no viene
+## nadie en LIBRE_RODEO m. Sin esto un coche averiado dejaba detrás una cola para siempre.
+func _rodear(c: Dictionary, o: Dictionary, g: float, _dt: float) -> void:
+	var dir: int = c["dir"]
+	if c.get("suelto", false):
+		return
+	if c.has("rodea"):
+		var r := _por_id(int(c["rodea"]))
+		if r.is_empty() or not r.get("suelto", false) or (float(r["s"]) - float(c["s"])) * dir < -(largo + 4.0):
+			c.erase("rodea")
+			c["desv_obj"] = 0.0
+		return
+	if o.is_empty() or g > 45.0 or c.get("fijo", false) or not o.get("suelto", false):
+		return
+	if not (o.get("estado", "") == "averiado" or float(o.get("t_quieto", 0.0)) > 6.0):
+		return          # recién parado o maniobrando: se le espera
+	var so: float = o["s"]
+	var lc := ruta.lateral_carril(so, dir)
+	var lat_o := _lat_de(o)
+	var ext := _extension(o)
+	var an := ficha_trafico.ancho
+	var lim := ruta.valor(ruta.ancho, so) * 0.5 - an * 0.5 + 0.8
+	var mejor := INF
+	for cand in [lat_o - ext.x - an * 0.5 - 0.35, lat_o + ext.x + an * 0.5 + 0.35]:
+		if absf(cand) <= lim and absf(cand - lc) < absf(mejor - lc):
+			mejor = cand
+	if mejor == INF:
+		return
+	var eje := ruta.lateral_eje(so)
+	var invade: bool = (mejor - eje) * (lc - eje) < 0.0 or absf(mejor - eje) < an * 0.5 + 0.1
+	if invade:
+		var s: float = c["s"]
+		for o2 in coches:
+			if o2 == c or o2 == o or int(o2["dir"]) == dir:
+				continue
+			var d2 := (float(o2["s"]) - s) * dir
+			if d2 > -8.0 and d2 < LIBRE_RODEO:
+				return
+		if _dir_jug == -dir:
+			var dj := (_s_jug - s) * dir
+			if dj > -8.0 and dj < LIBRE_RODEO:
+				return
+	c["rodea"] = (o["nodo"] as Node3D).get_instance_id()
+	c["desv_obj"] = mejor - lc
+	rodeos += 1
+
+
+func _por_id(id: int) -> Dictionary:
+	for o in coches:
+		if (o["nodo"] as Node3D).get_instance_id() == id:
+			return o
+	return {}
+
+
+## Un coche que se ha recolocado tras un golpe vuelve al tráfico normal (desde su posición, sin saltos)
+func reincorporar(c: Dictionary) -> void:
+	var s: float = c["s"]
+	var dir: int = c["dir"]
+	c["suelto"] = false
+	c.erase("estado")
+	c.erase("man")
+	c.erase("rodea")
+	c["desv"] = 0.0
+	c["desv_obj"] = 0.0
+	c["t_quieto"] = 0.0
+	c["v"] = maxf(0.0, float(c.get("v_man", 0.0)))
+	if c.has("f"):
+		c["v0"] = vel_deseada(s, dir, c["f"])
+	c["vc"] = vel_curva(s, dir, c.get("alat", A_LAT))
+	var nodo: Node3D = c["nodo"]
+	var p := ruta.punto_carril(s, dir) + Vector3.UP * 0.05
+	var df := nodo.position - p
+	df.y = 0.0
+	c["desf"] = df
+	var t3 := ruta.marcha_carril(s, dir)
+	var fo := -nodo.basis.z
+	c["dyaw"] = Maniobra.angulo(Vector2(t3.x, t3.z).normalized(), Vector2(fo.x, fo.z).normalized())
+	reincorporados += 1

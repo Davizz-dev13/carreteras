@@ -93,6 +93,30 @@ func contacto(centro: Vector2, esquinas: Array, y: float, mejor: Dictionary) -> 
 	return mejor
 
 
+## ¿Choca con la valla un punto q del paragolpes que se mueve desde q0? (maniobras a poca velocidad, maniobra.gd):
+## q queda a menos de 12 cm de la cara o detrás de ella, con q0 del lado de la calzada
+func bloquea(q: Vector2, q0: Vector2, y: float) -> bool:
+	var lista = celdas.get(Vector2i(floori(q.x / CELDA), floori(q.y / CELDA)))
+	if lista == null:
+		return false
+	for k in lista:
+		if absf(py[k] - y) > ALTO_MAX:
+			continue
+		var a := pa[k]
+		var t := pb[k] - a
+		var largo := t.length()
+		if largo < 1e-4:
+			continue
+		var u := (q - a).dot(t / largo)
+		if u < -0.05 or u > largo + 0.05:
+			continue
+		var n := pn[k]
+		var dq := (q - a).dot(n)
+		if (q0 - a).dot(n) > -0.05 and dq < 0.12 and dq > -PROF_MAX:
+			return true
+	return false
+
+
 ## Resuelve el choque del coche del jugador contra las biondas dadas (un paso de física). Devuelve la velocidad
 ## (m/s) con que el coche iba contra la valla en el golpe más fuerte de este paso (0 si no ha tocado).
 static func resolver(c: Coche, listas: Array) -> float:

@@ -3,7 +3,10 @@
 ## masas reales de la ficha (coeficiente de restitución ≈ 0,15 y rozamiento chapa-chapa 0,35).
 ##  · jugador contra tráfico y tráfico "suelto" (ya golpeado) contra cualquier coche
 ##  · un coche del tráfico que recibe un golpe deja su carril y pasa a ser un cuerpo libre: sale despedido,
-##    gira y se frena arrastrando las ruedas (μ·g) hasta pararse; el conductor se queda parado
+##    gira y se frena arrastrando las ruedas (μ·g) hasta pararse. Después (v6) el conductor espera unos segundos
+##    y se recoloca solo (maniobra.gd: hacia delante y marcha atrás las veces que haga falta) hasta volver a su
+##    carril y seguir. Si el golpe ha sido muy fuerte (cambio de velocidad > DV_AVERIA) queda averiado: se queda
+##    como obstáculo y el tráfico lo rodea con cuidado; solo se retira lejos del jugador (trafico.gd)
 ##  · sin atravesar a alta velocidad: si el movimiento relativo en un paso es grande, se buscan los
 ##    instantes intermedios (sub-pasos) y se resuelve en el primer contacto
 class_name Colisiones
@@ -14,6 +17,11 @@ const ROCE_CHAPA := 0.35
 const MU_ARRASTRE := 0.75      # deceleración de un coche suelto con las ruedas bloqueadas/cruzadas (× g)
 const FRENO_GIRO := 3.0        # rad/s² con que se frena el giro de un coche suelto
 const SUBPASO_M := 0.25        # desplazamiento relativo máximo entre comprobaciones (m)
+const DV_AVERIA := 17.0        # m/s (≈ 60 km/h) de cambio de velocidad en el golpe: coche inutilizado (averiado)
+const T_ESPERA := 2.0          # s parado tras el golpe antes de empezar a recolocarse
+const T_MANIOBRA_MAX := 45.0   # s de maniobra sin conseguirlo: se queda averiado (como obstáculo)
+const GOLPE_MIN := 0.6         # m/s de cambio de velocidad: por debajo es un roce (no interrumpe una maniobra)
+const ACEL_MANIOBRA := 2.0     # m/s² con que arranca y frena maniobrando
 
 var juego: Node                # escena de conducción (coche, trafico, ruta)
 var golpes := 0                # choques con el jugador (para el resumen)
@@ -152,6 +160,14 @@ func _cuerpo_trafico(t: Dictionary) -> Dictionary:
 
 
 func _soltar(t: Dictionary, b: Dictionary) -> void:
+	# cambio de velocidad del golpe (para saber si el coche queda inutilizado)
+	var dv: float = (b["v"] - (t.get("v2", b["v"]) as Vector2)).length()
+	if dv > DV_AVERIA:
+		t["averiado"] = true
+	t.erase("rodea")
+	t["estado"] = "deslizando"       # tras cualquier golpe (también maniobrando) vuelve a deslizar y esperar
+	t["t_estado"] = 0.0
+	t["v_man"] = 0.0
 	t["suelto"] = true
 	t["v2"] = b["v"]
 	t["w2"] = b["w"]
@@ -182,9 +198,26 @@ func resolver(dt: float, prev_jug: Dictionary) -> void:
 			if not hit["hay"]:
 				continue
 			_separar(a, b, hit)
-			impulso(a, b, hit["n"], hit["punto"])
-			_soltar(t, a)
-			_soltar(o, b)
+			var jj := impulso(a, b, hit["n"], hit["punto"])
+			# un roce sin golpe (maniobrando pegado a otro) solo los separa; un golpe de verdad los suelta otra vez
+			if jj > GOLPE_MIN * minf(a["m"], b["m"]):
+				_soltar(t, a)
+				_soltar(o, b)
+			else:
+				_mover_cuerpo(t, a)
+				if o.get("suelto", false):
+					_mover_cuerpo(o, b)
+				else:
+					_soltar(o, b)
+
+
+func _mover_cuerpo(t: Dictionary, b: Dictionary) -> void:
+	t["p2"] = b["p"]
+	if t.get("estado", "") == "maniobra":
+		pass                 # maniobrando pegado a otro: solo se separan (si no, se frenaban el uno al otro para siempre)
+	else:
+		t["v2"] = b["v"]
+		t["w2"] = b["w"]
 
 
 func _separar(a: Dictionary, b: Dictionary, hit: Dictionary) -> void:
@@ -235,30 +268,170 @@ func _par(a: Dictionary, b: Dictionary, prev_a: Dictionary, t: Dictionary, dt: f
 				"wa1": a["w"], "wb1": b["w"]})
 
 
-## Movimiento de los coches sueltos: deslizan frenando con las ruedas (μ·g) hasta pararse
+## Movimiento de los coches sueltos: deslizan frenando con las ruedas (μ·g) hasta pararse; luego esperan T_ESPERA s y
+## se recolocan en su carril maniobrando (maniobra.gd); al conseguirlo vuelven al tráfico normal (trafico.gd)
 func mover_sueltos(dt: float) -> void:
 	var tr: Trafico = juego.trafico
+	var reincorporar: Array = []
 	for t in tr.coches:
 		if not t.get("suelto", false):
 			continue
-		var v: Vector2 = t["v2"]
-		var sp := v.length()
-		var dec := MU_ARRASTRE * Coche.G * dt
-		t["v2"] = Vector2.ZERO if sp <= dec else v - v / sp * dec
-		var w: float = t["w2"]
-		t["w2"] = 0.0 if absf(w) <= FRENO_GIRO * dt else w - signf(w) * FRENO_GIRO * dt
-		t["p2"] = t["p2"] + t["v2"] * dt
+		var estado: String = t.get("estado", "deslizando")
+		t["t_estado"] = float(t.get("t_estado", 0.0)) + dt
+		var vq: Vector2 = t["v2"]
+		t["t_quieto"] = float(t.get("t_quieto", 0.0)) + dt if vq.length() < 0.3 else 0.0
+		if estado == "maniobra":
+			if _maniobrar(t, dt):
+				reincorporar.append(t)
+				continue
+		elif estado == "espera" or estado == "averiado":
+			t["v2"] = Vector2.ZERO
+			t["w2"] = 0.0
+			if estado == "espera" and float(t["t_estado"]) > T_ESPERA:
+				t["estado"] = "maniobra"
+				t["t_estado"] = 0.0
+				t["v_man"] = 0.0
+				var m := Maniobra.new()
+				m.empezar()
+				t["man"] = m
+		else:
+			_deslizar(t, dt)
+			_contra_bionda(t, tr)
+			if (t["v2"] as Vector2).length() < 0.3 and absf(float(t["w2"])) < 0.15:
+				t["v2"] = Vector2.ZERO
+				t["w2"] = 0.0
+				t["estado"] = "averiado" if t.get("averiado", false) else "espera"
+				t["t_estado"] = 0.0
+		_situar(t, tr)
+	for t in reincorporar:
+		tr.reincorporar(t)
+
+
+func _deslizar(t: Dictionary, dt: float) -> void:
+	var v: Vector2 = t["v2"]
+	var sp := v.length()
+	var dec := MU_ARRASTRE * Coche.G * dt
+	t["v2"] = Vector2.ZERO if sp <= dec else v - v / sp * dec
+	var w: float = t["w2"]
+	t["w2"] = 0.0 if absf(w) <= FRENO_GIRO * dt else w - signf(w) * FRENO_GIRO * dt
+	t["p2"] = t["p2"] + t["v2"] * dt
+	var f: Vector2 = t["f2"]
+	var ang: float = t["w2"] * dt
+	# giro alrededor del eje vertical (mismo convenio que _vel_punto)
+	f = Vector2(f.x * cos(ang) + f.y * sin(ang), -f.x * sin(ang) + f.y * cos(ang))
+	t["f2"] = f.normalized()
+
+
+## v6: un coche suelto tampoco atraviesa los quitamiedos (antes solo chocaba el del jugador): se le saca de la valla y
+## pierde la velocidad contra ella (restitución 0,1 y roce 0,35, como biondas.gd)
+func _contra_bionda(t: Dictionary, tr: Trafico) -> void:
+	var bi = juego.get("biondas")
+	if bi == null or (bi as Biondas).vacia():
+		return
+	var fi: Ficha = tr.ficha_trafico
+	for it in 3:
+		var p: Vector2 = t["p2"]
 		var f: Vector2 = t["f2"]
-		var ang: float = t["w2"] * dt
-		# giro alrededor del eje vertical (mismo convenio que _vel_punto)
-		f = Vector2(f.x * cos(ang) + f.y * sin(ang), -f.x * sin(ang) + f.y * cos(ang))
-		t["f2"] = f.normalized()
-		# su posición en la ruta (para que el resto del tráfico lo vea como obstáculo)
-		var p3 := Vector3(t["p2"].x, t["nodo"].position.y, t["p2"].y)
-		var pr: Vector2 = tr.ruta.proyectar(p3, t["s"])
-		t["s"] = pr.x
-		t["v"] = 0.0 if t["v2"].length() < 0.5 else t["v2"].dot(Vector2(tr.ruta.tangente(pr.x).x, tr.ruta.tangente(pr.x).z)) * t["dir"]
-		var h := Ajustes.superficie.consultar(p3.x, p3.z, p3.y).x
-		var nodo: Node3D = t["nodo"]
-		nodo.position = Vector3(p3.x, h + 0.05, p3.z)
-		nodo.basis = Basis.looking_at(Vector3(t["f2"].x, 0.0, t["f2"].y), Vector3.UP)
+		var a := f * fi.largo * 0.5
+		var b := Maniobra.derecha(f) * fi.ancho * 0.5
+		var mejor: Dictionary = (bi as Biondas).contacto(p, [p + a + b, p + a - b, p - a + b, p - a - b], (t["nodo"] as Node3D).position.y, {})
+		if mejor.is_empty():
+			return
+		var n: Vector2 = mejor["n"]
+		t["p2"] = p + n * (float(mejor["prof"]) + 0.005)
+		var v: Vector2 = t["v2"]
+		var vn := v.dot(n)
+		if vn < 0.0:
+			var vt := v - n * vn
+			var red := minf(vt.length(), Biondas.ROCE * (1.0 + Biondas.RESTITUCION) * -vn)
+			vt = vt - vt.normalized() * red if vt.length() > 1e-4 else vt
+			t["v2"] = vt - n * vn * Biondas.RESTITUCION
+			t["w2"] = float(t["w2"]) * 0.7
+
+
+## Posición en la ruta (para que el resto del tráfico lo vea como obstáculo), altura y orientación del modelo
+func _situar(t: Dictionary, tr: Trafico) -> void:
+	var p3 := Vector3(t["p2"].x, t["nodo"].position.y, t["p2"].y)
+	var pr: Vector2 = tr.ruta.proyectar(p3, t["s"])
+	t["s"] = pr.x
+	t["lat"] = pr.y
+	var tg := tr.ruta.tangente(pr.x)
+	t["v"] = 0.0 if t["v2"].length() < 0.5 else t["v2"].dot(Vector2(tg.x, tg.z)) * t["dir"]
+	var h := Ajustes.superficie.consultar(p3.x, p3.z, p3.y).x
+	var nodo: Node3D = t["nodo"]
+	nodo.position = Vector3(p3.x, h + 0.05, p3.z)
+	nodo.basis = Basis.looking_at(Vector3(t["f2"].x, 0.0, t["f2"].y), Vector3.UP)
+
+
+## Un paso de la maniobra de un coche del tráfico. Devuelve true cuando ya está en su carril y alineado.
+func _maniobrar(t: Dictionary, dt: float) -> bool:
+	var tr: Trafico = juego.trafico
+	var ruta: Ruta = tr.ruta
+	var m: Maniobra = t["man"]
+	var dir: int = t["dir"]
+	var fi: Ficha = tr.ficha_trafico
+	var p: Vector2 = t["p2"]
+	var f: Vector2 = t["f2"]
+	var s: float = t["s"]
+	var cp3 := ruta.punto_carril(s, dir)
+	var ct3 := ruta.marcha_carril(s, dir)
+	var mira := 7.0 * ruta.escala_carril(s, dir)
+	var mp3 := ruta.punto_carril(s + dir * mira, dir)
+	var bloq := func(q: Vector2, q0: Vector2) -> bool: return _ocupado(q, q0, t, s, m.forzar)
+	var libre := func(sentido: int, giro: float) -> float: return Maniobra.libre(p, f, sentido, giro, fi.largo, fi.ancho, fi.batalla, bloq)
+	var v_man: float = t.get("v_man", 0.0)
+	var r := m.paso(p, f, v_man, Vector2(cp3.x, cp3.z), Vector2(ct3.x, ct3.z).normalized(), Vector2(mp3.x, mp3.z),
+			libre, fi.batalla, dt)
+	if r["hecho"]:
+		return true
+	if float(t["t_estado"]) > T_MANIOBRA_MAX:
+		# no hay forma (encajado): se queda como obstáculo averiado
+		t["estado"] = "averiado"
+		t["averiado"] = true
+		t["v2"] = Vector2.ZERO
+		return false
+	var objetivo: float = float(r["v"]) * int(r["marcha"])
+	# para cambiar de sentido primero se para; se arranca y se frena con suavidad
+	if signf(objetivo) != signf(v_man) and absf(v_man) > 0.05:
+		objetivo = 0.0
+	v_man = move_toward(v_man, objetivo, ACEL_MANIOBRA * dt)
+	var mv := Maniobra.mover(p, f, v_man, float(r["giro"]), fi.batalla, dt)
+	t["p2"] = mv[0]
+	t["f2"] = mv[1]
+	t["v2"] = (mv[1] as Vector2) * v_man
+	t["w2"] = 0.0
+	_contra_bionda(t, tr)
+	if (t["v2"] as Vector2).length() < absf(v_man) * 0.5:
+		v_man = 0.0          # ha tocado la valla: se para (la maniobra lo verá como atasco y cambiará de sentido)
+	t["v_man"] = v_man
+	Catalogo.animar_ruedas(t["modelo"], v_man * dt, float(r["giro"]))
+	return false
+
+
+## ¿Está ocupado el punto q para un coche que maniobra? Fuera de la calzada (+ arcén) hacia fuera, otro coche o el jugador
+func _ocupado(q: Vector2, q0: Vector2, yo: Dictionary, s_pista: float, forzar := false) -> bool:
+	var tr: Trafico = juego.trafico
+	var ruta: Ruta = tr.ruta
+	var pr := ruta.proyectar(Vector3(q.x, 0.0, q.y), s_pista, 14.0)
+	var lim := ruta.valor(ruta.ancho, pr.x) * 0.5 + (2.5 if forzar else 0.6)
+	if absf(pr.y) > lim:
+		var pr0 := ruta.proyectar(Vector3(q0.x, 0.0, q0.y), s_pista, 14.0)
+		if absf(pr.y) > absf(pr0.y) + 0.02:
+			return true
+	var bi = juego.get("biondas")
+	if bi != null and not (bi as Biondas).vacia() and (bi as Biondas).bloquea(q, q0, (yo["nodo"] as Node3D).position.y):
+		return true
+	var fi: Ficha = tr.ficha_trafico
+	for o in tr.cerca_de(Vector3(q.x, (yo["nodo"] as Node3D).position.y, q.y), 6.0):
+		if o == yo:
+			continue
+		var on: Node3D = o["nodo"]
+		var fo := -on.basis.z
+		if Maniobra.dentro(q, Vector2(on.position.x, on.position.z), Vector2(fo.x, fo.z).normalized(), fi.largo, fi.ancho):
+			return true
+	var c: Coche = juego.coche
+	if c != null:
+		var fc := c.adelante()
+		if Maniobra.dentro(q, Vector2(c.position.x, c.position.z), Vector2(fc.x, fc.z).normalized(), c.ficha.largo, c.ficha.ancho):
+			return true
+	return false

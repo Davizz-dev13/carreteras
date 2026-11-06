@@ -31,6 +31,12 @@ var lat_camino := 0.0
 var preferencia := 0          # próximo cruce: -1 izquierda, 0 seguir, +1 derecha
 var pref_en: Array = []       # paso [tramo, sentido] a cuyo final se aplicó la preferencia ([] = aún no)
 var t_perdido := 0.0          # s del piloto fuera del camino o parado sin motivo (para reengancharlo)
+var recol: Maniobra = null     # v6: maniobra de recolocación del piloto (maniobra.gd)
+var t_recol := 0.0
+var _man_i := 0.0
+var recolocaciones := 0        # maniobras empezadas (pruebas)
+var recol_fallidas := 0        # maniobras que no lo consiguieron: recolocado como con R
+const T_RECOL_MAX := 40.0
 var tramo_actual := -1
 
 var hud := CanvasLayer.new()
@@ -176,9 +182,25 @@ func _seguir_camino() -> void:
 		# el piloto no suelta el camino: si se ha abierto (rampa o glorieta cerrada) vuelve a él; si tras 4 s sigue
 		# lejos o parado, se le recoloca en el carril (como R). Antes se borraba el camino y, fuera del asfalto, no
 		# encontraba vía y se quedaba parado para siempre.
+		# v6: antes de recolocarlo de golpe, el piloto maniobra (hacia delante y marcha atrás, maniobra.gd) para volver a su
+		# carril; solo si no lo consigue en T_RECOL_MAX s (o está a más de 40 m) se le recoloca como con R
 		var perdido := absf(lat_camino) > 8.0 or (absf(coche.v) < 0.5 and coche.freno < 0.05)
 		t_perdido = t_perdido + 1.0 / 60.0 if perdido else 0.0
-		if t_perdido > 4.0 or absf(lat_camino) > 40.0:
+		var ptc := _punto_camino(0.0)
+		var tc: Vector3 = ptc[1]
+		var fwc := coche.adelante()
+		var cruzado := absf(Maniobra.angulo(Vector2(fwc.x, fwc.z).normalized(), Vector2(tc.x, tc.z).normalized())) > 1.05 and absf(coche.v) < 6.0
+		if recol == null and (t_perdido > 2.0 or cruzado) and absf(lat_camino) <= 40.0:
+			recol = Maniobra.new()
+			recol.empezar()
+			t_recol = 0.0
+			_man_i = 0.0
+			recolocaciones += 1
+			t_perdido = 0.0
+		var fallo := recol != null and t_recol > T_RECOL_MAX
+		if fallo or absf(lat_camino) > 40.0:
+			if fallo: recol_fallidas += 1
+			recol = null
 			t_perdido = 0.0
 			reenganches += 1
 			if traza_cruces:
@@ -358,8 +380,12 @@ func _mandos(_dt: float) -> void:
 	if piloto and tocado:
 		piloto = false
 	if mano: fren = 1.0
+	if not piloto:
+		recol = null
 	if piloto and not camino.is_empty():
 		if coche.caja.manual: coche.caja.automatico()   # el piloto conduce siempre en automático
+		if recol != null and _maniobra_piloto(1.0 / 60.0):
+			return
 		coche.giro_directo = true
 		coche.volante = _volante_piloto()
 		_control_velocidad(_velocidad_objetivo())
@@ -375,6 +401,67 @@ func _mandos(_dt: float) -> void:
 		coche.marcha_atras = false
 	coche.acelerador = acel if not coche.marcha_atras else 0.0
 	coche.freno = fren if not coche.marcha_atras else acel
+
+
+## v6: un paso de la maniobra de recolocación del piloto (true mientras maniobra)
+func _maniobra_piloto(dt: float) -> bool:
+	t_recol += dt
+	var p0 := _punto_camino(0.0)
+	var p7 := _punto_camino(7.0)
+	var k0: int = p0[2] if p0[2] >= 0 else camino[0][0]
+	var k7: int = p7[2] if p7[2] >= 0 else camino[0][0]
+	var t0: Vector3 = p0[1]
+	var t7: Vector3 = p7[1]
+	var c0: Vector3 = (p0[0] as Vector3) + Vector3(-t0.z, 0.0, t0.x).normalized() * red.carril_derecho(k0, 0)
+	var c7: Vector3 = (p7[0] as Vector3) + Vector3(-t7.z, 0.0, t7.x).normalized() * red.carril_derecho(k7, 0)
+	var fw3 := coche.adelante()
+	var f2 := Vector2(fw3.x, fw3.z).normalized()
+	var p := Vector2(coche.position.x, coche.position.z)
+	var fi := coche.ficha
+	var bloq := func(q: Vector2, q0: Vector2) -> bool: return _ocupado_jugador(q, q0, recol.forzar)
+	var libre := func(sentido: int, giro: float) -> float: return Maniobra.libre(p, f2, sentido, giro, fi.largo, fi.ancho, fi.batalla, bloq)
+	var r := recol.paso(p, f2, coche.v, Vector2(c0.x, c0.z), Vector2(t0.x, t0.z).normalized(), Vector2(c7.x, c7.z),
+			libre, fi.batalla, dt)
+	if r["hecho"]:
+		recol = null
+		coche.marcha_atras = false
+		return false
+	coche.giro_directo = true
+	coche.volante = float(r["giro"])
+	var vt := float(r["v"]) * int(r["marcha"])
+	var atras := vt < 0.0
+	var cur := coche.v
+	if absf(vt) < 0.05 or (atras and cur > 0.1) or (not atras and cur < -0.1):
+		coche.acelerador = 0.0
+		coche.freno = 0.6
+		_man_i = 0.0
+		return true
+	coche.marcha_atras = atras
+	var e := absf(vt) - absf(cur)
+	_man_i = clampf(_man_i + e * dt * 0.8, 0.0, 0.6)
+	if e > -0.3:
+		coche.acelerador = clampf(0.12 + e * 0.35 + _man_i, 0.0, 1.0)
+		coche.freno = 0.0
+	else:
+		coche.acelerador = 0.0
+		coche.freno = clampf(-e * 0.3, 0.0, 0.5)
+	return true
+
+
+## ¿Choca el coche maniobrando en q (desde q0)? Biondas, coches del tráfico o salir del asfalto hacia fuera
+func _ocupado_jugador(q: Vector2, q0: Vector2, forzar := false) -> bool:
+	var y := coche.position.y
+	for b in mundo.biondas_cerca(Vector3(q.x, y, q.y)):
+		if b != null and (b as Biondas).bloquea(q, q0, y):
+			return true
+	if not forzar and Ajustes.superficie.consultar(q.x, q.y, y).z < 0 and Ajustes.superficie.consultar(q0.x, q0.y, y).z >= 0:
+		return true
+	for o in trafico.cerca_de(Vector3(q.x, y, q.y), 6.0):
+		var on: Node3D = o["nodo"]
+		var fo := -on.basis.z
+		if Maniobra.dentro(q, Vector2(on.position.x, on.position.z), Vector2(fo.x, fo.z).normalized(), 4.9, 1.9):
+			return true
+	return false
 
 
 func _volante_piloto() -> float:
