@@ -45,6 +45,8 @@ var _arboles_tesela := {}       # Vector2i -> Array[PackedFloat32Array] (16 sub-
 var _ultima := Vector3(INF, 0, INF)
 var _adelante := Vector2(0, -1)
 var _iniciado := false
+var _pendientes_alturas := 0
+var sin_terreno := false        # mundo por teselas (TerrenoStream): sin terreno lejano ni fino; árboles cuando haya alturas
 # estadísticas para medir
 var est := {"construidas": 0, "liberadas": 0, "us_max_pieza": 0, "us_max_fotograma": 0, "us_total": 0, "vivas": 0,
 		"fotogramas": 0, "us_carga_ventana": 0, "us_piezas": 0, "us_max_repaso": 0, "fot_sobre_4ms": 0}
@@ -54,7 +56,8 @@ func preparar(m: Node3D) -> void:
 	var t0 := Time.get_ticks_msec()
 	mundo = m
 	malla_pino = _malla_pino()
-	_terreno_lejano()
+	if not sin_terreno:
+		_terreno_lejano()
 	_piezas_terreno()
 	for r in Ajustes.rutas:
 		_piezas_ruta(r)
@@ -138,6 +141,10 @@ func _construir_cola(_p2: Vector2, presupuesto: int) -> void:
 		var pz: Dictionary = piezas[k]
 		if pz["nodo"] != null:
 			continue
+		if sin_terreno and int(pz["t"]) == T_ARBOLES and Ajustes.terreno_stream != null \
+				and not Ajustes.terreno_stream.alturas_listas(Rect2(pz["c"] - Vector2(pz["r"], pz["r"]), Vector2(pz["r"], pz["r"]) * 2.0)):
+			_pendientes_alturas += 1
+			continue        # sin las alturas del relieve descargado flotarían o se hundirían: en el siguiente repaso
 		var t1 := Time.get_ticks_usec()
 		_construir(pz)
 		_hecha[k] = 1
@@ -209,7 +216,8 @@ func _piezas_terreno() -> void:
 			for si in subs:
 				var xa := x0 + si * lado
 				var za := z0 + sj * lado
-				_pieza(T_TERRENO, 1, xa, za, xa + lado, za + lado, {"clave": clave, "si": si, "sj": sj, "x0": x0, "z0": z0, "n": int(t["n"]), "m": int(t["m"])})
+				if not sin_terreno:
+					_pieza(T_TERRENO, 1, xa, za, xa + lado, za + lado, {"clave": clave, "si": si, "sj": sj, "x0": x0, "z0": z0, "n": int(t["n"]), "m": int(t["m"])})
 				if int(wc.get(t["nombre"], 0) if not wc.is_empty() else t["arboles"]) > 0:
 					_pieza(T_ARBOLES, 1, xa, za, xa + lado, za + lado, {"clave": clave, "sub": sj * subs + si, "nombre": t["nombre"], "x0": x0, "z0": z0, "subs": subs})
 

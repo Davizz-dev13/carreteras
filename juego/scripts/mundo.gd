@@ -13,6 +13,7 @@ var mat_copa := StandardMaterial3D.new()
 var mat_tronco := StandardMaterial3D.new()
 var entorno: Environment
 var streaming: MapaStreaming
+var terreno_stream: TerrenoStream   # mundo por teselas (scripts/mundo_stream/), si Ajustes.usa_mundo_stream()
 var marcas_norma := false     # Gráficos alto (solo .exe): marcas viales según la 8.2-IC y materiales con detalle (aspecto.gd)
 var aspecto_web := false      # versión web: materiales del aspecto sin ortofoto (terreno_web.gdshader)
 
@@ -51,14 +52,39 @@ func construir() -> void:
 		mat_marca = Aspecto.marca()
 		mat_terreno = _suelo_web(false)
 		mat_talud = _suelo_web(true)
+	if Ajustes.usa_mundo_stream():
+		# suelo y relieve por teselas descargadas (PNOA + LiDAR) hasta el horizonte; las carreteras, quitamiedos,
+		# señales y árboles siguen saliendo de los datos de la zona (MapaStreaming, sin su terreno)
+		terreno_stream = TerrenoStream.new()
+		terreno_stream.preparar(Ajustes.info["origen_utm"])
+		add_child(terreno_stream)
+		Ajustes.terreno_stream = terreno_stream
+		Paisaje.solo_bruma = true
+	else:
+		Ajustes.terreno_stream = null
+		Paisaje.solo_bruma = false
 	var paisaje := Paisaje.new()
 	add_child(paisaje)
 	paisaje.preparar(self, mat_terreno)
+	if terreno_stream != null:
+		# con la curvatura de la Tierra el terreno lejano baja del horizonte: la mitad de abajo del cielo se ve, así que
+		# se pinta del color de la bruma (si no, sale una franja gris de "fin del mundo" en el horizonte)
+		var cm := entorno.sky.sky_material as ProceduralSkyMaterial if entorno.sky else null
+		if cm:
+			cm.ground_horizon_color = entorno.fog_light_color
+			cm.ground_bottom_color = entorno.fog_light_color.darkened(0.08)
+			cm.ground_curve = 0.25
 	# terreno, carreteras y pinos: por streaming (solo una ventana alrededor del coche, ver mapa_streaming.gd)
 	streaming = MapaStreaming.new()
 	streaming.name = "Streaming"
+	streaming.sin_terreno = terreno_stream != null
 	streaming.preparar(self)
 	add_child(streaming)
+
+
+func _exit_tree() -> void:
+	if Ajustes.terreno_stream == terreno_stream:
+		Ajustes.terreno_stream = null
 
 
 ## Suelo de la web: color de siempre (por vértice) con manchas y grano; talud = arcén de grava y tierra

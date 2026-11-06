@@ -18,6 +18,7 @@ const BAJADA_BORDE := 6.0      # m que se hunde la franja que se solapa con el t
 static var graficos := "alto"   # "alto" | "bajo"
 static var estacion := "verano" # "verano" | "invierno"
 static var _opciones_leidas := false
+static var solo_bruma := false  # mundo por teselas: el relieve lejano lo pone TerrenoStream; aquí solo bruma y cámara lejana
 
 var meta := {}
 var mat: ShaderMaterial
@@ -147,7 +148,8 @@ func preparar(mundo: Node3D, material: Material) -> void:
 	meta = JSON.parse_string(FileAccess.get_file_as_string(Ajustes.dir_datos() + "paisaje/paisaje.json"))
 	mat = material as ShaderMaterial
 	var t0 := Time.get_ticks_msec()
-	_relieve_lejano()
+	if not solo_bruma:
+		_relieve_lejano()
 	if Ajustes.args.get("paisaje_bruma", "1") == "1":
 		_bruma(mundo.entorno)
 	print("Paisaje: relieve lejano en %d ms (%s, %s)" % [Time.get_ticks_msec() - t0, graficos, estacion])

@@ -105,9 +105,32 @@ func _ready() -> void:
 	colisiones.juego = self
 	_reiniciar()
 	mundo.cargar_ventana(coche.position, ruta.tangente(s_ini) * dir)   # streaming: el mapa alrededor de la salida
+	if mundo.terreno_stream != null:
+		await _esperar_terreno_stream()
 	cargado = true
 	if Ajustes.args.has("captura"):
 		_captura()
+
+
+## Mundo por teselas: espera a que esté descargado y montado el suelo que se ve desde la salida (máx. 90 s)
+func _esperar_terreno_stream() -> void:
+	var aviso := Label.new()
+	aviso.add_theme_font_size_override("font_size", 24)
+	aviso.position = Vector2(60, 60)
+	hud.add_child(aviso)
+	var t0 := Time.get_ticks_msec()
+	var ts := mundo.terreno_stream
+	ts.foco = coche.position + Vector3(0, 2, 0)
+	while Time.get_ticks_msec() - t0 < 90000:
+		await get_tree().process_frame
+		var p: int = ts.pendientes()
+		aviso.text = "Descargando el terreno real (ortofoto PNOA + relieve LiDAR)… %d teselas" % p
+		if p == 0 and Time.get_ticks_msec() - t0 > 500:
+			break
+	ts.foco = null
+	mundo.cargar_ventana(coche.position, coche.adelante())   # árboles, ya con las alturas del relieve descargado
+	print("Mundo por teselas: suelo inicial listo en %d ms %s" % [Time.get_ticks_msec() - t0, JSON.stringify(ts.resumen())])
+	aviso.queue_free()
 
 
 func _leer_args() -> void:

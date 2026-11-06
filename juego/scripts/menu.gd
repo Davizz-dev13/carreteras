@@ -162,6 +162,7 @@ func _ready() -> void:
 	col.add_child(Paisaje.fila_menu())   # Gráficos alto/bajo y Estación (paisaje.gd; oculto en la web)
 	col.add_child(Rendimiento.fila_nota())   # por qué está en "bajo" si se eligió solo (rendimiento.gd)
 	col.add_child(MaMundo.fila_menu(self))   # mapa abierto de la Comunidad de Madrid (ma_mundo.gd; oculto en la web)
+	col.add_child(_fila_mundo_stream())      # prototipo del mundo por teselas (scripts/mundo_stream/; oculto en la web)
 	var mandos := Label.new()
 	mandos.text = ("Mandos en carretera: W/↑ acelerar · S/↓ frenar (parado: marcha atrás) · G/T bajar/subir marcha (cambio manual; T mantenida vuelve al automático) · " +
 		"P piloto automático · O adelantar (con el piloto) · L respetar límite al adelantar · +/− velocidad · K adaptar en curvas · 9/0 menos/más tráfico · " +
@@ -175,6 +176,8 @@ func _ready() -> void:
 	col.add_child(mandos)
 	var fuentes := Label.new()
 	fuentes.text = "Datos: © colaboradores de OpenStreetMap (ODbL) · MDT05 © Instituto Geográfico Nacional (CC BY 4.0) · ETRS89 UTM 30N, 1 unidad = 1 metro · Modelo 3D del Arteon: MattDoesBlender (CC BY 4.0)"
+	if not OS.has_feature("web"):
+		fuentes.text += "\nMundo por teselas: ortofoto PNOA © Instituto Geográfico Nacional – CNIG (CC BY 4.0, scne.es) · relieve © Mapterhorn (mapterhorn.com: LiDAR PNOA del IGN en España, Copernicus GLO-30 fuera)"
 	fuentes.modulate = Color(0.5, 0.55, 0.6)
 	fuentes.add_theme_font_size_override("font_size", 12)
 	col.add_child(fuentes)
@@ -322,3 +325,25 @@ func _captura_menu() -> void:
 	await RenderingServer.frame_post_draw
 	get_viewport().get_texture().get_image().save_png(Ajustes.args.get("salida", "user://menu.png"))
 	get_tree().quit()
+
+
+## Prototipo (solo .exe): "Mundo: suelo real por teselas (beta)". Por ahora solo para el Puerto de Navacerrada: el suelo
+## (ortofoto PNOA) y el relieve (LiDAR) se descargan por teselas alrededor del coche hasta el horizonte (TerrenoStream).
+func _fila_mundo_stream() -> HBoxContainer:
+	var f := HBoxContainer.new()
+	if OS.has_feature("web"):
+		f.visible = false
+		return f
+	var ck := CheckButton.new()
+	ck.text = "Mundo real por teselas (beta, solo Puerto de Navacerrada, necesita Internet)"
+	ck.tooltip_text = "Suelo con la ortofoto PNOA del IGN y relieve LiDAR descargados alrededor del coche, con nivel de detalle hasta el horizonte, como BeamNG.Earth"
+	ck.button_pressed = Ajustes.mundo_stream
+	ck.toggled.connect(func(v: bool) -> void: Ajustes.mundo_stream = v)
+	f.add_child(ck)
+	var actualizar := func() -> void:
+		ck.disabled = Ajustes.zona != "navacerrada"
+		if ck.disabled:
+			ck.button_pressed = false
+	f.visibility_changed.connect(actualizar)
+	f.ready.connect(actualizar)
+	return f

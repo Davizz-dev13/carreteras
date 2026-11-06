@@ -32,6 +32,9 @@ var ter_paso := 20.0
 var ter_n := 101
 var ter_tesela := 2000.0
 var superficie: Superficie
+# --- mundo por teselas (scripts/mundo_stream/, prototipo: Navacerrada) ---
+var mundo_stream := false     # --mundo=stream o el menú (solo .exe): suelo PNOA + relieve LiDAR descargados por teselas
+var terreno_stream: Node = null   # TerrenoStream mientras hay partida
 
 # --- captura automática (verificación / vídeo) ---
 var args := {}
@@ -141,8 +144,25 @@ func _cargar_carriles() -> void:
 				rutas[i].cargar_carriles(r["carriles"])
 
 
-## Altura del terreno (bilineal) en X, Z
+## ¿Se juega con el mundo por teselas? (argumento --mundo=stream o la opción del menú; nunca en la web)
+func usa_mundo_stream() -> bool:
+	if args.has("mundo"):
+		return args["mundo"] == "stream"
+	return mundo_stream and zona == "navacerrada" and not OS.has_feature("web")
+
+
+## Altura del terreno (bilineal) en X, Z. Con el mundo por teselas, la del relieve descargado (graduado bajo las
+## carreteras) cuando ya está en memoria; si no, la de los datos de la zona.
 func altura_terreno(x: float, z: float) -> float:
+	if terreno_stream != null:
+		var hs: float = terreno_stream.altura(x, z)
+		if not is_nan(hs):
+			return hs
+	return altura_terreno_zona(x, z)
+
+
+## Altura del terreno de los datos de la zona (MDT05 a 20 m, terreno/*.bin)
+func altura_terreno_zona(x: float, z: float) -> float:
 	var gx := (x - ter_x0) / ter_paso
 	var gz := (z - ter_z0) / ter_paso
 	var celdas := int(ter_tesela / ter_paso)
