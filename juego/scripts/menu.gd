@@ -259,10 +259,10 @@ func _al_cambiar_coche(i: int) -> void:
 	var fu: Array = f.datos.get("fuentes", [])
 	if not fu.is_empty():
 		fuente = String(fu[0]["url"]).replace("https://", "").replace("www.", "").get_slice("/", 0)
-	ficha_txt.text = ("%d CV (%d kW) · %d Nm · %d kg · %s · %s · 0-100 km/h en %s s · vel. máx. %d km/h%s\n" +
+	ficha_txt.text = ("%d CV (%d kW) · %d Nm · %d kg · %s · %s · 0-100 km/h en %s s · vel. máx. %s\n" +
 		"%d × %d × %d mm · batalla %d mm · Cx %s   |   ficha real: %s (fuentes en datos/coches/coches.json) · 0-100 simulado en llano: %s s") % [
 		roundi(f.potencia_cv), roundi(f.potencia_kw), roundi(f.par), roundi(f.masa), f.traccion, f.cambio,
-		("%.1f" % f.t_0_100).replace(".", ","), roundi(f.v_max_kmh), " (limitada)" if f.limitada else "",
+		("%.1f" % f.t_0_100).replace(".", ","), f.texto_v_max(),
 		roundi(f.largo * 1000), roundi(f.ancho * 1000), roundi(f.alto * 1000), roundi(f.batalla * 1000),
 		("%.3f" % f.cx).replace(".", ","), fuente, ("%.1f" % f.t_0_100_sim).replace(".", ",")]
 

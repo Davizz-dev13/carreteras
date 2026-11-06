@@ -27,6 +27,13 @@ func _asegurar() -> void:
 	for m in modelos:
 		for v in m["versiones"]:
 			fichas.append(Ficha.desde_json(m, v))
+	# versiones limitadas sin cifra publicada sin limitador: rendimiento de su hermana (ficha.gd, "rendimiento_como")
+	for f in fichas:
+		var como := str(f.datos.get("rendimiento_como", ""))
+		if f.limitada and como != "":
+			for h in fichas:
+				if h.id == como and h != f:
+					f.heredar_rendimiento(h.rendimiento)
 	for a in OS.get_cmdline_user_args():
 		if a.begins_with("--coche="):
 			elegir_id(a.split("=")[1])

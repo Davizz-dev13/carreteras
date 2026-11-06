@@ -539,6 +539,8 @@
      "cambio": "DSG 7",
      "vel_max_kmh": 250,
      "vel_max_limitada": true,
+     "rendimiento_como": "arteon_r_320_4motion",
+     "rendimiento_nota": "Sin cifra publicada sin limitador: rendimiento de transmisión del Arteon R (mismo EA888 2.0 TSI, DSG de 7 y 4Motion, calibrado con sus 270 km/h oficiales sin limitador); la velocidad máxima sin limitador es la que da la física del juego (estimada).",
      "aceleracion_0_100_s": 5.6,
      "cx": null,
      "area_frontal_m2": null,
@@ -574,6 +576,7 @@
      "traccion": "4Motion",
      "cambio": "DSG 7",
      "vel_max_kmh": 250,
+     "vel_max_sin_limitador_kmh": 270,
      "aceleracion_0_100_s": 4.9,
      "cx": null,
      "area_frontal_m2": null,
@@ -594,6 +597,11 @@
        "campos": "gama vendida en España (motores y cambios)",
        "url": "https://volkswagenzaragoza.com/wp-content/uploads/2022/09/arteon.pdf",
        "titulo": "VW España, 'Catálogo Nuevo Arteon' — lista de precios PVP para pedidos desde 01/05/2022 (copia en la web de un concesionario VW)"
+      },
+      {
+       "campos": "vel_max_sin_limitador_kmh: 270 km/h ('can be ordered with unlimited top speed; in this case it reaches 270 km/h', paquete R-Performance)",
+       "url": "https://www.volkswagen-newsroom.com/en/press-releases/arteon-and-arteon-r-shooting-brake-presales-of-the-new-performance-models-now-underway-6714",
+       "titulo": "Arteon and Arteon R Shooting Brake: presales of the new performance models now underway | Volkswagen Newsroom"
       }
      ],
      "notas": [

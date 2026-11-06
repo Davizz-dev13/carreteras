@@ -4,8 +4,13 @@
 ##   · cx_a (Cx · área frontal): Cx publicado × área frontal publicada; si no hay área publicada,
 ##     área ≈ 0,84 × ancho × alto (aproximación estándar en turismos).
 ##   · potencia en rueda = potencia × rendimiento de transmisión. El rendimiento se obtiene de la velocidad
-##     máxima oficial cuando NO está limitada electrónicamente (potencia en rueda = resistencia a esa velocidad);
-##     si está limitada (250 km/h) se usa 0,85.
+##     máxima oficial cuando NO está limitada electrónicamente (potencia en rueda = resistencia a esa velocidad).
+##   · SIN LIMITADOR (petición de David, nov. 2026): las versiones limitadas de fábrica a 250 km/h corren hasta su
+##     velocidad máxima real. Si la marca publica la cifra sin limitador ("vel_max_sin_limitador_kmh" en el JSON,
+##     con su fuente; p. ej. el Arteon R con el paquete R-Performance: 270 km/h) el rendimiento sale de ella como
+##     en las no limitadas. Si no la publica, se usa el rendimiento de la versión hermana que se indique
+##     ("rendimiento_como": mismo motor/cambio/tracción) y la velocidad máxima es la que da la física
+##     (potencia en rueda = resistencia): es una ESTIMACIÓN y el menú lo dice. v_max_fabrica_kmh guarda la oficial.
 ##   · fuerza de tracción máxima: se calibra para que el 0-100 simulado en llano dé el 0-100 oficial,
 ##     sin pasar del límite de adherencia de las ruedas motrices (≈60 % del peso en tracción delantera, 100 % en 4Motion).
 class_name Ficha
@@ -32,7 +37,10 @@ var traccion := "delantera"
 var cambio := ""
 var v_max := 60.0            # m/s
 var v_max_kmh := 216.0
-var limitada := false        # velocidad máxima limitada electrónicamente
+var limitada := false        # de fábrica, velocidad máxima limitada electrónicamente (en el juego ya no: ver arriba)
+var v_max_fabrica_kmh := 216.0   # velocidad máxima oficial de catálogo (250 en las limitadas)
+var v_max_estimada := false      # sin cifra publicada sin limitador: la da la física con el rendimiento de la hermana
+var rendimiento_fijo := -1.0     # rendimiento heredado de la versión hermana (Catalogo lo rellena), −1 = calcularlo
 var t_0_100 := 9.0           # s (oficial)
 var cx := 0.30
 var area := 2.2
@@ -72,8 +80,11 @@ static func desde_json(m: Dictionary, d: Dictionary) -> Ficha:
 	f.cambio = d.get("cambio", "")
 	f.combustible = d.get("combustible", "")
 	f.v_max_kmh = float(d["vel_max_kmh"])
-	f.v_max = f.v_max_kmh / 3.6
+	f.v_max_fabrica_kmh = f.v_max_kmh
 	f.limitada = bool(d.get("vel_max_limitada", f.v_max_kmh >= 249.0))
+	if f.limitada and d.has("vel_max_sin_limitador_kmh"):
+		f.v_max_kmh = float(d["vel_max_sin_limitador_kmh"])     # cifra de la marca sin limitador
+	f.v_max = f.v_max_kmh / 3.6
 	f.t_0_100 = float(d["aceleracion_0_100_s"])
 	var cxv = d.get("cx", null)
 	if cxv == null: cxv = m.get("cx", null)       # misma carrocería: Cx del modelo
@@ -92,8 +103,13 @@ func es_4x4() -> bool:
 func _derivar() -> void:
 	cx_a = cx * area
 	var p := potencia_kw * 1000.0
-	if limitada:
-		rendimiento = 0.85
+	v_max_estimada = false
+	if limitada and not datos.has("vel_max_sin_limitador_kmh"):
+		# sin cifra publicada: rendimiento de la hermana (o 0,85) y la velocidad máxima que da la física sin limitador
+		rendimiento = rendimiento_fijo if rendimiento_fijo > 0.0 else 0.85
+		v_max = _v_equilibrio(p * rendimiento)
+		v_max_kmh = v_max * 3.6
+		v_max_estimada = true
 	else:
 		var v := v_max
 		rendimiento = clampf((0.5 * RHO * cx_a * v * v * v + crr * masa * G * v) / p, 0.70, 0.95)
@@ -113,6 +129,30 @@ func _derivar() -> void:
 			else: hi = mid
 		f_traccion_max = hi
 	t_0_100_sim = _simular_0_100(f_traccion_max)
+
+
+## Velocidad (m/s) a la que la potencia en rueda iguala la resistencia aerodinámica y de rodadura en llano
+func _v_equilibrio(p_rueda: float) -> float:
+	var lo := 10.0
+	var hi := 150.0
+	for i in 60:
+		var v := (lo + hi) * 0.5
+		if 0.5 * RHO * cx_a * v * v * v + crr * masa * G * v < p_rueda: lo = v
+		else: hi = v
+	return lo
+
+
+## Rehace las derivadas con el rendimiento de la versión hermana (Catalogo, tras leer todas las fichas)
+func heredar_rendimiento(r: float) -> void:
+	rendimiento_fijo = r
+	_derivar()
+
+
+## Texto de la velocidad máxima para el menú: "270 km/h (sin limitador; de fábrica 250)"
+func texto_v_max() -> String:
+	if not limitada:
+		return "%d km/h" % roundi(v_max_kmh)
+	return "%d km/h%s (sin limitador; de fábrica limitada a %d)" % [roundi(v_max_kmh), " estimada" if v_max_estimada else "", roundi(v_max_fabrica_kmh)]
 
 
 func _simular_0_100(f_max: float) -> float:
