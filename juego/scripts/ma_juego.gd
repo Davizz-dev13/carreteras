@@ -347,6 +347,7 @@ func _mandos(_dt: float) -> void:
 	if Input.is_physical_key_pressed(KEY_A) or Input.is_physical_key_pressed(KEY_LEFT): vol -= 1.0
 	if Input.is_physical_key_pressed(KEY_D) or Input.is_physical_key_pressed(KEY_RIGHT): vol += 1.0
 	var mano := Input.is_physical_key_pressed(KEY_SPACE)
+	coche.entrada_digital = vol != 0.0     # v5: giro con teclas (todo o nada): el coche limita el ángulo por la deriva real
 	var tocado := acel > 0.0 or fren > 0.0 or vol != 0.0 or mano
 	# mando: se suma al teclado (gana el que pida más; el volante del teclado manda)
 	tocado = mando.leer(_pad()) or tocado

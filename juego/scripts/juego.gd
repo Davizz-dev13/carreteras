@@ -234,6 +234,7 @@ func _mandos(_dt: float) -> void:
 	if Input.is_physical_key_pressed(KEY_A) or Input.is_physical_key_pressed(KEY_LEFT): vol -= 1.0
 	if Input.is_physical_key_pressed(KEY_D) or Input.is_physical_key_pressed(KEY_RIGHT): vol += 1.0
 	var mano := Input.is_physical_key_pressed(KEY_SPACE)
+	coche.entrada_digital = vol != 0.0     # v5: giro con teclas (todo o nada): el coche limita el ángulo por la deriva real
 	var tocado := acel > 0.0 or fren > 0.0 or vol != 0.0 or mano
 	# mando: gatillos analógicos y joystick; se suma al teclado (gana el que pida más; el volante del teclado manda)
 	if _leer_mando():
@@ -1838,6 +1839,7 @@ func _prueba_giro() -> void:
 	var a_lat_max := 0.0
 	while t < 5.0:
 		coche.giro_directo = false
+		coche.entrada_digital = true
 		coche.volante = lado
 		coche.acelerador = acel_fija
 		coche.freno = 0.0

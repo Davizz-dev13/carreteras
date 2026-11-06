@@ -61,6 +61,11 @@ const C_PAC := 1.45             # forma de la "fórmula mágica" de Pacejka: pic
 const IZ_FACTOR := 1.0          # inercia de guiñada = m · lf · lr · factor (índice dinámico ≈ 1)
 const SENS_DEL := 0.20          # pérdida de agarre por transferencia lateral de carga (sensibilidad a la carga)
 const SENS_TRA := 0.12
+const SENS_CARGA := 0.12        # v5: sensibilidad del neumático a la carga vertical: un eje más cargado agarra algo
+                                # menos por kilo (el trasero de un tracción delantera, ligero, agarra un poco más por kilo)
+const DIG_USO := 0.85           # v5 teclado: fracción del agarre delantero que puede pedir el teclado (por la deriva real)
+const DIG_V0 := 20.0 / 3.6      # v5.1: por debajo, el teclado da todo el giro (horquillas, maniobras)
+const DIG_V1 := 40.0 / 3.6      # v5.1: por encima, límite por deriva completo
 const V_DINAMICA := 4.0         # m/s: por debajo, giro cinemático (sin deriva), como un coche maniobrando
 var vy := 0.0                   # m/s, velocidad lateral del coche por la deriva de los neumáticos (+ derecha)
 var r_yaw := 0.0                # rad/s, velocidad de guiñada (+ giro a la derecha)
@@ -73,6 +78,8 @@ var acelerador := 0.0
 var freno := 0.0
 var volante := 0.0              # -1 izquierda … +1 derecha (ángulo pedido normalizado)
 var giro_directo := false       # el piloto pide un ángulo exacto en vez de volante
+var entrada_digital := false    # v5: el giro viene de teclas (todo o nada): la dirección la limita la deriva real
+var a_carga := 0.0              # v5: aceleración longitudinal que transfiere carga (sin la componente de la pendiente)
 var marcha_atras := false
 
 var modelo: Node3D
@@ -195,6 +202,25 @@ func paso_fisica(dt: float) -> void:
 		var a85 := 0.85 * mu * G * maxf(sqrt(maxf(1.0 - u_fr * u_fr, 0.0)), ABS_LAT_DEL + 0.1)
 		var g_max := minf(GIRO_MAX, atan(a85 * lb / maxf(v * v, 0.01)) + gradiente_subviraje() * a85)
 		objetivo = volante * g_max
+		# v5 (teclado, como los simuladores con ayuda de dirección para teclas): las teclas son todo o nada, así que
+		# además del tope por velocidad el ángulo se limita para que la rueda delantera no derive más de lo que da el
+		# 85 % de su agarre, medido sobre la marcha real (hacia dónde va de verdad el eje delantero). Si la trasera se
+		# empieza a ir, el eje delantero apunta hacia dentro y este límite quita giro solo (contravolante natural).
+		if entrada_digital and volante != 0.0 and v > V_DINAMICA:
+			var lf_d := lb * (1.0 - reparto())
+			var dir_del := atan2(vy + lf_d * r_yaw, v)
+			var b_pac := C_DEL / (C_PAC * maxf(mu, 0.1))
+			var alfa_t := tan(asin(DIG_USO) / C_PAC) / b_pac
+			var limitado := clampf(objetivo, dir_del - alfa_t, dir_del + alfa_t)
+			if signf(limitado) != signf(volante) and absf(limitado) > 0.0:
+				# contravolante automático solo si la trasera de verdad se va (si no, como mucho recto)
+				var beta := atan2(vy, v)
+				if absf(beta) < deg_to_rad(3.0): limitado = 0.0
+			# v5.1: en horquillas y maniobras (por debajo de ~20 km/h) las teclas dan todo el giro, como un coche real a
+			# poca velocidad; el límite por deriva entra poco a poco hasta 40 km/h (antes, a 15-30 km/h en una horquilla
+			# el coche no llegaba a girar lo que hacía falta y se iba contra la bionda)
+			var w_dig := clampf((v - DIG_V0) / (DIG_V1 - DIG_V0), 0.0, 1.0)
+			objetivo = lerpf(objetivo, limitado, w_dig)
 		# ≈0,35 s hasta el tope al pulsar y ≈0,25 s para volver al centro al soltar
 		var ritmo := g_max / (0.35 if absf(objetivo) > absf(giro) and signf(objetivo) == signf(giro) or giro == 0.0 else 0.25)
 		giro = move_toward(giro, objetivo, maxf(ritmo, 0.05) * dt)
@@ -217,6 +243,7 @@ func paso_fisica(dt: float) -> void:
 	if absf(v_lat) > 0.0:
 		v_lat = move_toward(v_lat, 0.0, mu * G * dt)
 	a_long = lerpf(a_long, (v - v_ant) / dt, 1.0 - exp(-dt * 6.0))
+	a_carga = lerpf(a_carga, (v - v_ant) / dt + G * seno, 1.0 - exp(-dt * 6.0))
 	a_lat_actual = lerpf(a_lat_actual, v * omega, 1.0 - exp(-dt * 6.0))
 	# --- avance --- (v4: más la deriva lateral de los neumáticos, vy)
 	var avance := adelante() * v * dt
@@ -278,13 +305,22 @@ func _bicicleta(dt: float, delta: float, mu: float, fx_del: float, fx_tra: float
 		derrapando = false
 		return r_yaw
 	# cargas por eje con la transferencia longitudinal (acelerar descarga el delantero, frenar lo carga)
-	var dfz := m * a_long * H_CDG / lb
+	# v5: la transferencia sale de la aceleración que dan neumáticos y aire (a_carga), no de la que da la pendiente:
+	# subiendo, la gravedad frena el coche pero no carga el morro (antes, en una subida al levantar el pie, el trasero
+	# perdía de más agarre y el coche hacía un trompo)
+	var dfz := m * a_carga * H_CDG / lb
 	var fzf := maxf(m * G * rep - dfz, 0.25 * m * G * rep)
 	var fzr := maxf(m * G * (1.0 - rep) + dfz, 0.25 * m * G * (1.0 - rep))
 	# transferencia lateral: el neumático exterior no gana lo que pierde el interior → el eje agarra algo menos
 	var q := absf(a_lat_actual) / G * 2.0 * H_CDG / ficha.via
 	var mu_f := mu * (1.0 - SENS_DEL * q * q)
 	var mu_r := mu * (1.0 - SENS_TRA * q * q)
+	# v5: sensibilidad a la carga vertical (por kilo, un neumático más cargado agarra algo menos): el delantero de un
+	# tracción delantera, con el 60 % del peso, agarra algo menos por kilo que el trasero, y si al levantar el pie
+	# el trasero se descarga, por kilo agarra algo más. Por eso un tracción delantera tiende a subvirar.
+	var fz0 := 0.5 * m * G
+	mu_f *= 1.0 - SENS_CARGA * (fzf / fz0 - 1.0)
+	mu_r *= 1.0 - SENS_CARGA * (fzr / fz0 - 1.0)
 	var dmax_f := mu_f * fzf
 	var dmax_r := mu_r * fzr
 	# fracción del agarre de cada eje que se usa en sentido longitudinal (frenos con EBD + motor)
@@ -329,7 +365,11 @@ func _bicicleta(dt: float, delta: float, mu: float, fx_del: float, fx_tra: float
 		var r_ref := clampf(u * tan(delta) / (lb + k * u * u), -r_lim, r_lim)
 		var beta := atan2(vy, maxf(u, 1.0))
 		var sobre := (absf(r_yaw) > absf(r_ref) + 0.02 and absf(ar) > 0.5 * a_pico_r) or signf(r_yaw) != signf(r_ref) and absf(r_yaw) > 0.05
-		if sobre or absf(beta) > deg_to_rad(4.0):
+		# v5: la deriva que vigila es la que va más allá de la geométrica del giro (lr·r/u): a 40 km/h en una curva
+		# cerrada el coche tiene 5-10° de deriva sin que la trasera deslice, y antes eso disparaba el ESC, que añadía
+		# guiñada justo cuando el coche ya subviraba (la trasera parecía irse sola)
+		var beta_geo := atan2(lr * r_yaw, maxf(u, 1.0))
+		if sobre or absf(beta - beta_geo) > deg_to_rad(4.0):
 			var m_esc := clampf(ESC_KP * (r_ref - r_yaw) * iz, -m_esc_max, m_esc_max)
 			r_yaw += m_esc / iz * h
 			u -= absf(m_esc) / (ficha.via * 0.5) / m * h      # esa rueda frenada también decelera el coche
