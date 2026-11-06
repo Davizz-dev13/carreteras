@@ -1,116 +1,24 @@
 # Carreteras de España · escala 1:1  (v4)
 
-**Novedades v2**: sin vibración (ver §6) y coches reales elegibles con su ficha técnica (§7). De momento, todos VW Arteon.
+**Novedades v2**: sin vibración (ver 6) y coches reales elegibles con su ficha técnica (7). De momento, solo VW Arteon.
 
 Juego de conducción por **carreteras reales** con su **trazado real** (curvas de OpenStreetMap) y su **altitud real**
-(Modelo Digital del Terreno de 5 m del IGN, LiDAR). Nada de escalas: 1 unidad de Godot = 1 metro, la altitud del
+(Modelo Digital del Terreno de 5 m del IGN, LiDAR). Nada de escalas, la altitud del
 juego es la altitud sobre el nivel del mar y las coordenadas son ETRS89 / UTM 30N (EPSG:25830).
 
 Demo incluida: **Puerto de Navacerrada**: M-601 desde Navacerrada hasta el puerto y bajada por la CL-601 hacia
 Valsaín (24,3 km), más las carreteras de alrededor (M-607, M-614, M-622, M-966, SG-615…).
 
 ## ▶ Jugar online
+Demo del juego final, se puede jugar en el navegador sin necesidad de instalar ningun archivo
+**[https://davizz-dev13.github.io/carreteras/](https://davizz-dev13.github.io/carreteras/)
 
-**[https://davizz-dev13.github.io/carreteras/](https://davizz-dev13.github.io/carreteras/)** — se juega en el navegador, sin instalar nada (Chrome, Edge o Firefox de escritorio
-con WebGL 2; la primera carga baja unos 48 MB). Es la misma versión que el proyecto de Godot, exportada a web.
 
-Cómo ejecutarlo en local:
-- **Con Godot (recomendado, va más fluido)**: instala Godot 4.7 estándar, importa `juego/project.godot` y pulsa F5 (detalles en §3).
-- **La versión web en tu PC**: exporta con el preset *Web* (`juego/export_presets.cfg`, sale en `build/web/`) y sírvela
-  con un servidor local, por ejemplo `python -m http.server 8000 --directory build/web` y abre `http://localhost:8000`
-  (abrir el `index.html` con doble clic no funciona: el navegador bloquea la carga del `.wasm` desde disco).
-
-**Controles** (también salen en pantalla, H para la ayuda): W/↑ acelerar · S/↓ frenar y marcha atrás · ← → girar
-(también A D) · P piloto automático · O adelantar · L límite al adelantar · + / − velocidad · K adaptar en curvas · 9 / 0 tráfico ·
-V cámara · R volver a la carretera · Esc pausa. Pulsa el perfil de altitud o el mapa de abajo para ir a ese punto.
-
-**Mando de PS4 (DualShock 4)**, también en la web (Chrome, Edge o Firefox; pulsa un botón del mando para que el navegador
-lo detecte y sale "Mando conectado"): R2 acelerar y L2 frenar, **analógicos** (cuanto más aprietas, más gas o más freno;
-parado, L2 es marcha atrás) · joystick izquierdo girar (analógico, con zona muerta pequeña) · ✕ freno de mano (Espacio) ·
-△ piloto automático (P) · □ adelantar (O) · R1 límite al adelantar (L) · L1 adaptar en curvas (K) · cruceta ↑ ↓ velocidad
-(+ / −) y ← → tráfico (9 / 0) · ○ cámara (V) · L3 / R3 volver a la carretera (R) · OPTIONS pausa (Esc) · SHARE ayuda (H).
-En el menú y en la pausa, la cruceta mueve el foco y ✕ pulsa. Teclado y mando se pueden usar a la vez: el teclado
-funciona exactamente igual que antes.
 
 ## ▶ Versión para Windows (.exe)
+Para esta version ya se incluye un mapa 1:1 de la region de la comunidad de madrid con toda la señalización y modelado 3D, aunque el juego sigue en una fase inicial de desarrollo
 
-**[Carreteras-windows.zip](https://github.com/Davizz-dev13/carreteras/releases/download/windows-latest/Carreteras-windows.zip)** — se
-regenera sola con cada cambio (GitHub Actions, `.github/workflows/windows.yml`, release `windows-latest`). Descomprime y abre
-`Carreteras.exe`. No está firmado: si Windows SmartScreen avisa, "Más información" → "Ejecutar de todas formas".
-- Renderizador Forward+ (Vulkan; si no hay Vulkan, Godot prueba D3D12 y luego OpenGL), pantalla completa, MSAA 4x. La web sigue en
-  Compatibility (WebGL 2) exactamente igual (`rendering_method.windows` / `.web` en `project.godot`).
-- **Paisaje real solo en el .exe** (menú: Gráficos alto/bajo, Estación verano/invierno): relieve lejano IGN MDT25 hasta 25 km y
-  color del suelo con la ortofoto PNOA (`scripts/paisaje.gd`, datos en `datos/<zona>/paisaje/`, generados con
-  `python pipeline/paisaje.py --zona <zona>`; qué es real y qué es aproximado: `paisaje.json` de cada zona). La exportación web los
-  excluye (`exclude_filter`) y en el navegador el paisaje no se activa. Filtro anisótropo del suelo activado en Windows.
-- **Mapa abierto de la Comunidad de Madrid solo en el .exe**: botón "Comunidad de Madrid entera" en la fila "Mapa abierto:" del
-  menú (`scripts/ma_*.gd`, `escenas/madrid.tscn`, datos en `datos/madrid/`, ~174 MB, generados con `pipeline/mundo/m1…m6`).
-  La exportación web excluye los datos y la escena (`exclude_filter`) y en el navegador el botón no aparece.
 
-## 1. Estructura
-
-```
-pipeline/            Extracción en Python
-  extraer.py         CLI: bbox -> datos del juego (OSM + MDT -> UTM 30N 1:1)
-  osm.py             Overpass API (bbox) y lector de .osm.pbf (Geofabrik) para toda España
-  dem.py             MDT05 del IGN (WCS) o Copernicus GLO-30 (AWS), muestreo bilineal
-  rutas.py           Encadenar vías por ref, remuestreo cada 2 m, altitud suavizada, pendiente, curvatura
-  graficos.py        Perfil de altitud y mapa de comprobación (PNG)
-juego/               Proyecto Godot 4 (GDScript, renderer Compatibility)
-  escenas/           menu.tscn (inicio) y juego.tscn (conducción)
-  scripts/
-    ajustes.gd       Autoload: opciones del menú + carga de datos + altura del terreno
-    catalogo.gd      Autoload: coches reales (datos/coches/coches.json) y creación de sus modelos 3D
-    ficha.gd         Ficha técnica de una versión + parámetros físicos derivados de ella (explicados)
-    modelo_procedural.gd  Modelo 3D low-poly a partir de un perfil de secciones, a medidas reales
-    ruta.gd          Una carretera: puntos, pendiente, curvatura, proyección de la posición sobre la ruta
-    superficie.gd    Rejilla espacial con todas las calzadas: altura exacta del asfalto bajo cada rueda
-    mundo.gd         Terreno, cinta de carretera con marcas viales, pinos, cielo y niebla
-    coche.gd         Física del coche (potencia, frenos, aerodinámica, rodadura, gravedad, adherencia)
-    trafico.gd       Tráfico en ambos sentidos con modelo IDM y velocidad de curva
-    perfil.gd        Dibujo del perfil de altitud (menú y HUD)
-    menu.gd          Menú: carretera, tramo, velocidad, piloto automático, tráfico
-    juego.gd         Bucle de juego, piloto automático, cámaras, HUD, pausa, resumen final
-  datos/coches/coches.json  Coches reales: versiones, cifras de fábrica con su fuente, colores, perfil 3D
-  datos/navacerrada/ Datos ya procesados (zona.json, carreteras.json, terreno/*.bin, arboles/*.bin, estadisticas.json)
-graficos/            perfil y mapa de la demo
-requirements.txt
-```
-
-## 2. Generar los datos de cualquier zona (pipeline)
-
-```bash
-python -m venv venv
-venv\Scripts\activate            # Windows   (Linux/Mac: source venv/bin/activate)
-pip install -r requirements.txt
-
-# la demo (ya viene hecha, tarda ~1 min la primera vez)
-python pipeline/extraer.py --zona navacerrada
-
-# cualquier zona: --bbox sur,oeste,norte,este en grados  +  qué carreteras encadenar como rutas
-python pipeline/extraer.py --zona morcuera --bbox 40.80,-3.88,40.88,-3.78 --rutas "M-611"
-python pipeline/extraer.py --zona cotos --bbox 40.78,-4.03,40.84,-3.93 --rutas "M-601+CL-601" "M-604"
-# sin --rutas: crea una ruta por cada referencia de carretera (M-…, CL-…, N-…) de más de 2 km
-# --mdt copernicus: usa Copernicus GLO-30 en vez del IGN (fuera de España o si el IGN no responde)
-
-python pipeline/graficos.py --zona morcuera     # perfil + mapa en graficos/
-```
-
-Luego, en el menú del juego, cambia `zona` en `scripts/ajustes.gd` (`ZONA_POR_DEFECTO`) por la nueva carpeta.
-
-Qué hace, paso a paso:
-1. **Trazado**: Overpass API descarga las vías `highway=motorway…unclassified` del bbox (con `ref`, `name`, `lanes`,
-   `width`, `maxspeed`, `bridge`, `tunnel`). Las vías con la misma `ref` se unen en un grafo; los cortes de
-   mapeo (rotondas sin ref) se puentean (< 80 m) y la ruta es el camino más largo del grafo.
-2. **Planta**: remuestreo cada 2 m y suavizado gaussiano de 3 m (quita los picos de la poligonal de OSM sin cambiar
-   las curvas: la horquilla más cerrada sale de 9 m de radio).
-3. **Altitud**: MDT05 del IGN (LiDAR, terreno desnudo, sin árboles) por su WCS público, muestreo bilineal. Para quitar
-   el ruido (±1 m y escalones de 1 m) sin tocar las pendientes reales: mediana de 25 m + gaussiana σ = 12 m.
-   **Puentes y túneles** (tags OSM) no siguen el terreno: rasante interpolada entre sus extremos.
-4. **Anchura**: `width` si existe; si no `lanes` × 3–3,5 m según tipo de vía + arcén.
-5. **Terreno**: malla de 20 m en teselas de 2 × 2 km; junto a la carretera el terreno se ajusta a la rasante
-   (desmonte/terraplén) para que el asfalto no quede enterrado ni flotando.
-6. **Salida**: JSON + binarios float32 en metros locales: `X = E − E0`, `Z = N0 − N`, `Y = altitud`.
 
 ### Comprobación con datos publicados (demo)
 | | Nuestro pipeline | Publicado |
