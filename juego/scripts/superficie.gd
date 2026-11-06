@@ -4,6 +4,7 @@ class_name Superficie
 extends RefCounted
 
 const CELDA := 40.0
+const SUBIDA_MAX := 0.6      # m por encima de y_ref que puede estar la calzada "de arriba" de un solape (v7)
 var a := PackedVector3Array()
 var b := PackedVector3Array()
 var semiancho := PackedFloat32Array()
@@ -98,6 +99,13 @@ func consultar(x: float, z: float, y_ref: float) -> Vector3:
 	var mejor := 1e9
 	var h := 0.0
 	var id := -1
+	# v7: donde dos calzadas se solapan (calzada gemela de una autovía, boca de un cruce, ramal que se funde) y el
+	# punto está DENTRO de las dos, manda la de arriba, que es la que se ve: la más cercana en planta podía ser la de
+	# debajo (hasta 1 m por debajo del asfalto visible en la M-406) y el coche se hundía o daba un escalón al pasar
+	# de una a otra. El máximo de alturas continuas es continuo, así que no vuelve la vibración de la v1.
+	var h_dentro := -INF
+	var id_dentro := -1
+	var por_via := {}      # via -> Vector2(distancia del tramo más cercano de esa calzada, su altura)
 	for k in lista:
 		var p := a[k]
 		var q := b[k]
@@ -112,14 +120,31 @@ func consultar(x: float, z: float, y_ref: float) -> Vector3:
 		var d := sqrt((x - cx) * (x - cx) + (z - cz) * (z - cz))
 		if d <= semiancho[k] + 1.2:
 			var hh := lerpf(p.y, q.y, t)
-			var puntos := d + (1000.0 if absf(hh - y_ref) > 2.5 else 0.0)
+			var otro_nivel := absf(hh - y_ref) > 2.5
+			# de cada calzada solo cuenta su tramo más cercano (si no, en pendiente un tramo 3 m más adelante de la
+			# misma carretera también "contiene" el punto por su extremo y daría su altura, más alta)
+			# (un tablero más de SUBIDA_MAX por encima del coche no es "la de arriba" sino otro nivel mal medido: puente
+			# de OSM demasiado bajo; el coche no se sube a él de golpe)
+			if d <= semiancho[k] and not otro_nivel and hh - y_ref <= SUBIDA_MAX:
+				var pv: Vector2 = por_via.get(via[k], Vector2(1e9, 0.0))
+				if d < pv.x:
+					por_via[via[k]] = Vector2(d, hh)
+			var puntos := d + (1000.0 if otro_nivel else 0.0)
 			if puntos < mejor:
 				mejor = puntos
 				h = hh
 				id = via[k]
-	if id >= 0:
-		return Vector3(h, 1.0, id)
-	# dentro de un triángulo de la malla de una glorieta (abocinamientos, isleta): altura por baricéntricas
+	for v in por_via:
+		var pv: Vector2 = por_via[v]
+		if pv.y > h_dentro:
+			h_dentro = pv.y
+			id_dentro = v
+	# dentro de un triángulo de la malla de una glorieta (abocinamientos, isleta): altura por baricéntricas; también
+	# compite con las calzadas que lo contienen (la malla se dibuja ELEV por encima: es la que se ve)
+	var h_tri := -INF
+	var id_tri := -1
+	var h_tri_lejos := 0.0
+	var id_tri_lejos := -1
 	for k in celdas_t.get(Vector2i(floori(x / CELDA), floori(z / CELDA)), PackedInt32Array()):
 		var a3 := ta[k]
 		var b3 := tb[k]
@@ -133,5 +158,18 @@ func consultar(x: float, z: float, y_ref: float) -> Vector3:
 		if l1 >= -0.01 and l2 >= -0.01 and l3 >= -0.01:
 			var hh := a3.y * l1 + b3.y * l2 + c3.y * l3 - GlorietaMalla.ELEV
 			if absf(hh - y_ref) < 2.5:
-				return Vector3(hh, 1.0, tid[k])
+				if hh - y_ref <= SUBIDA_MAX and hh > h_tri:
+					h_tri = hh
+					id_tri = tid[k]
+				elif id_tri_lejos < 0:
+					h_tri_lejos = hh
+					id_tri_lejos = tid[k]
+	if id_dentro >= 0 or id_tri >= 0:
+		if h_tri > h_dentro:
+			return Vector3(h_tri, 1.0, id_tri)
+		return Vector3(h_dentro, 1.0, id_dentro)
+	if id >= 0:
+		return Vector3(h, 1.0, id)
+	if id_tri_lejos >= 0:
+		return Vector3(h_tri_lejos, 1.0, id_tri_lejos)
 	return Vector3(Ajustes.altura_terreno(x, z), 0.0, -1)

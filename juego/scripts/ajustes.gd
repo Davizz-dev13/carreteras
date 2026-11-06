@@ -174,7 +174,7 @@ func altura_terreno(x: float, z: float) -> float:
 	return altura_terreno_zona(x, z)
 
 
-## Altura del terreno de los datos de la zona (MDT05 a 20 m, terreno/*.bin)
+## Altura del terreno de los datos de la zona (MDT05 a 20 m, terreno/*.bin), sobre los triángulos de la malla
 func altura_terreno_zona(x: float, z: float) -> float:
 	var gx := (x - ter_x0) / ter_paso
 	var gz := (z - ter_z0) / ter_paso
@@ -194,7 +194,12 @@ func altura_terreno_zona(x: float, z: float) -> float:
 	var b := h[j * ter_n + i + 1]
 	var c := h[(j + 1) * ter_n + i]
 	var d := h[(j + 1) * ter_n + i + 1]
-	return lerpf(lerpf(a, b, fx), lerpf(c, d, fx), fz)
+	# v7: los mismos dos triángulos por celda que dibuja la malla del terreno (MapaStreaming._terreno_fino) y que
+	# rebaja Cruces._excavar_terreno: con la bilineal de antes, junto a las carreteras (donde se bajan unos vértices
+	# y otros no) el coche fuera del asfalto y los árboles quedaban hasta 1,3 m por encima o por debajo del suelo
+	if fx + fz <= 1.0:
+		return a + (b - a) * fx + (c - a) * fz
+	return d + (c - d) * (1.0 - fx) + (b - d) * (1.0 - fz)
 
 
 func ruta() -> Ruta:

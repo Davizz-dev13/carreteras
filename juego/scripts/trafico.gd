@@ -304,6 +304,12 @@ func _colocar(c: Dictionary) -> void:
 	# punto_carril: el carril de su sentido; en una glorieta, el sentido contrario va por el resto del anillo
 	var p := ruta.punto_carril(s, dir) + Vector3.UP * 0.05
 	var t := ruta.marcha_carril(s, dir)
+	# v7: rodeando el anillo de una glorieta (desvío) el camino va a la altura del eje del anillo, que no es la de la
+	# malla de la glorieta que se ve (hasta 0,8 m más alta en la M-601): se apoya en la calzada de verdad
+	if ruta.desvio_en(s, dir) >= 0 and Ajustes.superficie != null:
+		var q: Vector3 = Ajustes.superficie.consultar(p.x, p.z, p.y + 0.5)
+		if q.y > 0.5 and absf(q.x + 0.05 - p.y) < 1.5:
+			p.y = q.x + 0.05
 	var desv: float = c.get("desv", 0.0)
 	if desv != 0.0:
 		# rodeando un obstáculo: desplazado hacia un lado (+ = derecha de la ruta) y girado lo que se abre
