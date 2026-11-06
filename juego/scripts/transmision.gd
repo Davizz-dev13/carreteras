@@ -223,9 +223,11 @@ func paso(dt: float, v: float, pedal: float, freno: float, seno: float, atras :=
 	if atras:
 		marcha = -1
 		cambio_t = 0.0
-		fuerza = pedal * fuerza_max(va)
+		# v6: la fuerza de la marcha atrás real (relación total de R del DQ381 hasta el corte), no la de la mejor marcha
+		# hacia delante; el tope de velocidad en R lo pone coche.gd (ficha_v_atras)
+		fuerza = pedal * f_marcha(va, -1, pedal)
 		retencion = 0.0
-		rpm = maxf(rpm_rueda(va, -1), ralenti + (900.0 * pedal))
+		rpm = minf(maxf(rpm_rueda(va, -1), ralenti + (900.0 * pedal)), corte)
 		potencia_motor = fuerza * va / ficha.rendimiento
 		corte_inyeccion = false
 		return fuerza

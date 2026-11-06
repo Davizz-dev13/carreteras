@@ -1,5 +1,6 @@
 ## Volante de la cabina: gira con la dirección (teclado, mando y piloto automático), en los tramos y en Madrid, sobre el
-## eje de la columna, a la derecha en sentido horario visto desde el asiento y con 450° de tope a tope; y los pilotos
+## eje de la columna, a la derecha en sentido horario visto desde el asiento y (v6) con el ángulo REAL que corresponde a las
+## ruedas (dirección progresiva: 13,2:1 en el centro, 2,1 vueltas = ±378° de tope a tope); y los pilotos
 ## traseros se encienden más al frenar. Sin mando real ni teclado real: Input.parse_input_event.
 ##   godot --headless res://pruebas/prueba_volante.tscn -- --ruta=0 --trafico=0
 ##   godot --headless res://pruebas/prueba_volante.tscn -- --madrid=1 --trafico=0
@@ -56,7 +57,7 @@ func _volante() -> Array:
 
 
 func _esperado() -> float:
-	return -j.coche.fraccion_volante() * Catalogo.VOLANTE_TOPE
+	return -Coche.volante_de_ruedas(j.coche.giro)
 
 
 func _correr() -> void:
@@ -98,19 +99,19 @@ func _correr() -> void:
 	j.coche.v = 0.0
 	_eje(0, JOY_AXIS_LEFT_X, 1.0); await _frames(90)
 	v = _volante()
-	_ok(absf(j.coche.giro - Coche.GIRO_MAX) < 0.02 and absf(rad_to_deg(v[0]) + 225.0) < 4.0, "mando a tope a la derecha (parado): ruedas %.1f° → volante %.0f° (tope 225°)" % [rad_to_deg(j.coche.giro), -rad_to_deg(v[0])])
+	_ok(absf(j.coche.giro - Coche.GIRO_MAX) < 0.02 and absf(rad_to_deg(v[0]) + 378.0) < 4.0, "mando a tope a la derecha (parado): ruedas %.1f° → volante %.0f° (tope 378°)" % [rad_to_deg(j.coche.giro), -rad_to_deg(v[0])])
 	_eje(0, JOY_AXIS_LEFT_X, -0.5); await _frames(90)
 	v = _volante()
 	_ok(v[0] > 0.0 and absf(v[0] - _esperado()) < deg_to_rad(4.0), "mando a la izquierda: volante %.0f° antihorario (esperado %.0f°)" % [rad_to_deg(v[0]), rad_to_deg(_esperado())])
 	_eje(0, JOY_AXIS_LEFT_X, 0.0); await _frames(90)
-	# ---- mando a fondo a 90 km/h: las ruedas giran pocos grados, pero el volante se ve girado (tope a esa velocidad) ----
+	# ---- mando a fondo a 90 km/h: las ruedas giran pocos grados y el volante lo que les corresponde (v6: ángulo real) ----
 	j.coche.v = 25.0
 	_eje(0, JOY_AXIS_LEFT_X, 1.0); await _frames(30)
 	v = _volante()
-	_ok(-rad_to_deg(v[0]) > 150.0, "mando a tope a 90 km/h: ruedas %.1f° → volante %.0f° (se ve girado)" % [rad_to_deg(j.coche.giro), -rad_to_deg(v[0])])
+	_ok(-rad_to_deg(v[0]) > 15.0 and absf(v[0] - _esperado()) < deg_to_rad(4.0), "mando a tope a 90 km/h: ruedas %.1f° → volante %.0f° (esperado %.0f°)" % [rad_to_deg(j.coche.giro), -rad_to_deg(v[0]), -rad_to_deg(_esperado())])
 	_eje(0, JOY_AXIS_LEFT_X, 0.5); await _frames(30)
 	v = _volante()
-	_ok(-rad_to_deg(v[0]) > 30.0 and absf(v[0] - _esperado()) < deg_to_rad(4.0), "mando a medias a 90 km/h: volante %.0f° (esperado %.0f°; el joystick tiene curva de respuesta)" % [-rad_to_deg(v[0]), -rad_to_deg(_esperado())])
+	_ok(-rad_to_deg(v[0]) > 5.0 and absf(v[0] - _esperado()) < deg_to_rad(4.0), "mando a medias a 90 km/h: volante %.0f° (esperado %.0f°; el joystick tiene curva de respuesta)" % [-rad_to_deg(v[0]), -rad_to_deg(_esperado())])
 	_eje(0, JOY_AXIS_LEFT_X, 0.0); j.coche.v = 0.0; await _frames(90)
 	# ---- frenos: pilotos ----
 	var luces: Array = m.get_meta("luces_freno")

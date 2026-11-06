@@ -304,6 +304,7 @@ func luces_freno(modelo: Node3D, frenando: bool) -> void:
 
 ## Volante de la cabina: gira sobre el eje de la columna con la dirección. frac = ángulo de las ruedas / máximo
 ## (-1 izquierda … +1 derecha). Desmultiplicación real: 450° de tope a tope (±225°), suavizado ligero.
+## (v6: el coche del jugador usa poner_volante con el ángulo real que sale de las ruedas, coche.gd)
 const VOLANTE_TOPE := deg_to_rad(225.0)
 func animar_volante(modelo: Node3D, frac: float, dt: float) -> void:
 	if modelo == null or not modelo.has_meta("volante"):
@@ -311,6 +312,17 @@ func animar_volante(modelo: Node3D, frac: float, dt: float) -> void:
 	var objetivo := -clampf(frac, -1.0, 1.0) * VOLANTE_TOPE      # a la derecha = horario visto desde el asiento
 	var k := 1.0 - exp(-maxf(dt, 0.0) * 30.0)      # suavizado corto (≈33 ms): sigue al mando sin retraso visible
 	var ang := lerpf(float(modelo.get_meta("volante_ang")), objetivo, k)
+	_girar_volante(modelo, ang)
+
+
+## v6: pone el volante de la cabina en el ángulo dado (rad, + = a la derecha, horario visto desde el asiento)
+func poner_volante(modelo: Node3D, ang_derecha: float) -> void:
+	if modelo == null or not modelo.has_meta("volante"):
+		return
+	_girar_volante(modelo, -ang_derecha)
+
+
+func _girar_volante(modelo: Node3D, ang: float) -> void:
 	modelo.set_meta("volante_ang", ang)
 	var base: Transform3D = modelo.get_meta("volante_base")
 	(modelo.get_meta("volante") as Node3D).transform = Transform3D(base.basis * Basis(Vector3.BACK, ang), base.origin)

@@ -1,0 +1,63 @@
+{
+ "fs": 22050,
+ "n": 2048,
+ "ne": 256,
+ "motores": {
+  "tsi": {
+   "rejilla": [
+    550,
+    700,
+    850,
+    1000,
+    1200,
+    1450,
+    1700,
+    2000,
+    2350,
+    2750,
+    3200,
+    3700,
+    4250,
+    4850,
+    5500,
+    6200,
+    6900
+   ],
+   "ralenti": 700,
+   "corte": 6500,
+   "diesel": false,
+   "orden": "tablas[rpm][carga 0 retención,1 plena][N] y luego envolventes[rpm][carga][NE]"
+  },
+  "tdi": {
+   "rejilla": [
+    600,
+    800,
+    950,
+    1100,
+    1300,
+    1550,
+    1800,
+    2100,
+    2450,
+    2850,
+    3300,
+    3800,
+    4350,
+    4950,
+    5500
+   ],
+   "ralenti": 800,
+   "corte": 5000,
+   "diesel": true,
+   "orden": "tablas[rpm][carga 0 retención,1 plena][N] y luego envolventes[rpm][carga][NE]"
+  }
+ },
+ "ruidos": {
+  "flujo_tsi": 0,
+  "flujo_tdi": 1,
+  "admision": 2,
+  "turbo": 3,
+  "soplo": 4
+ },
+ "nota": "Generado por pipeline/sonido_motor_v2.py (síntesis propia). Leído por scripts/motor_sintesis.gd."
+}

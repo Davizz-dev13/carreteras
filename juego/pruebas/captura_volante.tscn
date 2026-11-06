@@ -1,0 +1,6 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://pruebas/captura_volante.gd" id="1"]
+
+[node name="CapturaVolante" type="Node"]
+script = ExtResource("1")

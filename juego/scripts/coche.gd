@@ -79,6 +79,9 @@ var freno := 0.0
 var volante := 0.0              # -1 izquierda … +1 derecha (ángulo pedido normalizado)
 var giro_directo := false       # el piloto pide un ángulo exacto en vez de volante
 var entrada_digital := false    # v5: el giro viene de teclas (todo o nada): la dirección la limita la deriva real
+var teclas := false             # v6: la última dirección pedida vino de teclas (también al soltarlas, para la vuelta al centro)
+var giro_vel := 0.0             # v6: velocidad de giro de las ruedas con teclas (rad/s), para la rampa en S
+const T_RAMPA_TECLAS := 0.05    # v6: s en llegar a la velocidad de giro máxima (y en pararla) con teclas
 var a_carga := 0.0              # v5: aceleración longitudinal que transfiere carga (sin la componente de la pendiente)
 var marcha_atras := false
 
@@ -118,6 +121,9 @@ func colocar(p: Vector3, direccion: Vector3) -> void:
 	vy = 0.0
 	r_yaw = 0.0
 	v_lat = 0.0
+	giro_vel = 0.0
+	vol_cab = 0.0
+	vol_cab_v = 0.0
 	giro_ext = 0.0
 	cab_v = 0.0
 	bal_v = 0.0
@@ -158,8 +164,8 @@ func paso_fisica(dt: float) -> void:
 		# limitador electrónico de velocidad máxima (o la máxima real si no lo lleva)
 		if v * sentido > ficha.v_max:
 			f = 0.0
-	if marcha_atras and v < -5.0:
-		f = maxf(f, 0.0)
+	if marcha_atras and v < -ficha_v_atras():
+		f = maxf(f, 0.0)            # tope de la marcha atrás (ver ficha_v_atras)
 	f -= 0.5 * RHO * ficha.cx_a * v * absf(v)
 	f -= ficha.crr * m * G * signf(v) * (1.0 if en_carretera else 6.0)
 	f -= m * G * seno                       # ¡la gravedad de la pendiente real!
@@ -223,7 +229,31 @@ func paso_fisica(dt: float) -> void:
 			objetivo = lerpf(objetivo, limitado, w_dig)
 		# ≈0,35 s hasta el tope al pulsar y ≈0,25 s para volver al centro al soltar
 		var ritmo := g_max / (0.35 if absf(objetivo) > absf(giro) and signf(objetivo) == signf(giro) or giro == 0.0 else 0.25)
-		giro = move_toward(giro, objetivo, maxf(ritmo, 0.05) * dt)
+		if entrada_digital:
+			teclas = true
+		elif volante != 0.0:
+			teclas = false              # mando o volante real: su eje manda tal cual (sin el suavizado de las teclas)
+		if teclas:
+			# v6 (teclas, como las ayudas de dirección de los simuladores): el giro sigue al objetivo con una rampa en S,
+			# con la velocidad de giro limitada (la misma de antes, sensible a la velocidad) y también su aceleración: al
+			# pulsar o soltar, la dirección arranca y se para poco a poco en vez de empezar y frenar de golpe, y sin pasarse
+			# del objetivo (frena justo a tiempo). El límite por deriva de arriba sigue mandando sobre el objetivo.
+			var r_max := maxf(ritmo, 0.05)
+			var a_max := r_max / T_RAMPA_TECLAS
+			var e := objetivo - giro
+			var w_obj := signf(e) * minf(r_max, sqrt(2.0 * a_max * absf(e)))
+			# al soltar o al cambiar de lado, la inercia de la dirección se frena el triple de rápido (no sigue girando)
+			var frena := signf(giro_vel) != signf(w_obj) or absf(w_obj) < absf(giro_vel)
+			giro_vel = move_toward(giro_vel, w_obj, a_max * (3.0 if frena else 1.0) * dt)
+			var paso := giro_vel * dt
+			if absf(e) < 1e-5 or (signf(paso) == signf(e) and absf(paso) >= absf(e)) or (signf(paso) != signf(e) and absf(e) < a_max * dt * dt):
+				giro = objetivo           # llega sin pasarse
+				giro_vel = 0.0
+			else:
+				giro += paso
+		else:
+			giro = move_toward(giro, objetivo, maxf(ritmo, 0.05) * dt)
+			giro_vel = 0.0
 	# el piloto pide la curvatura de su trayectoria (ángulo "geométrico"); se le suma lo que el coche subvira
 	var delta := giro
 	if giro_directo:
@@ -252,7 +282,7 @@ func paso_fisica(dt: float) -> void:
 	position.x += avance.x
 	position.z += avance.z
 	Catalogo.animar_ruedas(modelo, v * dt, giro)
-	Catalogo.animar_volante(modelo, fraccion_volante(), dt)
+	Catalogo.poner_volante(modelo, angulo_volante_cabina(dt))
 	Catalogo.luces_freno(modelo, freno > 0.05)
 	odometro += absf(v) * dt
 	choque_t = maxf(0.0, choque_t - dt)
@@ -431,3 +461,43 @@ func _aplicar_base() -> void:
 ## Parte del volante girada (-1..1): el ángulo de las ruedas respecto al tope de dirección a esta velocidad
 func fraccion_volante() -> float:
 	return clampf(giro / maxf(g_max_vel, 0.02), -1.0, 1.0)
+
+
+## v6: ángulo del volante de la cabina (rad, + = a la derecha) que corresponde al ángulo real de las ruedas, con la
+## desmultiplicación de la dirección progresiva de VW (de serie en el Arteon): 2,1 vueltas de tope a tope (±378°), más
+## directa hacia los topes. Antes se dibujaba la parte usada del tope a esta velocidad, así que a 90 km/h unos pocos
+## grados de ruedas eran media vuelta de volante y el aro iba a golpes (y saltaba al frenar, porque el tope cambia).
+const VOLANTE_RAD_CENTRO := 13.2       # desmultiplicación cerca del centro (como la dirección normal del MQB, supuesto)
+static func volante_de_ruedas(delta: float) -> float:
+	var d := clampf(delta, -GIRO_MAX, GIRO_MAX)
+	var tope := deg_to_rad(378.0)
+	var b := (tope - VOLANTE_RAD_CENTRO * GIRO_MAX) / pow(GIRO_MAX, 3.0)
+	return VOLANTE_RAD_CENTRO * d + b * d * d * d
+
+
+## v6: el aro sigue a ese ángulo con un muelle de amortiguación crítica (sin rebote, ≈60 ms), solo en el dibujo: la
+## dirección de verdad (giro) no se retrasa nada. Devuelve el ángulo a dibujar (rad).
+var vol_cab := 0.0
+var vol_cab_v := 0.0
+const OMEGA_VOLANTE := 34.0
+func angulo_volante_cabina(dt: float) -> float:
+	var obj := volante_de_ruedas(giro)
+	if dt <= 0.0:
+		vol_cab = obj; vol_cab_v = 0.0
+		return vol_cab
+	# integración exacta del muelle crítico en este paso (estable a cualquier dt)
+	var x0 := vol_cab - obj
+	var w := OMEGA_VOLANTE
+	var ex := exp(-w * dt)
+	var c := vol_cab_v + w * x0
+	vol_cab = obj + (x0 + c * dt) * ex
+	vol_cab_v = (c - w * (x0 + c * dt)) * ex
+	return vol_cab
+
+
+## v6: velocidad máxima en marcha atrás (m/s). La da la marcha atrás real del DSG7 (relación total 12,97–13,96) hasta
+## el corte, pero sin pasar de 45 km/h (supuesto: el control del motor limita las vueltas en R; es lo que da de verdad
+## un DSG con R a ~4.700 rpm). Antes se cortaba la fuerza a 18 km/h (5 m/s).
+const V_ATRAS_MAX := 45.0 / 3.6
+func ficha_v_atras() -> float:
+	return minf(V_ATRAS_MAX, caja.corte / 60.0 * TAU * caja.r_rueda / caja.rel_r)
