@@ -133,7 +133,10 @@ func _correr() -> void:
 	await _pulsar(JOY_BUTTON_BACK)
 	await _pulsar(JOY_BUTTON_START)
 	await get_tree().process_frame
-	_ok(j._salir_t > 0.0 and j.l_cruce.text.begins_with("Pulsa OPTIONS"), "OPTIONS una vez → pide confirmar (no sale)")
+	_ok(j.pausado and j.pausa.panel.visible and is_instance_valid(j) and j.is_inside_tree(), "OPTIONS → menú de pausa (no sale al menú principal)")
+	await _pulsar(JOY_BUTTON_START)
+	await get_tree().process_frame
+	_ok(not j.pausado and not j.pausa.panel.visible, "OPTIONS otra vez → sigue conduciendo")
 	# joystick derecho
 	Ajustes.camara = 0
 	j.coche.v = 12.0

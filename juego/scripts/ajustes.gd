@@ -5,6 +5,10 @@ const ZONA_POR_DEFECTO := "navacerrada"
 ## Zonas incluidas: carpeta en res://datos/ → nombre en el menú
 const ZONAS := {"navacerrada": "Puerto de Navacerrada (Madrid/Segovia)", "a308": "A-308 Iznalloz – Darro (Granada)", "gr8101": "GR-8101 Sierra de Baza (Granada)", "m406": "M-406"}
 
+## Mapa abierto de la Comunidad de Madrid (escenas/madrid.tscn): una entrada más del selector de zonas del menú
+const ZONA_MADRID := "madrid"
+const NOMBRE_MADRID := "Comunidad de Madrid · mapa abierto (todas las interurbanas)"
+
 # --- opciones de la partida (las rellena el menú) ---
 var zona := ZONA_POR_DEFECTO
 var ruta_idx := 0
@@ -19,6 +23,10 @@ var trafico := 0.3         # 0..1
 var camara := 0            # 0 persecución, 1 cabina
 var volumen_motor := 0.8   # 0..1, sonido del motor del coche (sonido_motor.gd)
 var silencio := false      # N: silenciar el motor
+var madrid_elegida := false   # el menú tiene elegida la Comunidad de Madrid (mapa abierto) en el selector de zonas
+## Viaje pinchando en el mapa (mapa_viaje.gd): {"zona": z, "e": UTM este, "n": UTM norte}; la escena de destino
+## pone el coche en el punto de carretera más cercano mirando a lo largo de ella y lo vacía. {} = salida normal.
+var viaje := {}
 
 # --- datos cargados ---
 var info := {}
@@ -32,6 +40,7 @@ var ter_paso := 20.0
 var ter_n := 101
 var ter_tesela := 2000.0
 var superficie: Superficie
+var _sup_zona: Superficie      # la de la zona de carretera (el mapa abierto pone la suya en superficie)
 # --- mundo por teselas (scripts/mundo_stream/, prototipo: Navacerrada) ---
 var mundo_stream := false     # --mundo=stream o el menú (solo .exe): suelo PNOA + relieve LiDAR descargados por teselas
 var terreno_stream: Node = null   # TerrenoStream mientras hay partida
@@ -76,12 +85,15 @@ func cambiar_zona(z: String) -> void:
 	glorietas = []
 	terreno.clear()
 	superficie = null
+	_sup_zona = null
 
 
 func cargar() -> void:
 	if args.has("zona") and args["zona"] != zona and rutas.is_empty():
 		zona = args["zona"]
 	if not rutas.is_empty():
+		if _sup_zona != null:
+			superficie = _sup_zona      # de vuelta del mapa abierto (ma_mundo.gd pone la suya)
 		return
 	var t0 := Time.get_ticks_msec()
 	info = JSON.parse_string(FileAccess.get_file_as_string(dir_datos() + "zona.json"))
@@ -126,6 +138,7 @@ func cargar() -> void:
 	print("Cruces: ", cr)
 	superficie = Superficie.new()
 	superficie.construir(rutas, vias)
+	_sup_zona = superficie
 	print("Datos cargados en %d ms: %d rutas, %d vías, %d teselas" % [Time.get_ticks_msec() - t0, rutas.size(), vias.size(), terreno.size()])
 
 
@@ -186,6 +199,44 @@ func altura_terreno_zona(x: float, z: float) -> float:
 
 func ruta() -> Ruta:
 	return rutas[clampi(ruta_idx, 0, rutas.size() - 1)]
+
+
+## ¿Está el mapa abierto de Madrid en este ejecutable? (en la web no van sus datos)
+static func hay_madrid() -> bool:
+	return not OS.has_feature("web") and FileAccess.file_exists("res://datos/madrid/mundo.json")
+
+
+## Viaje pendiente a esta zona de carretera (mapa_viaje.gd): elige la ruta y el km más cercanos al punto pinchado
+## y el sentido hacia el lado con más carretera por delante. Devuelve true si lo ha aplicado.
+func aplicar_viaje() -> bool:
+	if viaje.is_empty() or str(viaje.get("zona", "")) != zona or rutas.is_empty():
+		return false
+	var e0 := float(info["origen_utm"][0])
+	var n0 := float(info["origen_utm"][1])
+	var p := Vector3(float(viaje["e"]) - e0, 0.0, n0 - float(viaje["n"]))
+	var mejor := -1
+	var dmin := 1e30
+	var s_mejor := 0.0
+	for i in rutas.size():
+		var pr := rutas[i].proyectar(p)
+		var q := rutas[i].punto(pr.x)
+		var d := Vector2(q.x - p.x, q.z - p.z).length()
+		if d < dmin:
+			dmin = d
+			mejor = i
+			s_mejor = pr.x
+	viaje = {}
+	if mejor < 0:
+		return false
+	ruta_idx = mejor
+	var L := rutas[mejor].longitud()
+	var s := clampf(s_mejor, 0.0, L)
+	km_ini = s / 1000.0
+	km_fin = L / 1000.0 if L - s >= s else 0.0          # sentido con más carretera por delante
+	if absf(km_fin - km_ini) < 0.2:
+		km_fin = 0.0 if km_fin > km_ini else L / 1000.0
+	print("VIAJE zona=%s ruta=%d (%s) km %.2f → %.2f, a %.0f m del punto pinchado" % [zona, mejor, rutas[mejor].nombre, km_ini, km_fin, dmin])
+	return true
 
 
 ## Línea central derivada (no son las marcas reales): tramos de línea discontinua de datos/…/adelantar.json,

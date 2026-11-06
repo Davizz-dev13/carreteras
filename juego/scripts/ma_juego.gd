@@ -2,7 +2,7 @@
 ## pantallas de carga (teselas de 2 km leídas del disco en hilos, ver ma_mundo.gd). Solo en la versión de escritorio.
 ## Teclas: W/S/A/D o flechas · Espacio freno de mano · P piloto automático · Q/E en el próximo cruce: izquierda/derecha
 ## (otra vez = seguir recto) · +/- velocidad del piloto · C cámara · R volver a la carretera · M mapa grande y GPS (ma_mapa.gd)
-## · Z/X zoom del minimapa · F3 datos · Esc menú · G/T bajar/subir marcha (T mantenida: automático) · N silenciar motor.
+## · Z/X zoom del minimapa · F3 datos · Esc pausa · G/T bajar/subir marcha (T mantenida: automático) · N silenciar motor.
 ## Mando (como en los tramos): R2 acelerar · L2 frenar (parado: marcha atrás) · joystick izq. girar · joystick der.
 ## mirar · L1/R1 bajar/subir marcha · ✕ freno de mano · △ piloto · ○ cámara · L3/R3 volver a la carretera ·
 ## cruceta ←→ próximo cruce, ↑↓ velocidad del piloto · panel táctil mapa (ma_mapa.gd) · SHARE datos · OPTIONS (dos veces) menú.
@@ -51,6 +51,8 @@ var _choque_t := 0.0
 var en_prueba := false
 var gps: MaGps                  # ruta al destino elegido en el mapa (ma_gps.gd)
 var mapa: MaMapa                # minimapa, mapa grande con M y GPS (ma_mapa.gd)
+var pausa := MenuPausa.new()    # Esc / OPTIONS: pausa con opciones y "Cambiar de carretera" (pausa.gd)
+var pausado := false
 
 
 func _ready() -> void:
@@ -80,7 +82,7 @@ func _ready() -> void:
 	sonido.coche = coche
 	coche.add_child(sonido)               # motor con las rpm reales de la caja (sonido_motor.gd)
 	piloto = Ajustes.piloto
-	var salida := _salida(str(Ajustes.args.get("inicio", "A-6")))
+	var salida := _salida_viaje() if str(Ajustes.viaje.get("zona", "")) == Ajustes.ZONA_MADRID else _salida(str(Ajustes.args.get("inicio", "A-6")))
 	_colocar_en(salida[0], salida[1], salida[2])
 	mundo.actualizar(coche.position, true)
 	trafico.iniciar(red, mundo, Ajustes.trafico)
@@ -97,6 +99,8 @@ func _ready() -> void:
 	mapa = MaMapa.new()
 	add_child(mapa)
 	mapa.iniciar(self)
+	add_child(pausa)
+	pausa.cambio.connect(func(on: bool) -> void: pausado = on)
 	print("Mapa abierto: %d tramos, %d nodos, listo en %d ms (teselas iniciales %d)" % [datos.tramos.size(), datos.nodos.size(), Time.get_ticks_msec() - t0, mundo.listas()])
 	cargado = true
 	if Ajustes.args.has("captura"):
@@ -132,6 +136,53 @@ func _salida(ref: String) -> Array:
 	return [mejor, sv if sv != 0 else 1, minf(20.0, red.longitud(mejor) * 0.5)]
 
 
+## Pausa (pausa.gd): el coche y el tráfico se paran; el mapa de viaje sabe dónde está el coche
+func pausar(on: bool) -> void:
+	var o: Array = datos.info.get("origen_utm", [0.0, 0.0])
+	pausa.aqui = Vector2(float(o[0]) + coche.position.x, float(o[1]) - coche.position.z)
+	pausa.abrir(on)
+
+
+## Viaje pinchando en el mapa (mapa_viaje.gd): tramo (no ramal ni túnel) más cercano al punto elegido, la distancia
+## a lo largo de él y el sentido (el permitido; en doble sentido, hacia donde queda más tramo por delante)
+func _salida_viaje() -> Array:
+	var v: Dictionary = Ajustes.viaje
+	Ajustes.viaje = {}
+	var o: Array = datos.info["origen_utm"]
+	var p := Vector2(float(v["e"]) - float(o[0]), float(o[1]) - float(v["n"]))
+	var mejor := -1
+	var dmin := 1e30
+	var d_mejor := 0.0
+	for k in datos.tramos.size():
+		var t: Dictionary = datos.tramos[k]
+		if int(t["tunel"]) == 1 or int(t["enlace"]) == 1:
+			continue
+		var na = datos.nodos.get(int(t["a"]))
+		if na != null and Vector2(float(na[0]), float(na[2])).distance_to(p) - float(t["L"]) > dmin:
+			continue
+		var pts := datos.geometria(k)
+		var acum := 0.0
+		for i in pts.size() - 1:
+			var a := Vector2(pts[i].x, pts[i].z)
+			var ab := Vector2(pts[i + 1].x, pts[i + 1].z) - a
+			var l := ab.length()
+			var f := clampf((p - a).dot(ab) / maxf(l * l, 1e-6), 0.0, 1.0)
+			var d := (a + ab * f).distance_to(p)
+			if d < dmin:
+				dmin = d
+				mejor = k
+				d_mejor = acum + l * f
+			acum += l
+	if mejor < 0:
+		return _salida("A-6")
+	var L := red.longitud(mejor)
+	var sv := int(datos.tramos[mejor]["s"])
+	var sd := sv if sv != 0 else (1 if L - d_mejor >= d_mejor else -1)
+	var d_paso := d_mejor if sd > 0 else L - d_mejor
+	print("VIAJE madrid tramo=%d (%s) sentido %d d=%.0f de %.0f m, a %.0f m del punto pinchado" % [mejor, datos.rotulo(mejor), sd, d_paso, L, dmin])
+	return [mejor, sd, clampf(d_paso, 0.0, L)]
+
+
 func _colocar_en(k: int, sd: int, d: float) -> void:
 	camino = [[k, sd]]
 	d_camino = d
@@ -146,7 +197,7 @@ func _colocar_en(k: int, sd: int, d: float) -> void:
 
 # ------------------------------------------------------------------ simulación
 func _physics_process(dt: float) -> void:
-	if not cargado or en_prueba or (mapa != null and mapa.abierto):
+	if not cargado or en_prueba or pausado or (mapa != null and mapa.abierto):
 		return
 	_simular(dt)
 
@@ -589,6 +640,17 @@ func _choques(dt: float) -> void:
 func _unhandled_input(ev: InputEvent) -> void:
 	if not cargado:
 		return
+	# Esc / OPTIONS: pausa (antes Esc sacaba al menú principal sin preguntar); con el mapa grande abierto lo cierra ma_mapa.gd
+	var es_pausa: bool = (ev is InputEventKey and ev.pressed and not ev.echo and ev.physical_keycode == KEY_ESCAPE) or \
+		(ev is InputEventJoypadButton and ev.pressed and ev.button_index == JOY_BUTTON_START)
+	if es_pausa:
+		if pausa.viendo_mapa() or (mapa != null and mapa.abierto):
+			return
+		pausar(not pausado)
+		get_viewport().set_input_as_handled()
+		return
+	if pausado:
+		return
 	if ev is InputEventJoypadButton and ev.pressed:
 		_boton_mando(ev.button_index)
 		return
@@ -619,8 +681,6 @@ func _unhandled_input(ev: InputEvent) -> void:
 			ver_datos = not ver_datos
 		KEY_N:
 			Ajustes.silencio = not Ajustes.silencio
-		KEY_ESCAPE:
-			get_tree().change_scene_to_file("res://escenas/menu.tscn")
 
 
 func _alternar_piloto() -> void:
@@ -687,11 +747,6 @@ func _boton_mando(b: int) -> void:
 			Ajustes.velocidad = maxf(Ajustes.velocidad - 10.0, 20.0)
 		JOY_BUTTON_BACK:                      # SHARE datos (F3)
 			ver_datos = not ver_datos
-		JOY_BUTTON_START:                     # OPTIONS dos veces: menú (Esc)
-			if _salir_t > 0.0:
-				get_tree().change_scene_to_file("res://escenas/menu.tscn")
-			else:
-				_salir_t = 3.0
 
 
 func _volver_a_carretera() -> void:
@@ -724,7 +779,7 @@ func _process(dt: float) -> void:
 	_salir_t = maxf(_salir_t - dt, 0.0)
 	sonido.cabina = Ajustes.camara == 1
 	sonido.volumen = Ajustes.volumen_motor
-	sonido.silencio = Ajustes.silencio
+	sonido.silencio = Ajustes.silencio or pausado
 	_camara(dt)
 	_hud()
 
@@ -804,7 +859,7 @@ func _crear_hud() -> void:
 	l_datos.add_theme_font_size_override("font_size", 14)
 	hud.add_child(l_datos)
 	var ayuda := Label.new()
-	ayuda.text = ("W/S/A/D · Espacio freno de mano · G/T marcha (T mantenida: automático) · P piloto · Q/E próximo cruce izq./der. · +/- velocidad · C cámara · R carretera · M mapa y GPS · Z/X zoom minimapa · N silenciar motor · F3 datos · Esc menú\n" +
+	ayuda.text = ("W/S/A/D · Espacio freno de mano · G/T marcha (T mantenida: automático) · P piloto · Q/E próximo cruce izq./der. · +/- velocidad · C cámara · R carretera · M mapa y GPS · Z/X zoom minimapa · N silenciar motor · F3 datos · Esc pausa (opciones, cambiar de carretera, menú)\n" +
 		"Mando: R2/L2 gas/freno · joystick izq. girar, der. mirar · L1/R1 marcha (R1 mantenido: automático) · ✕ freno de mano · △ piloto · ○ cámara · cruceta ←→ cruce, ↑↓ velocidad · L3 carretera · panel táctil mapa · SHARE datos · OPTIONS ×2 menú")
 	ayuda.add_theme_font_size_override("font_size", 13)
 	ayuda.modulate = Color(1, 1, 1, 0.7)

@@ -24,6 +24,11 @@ var lista_coches := OptionButton.new()
 var lista_colores := OptionButton.new()
 var ficha_txt := Label.new()
 var boton_empezar: Button
+var ck_stream: CheckButton            # "Mundo real por teselas (beta)": solo con el Puerto de Navacerrada
+var filas_carretera: Array[Control] = []   # carretera, perfil, km y datos del tramo: se ocultan con el mapa abierto
+var info_madrid := Label.new()
+var sub := Label.new()
+var mapa_viaje: MapaViaje = null
 
 
 func _ready() -> void:
@@ -45,30 +50,61 @@ func _ready() -> void:
 	scroll.follow_focus = true
 	marco.add_child(scroll)
 	var col := VBoxContainer.new()
-	col.add_theme_constant_override("separation", 8)
+	col.add_theme_constant_override("separation", 6)
 	col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	scroll.add_child(col)
 	var titulo := Label.new()
 	titulo.text = "Carreteras de España · escala 1:1"
 	titulo.add_theme_font_size_override("font_size", 30)
 	col.add_child(titulo)
-	var sub := Label.new()
-	sub.text = "Trazado real de OpenStreetMap · altitud real del MDT del IGN · zona: %s" % Ajustes.zona
 	sub.modulate = Color(0.75, 0.8, 0.85)
 	col.add_child(sub)
-	# zona (cada una con su terreno y sus carreteras; cambiarla recarga el menú)
+	# zona (cada una con su terreno y sus carreteras; cambiarla recarga el menú). La Comunidad de Madrid (mapa abierto)
+	# es una zona más de la lista, como las demás (antes iba aparte, en un botón debajo de todo)
 	var fila_z := HBoxContainer.new()
+	fila_z.add_theme_constant_override("separation", 12)
 	fila_z.add_child(_etq("Zona:", 140))
-	var claves := Ajustes.ZONAS.keys()
-	for k in claves:
-		lista_zonas.add_item(Ajustes.ZONAS[k])
-	lista_zonas.selected = maxi(claves.find(Ajustes.zona), 0)
+	var claves: Array = []
+	for k in MapaViaje.ORDEN:
+		if k == Ajustes.ZONA_MADRID:
+			if Ajustes.hay_madrid():
+				claves.append(k)
+				lista_zonas.add_item(Ajustes.NOMBRE_MADRID)
+		elif Ajustes.ZONAS.has(k):
+			claves.append(k)
+			lista_zonas.add_item(Ajustes.ZONAS[k])
+	for k in Ajustes.ZONAS:
+		if not claves.has(k):
+			claves.append(k)
+			lista_zonas.add_item(Ajustes.ZONAS[k])
+	if Ajustes.madrid_elegida and not claves.has(Ajustes.ZONA_MADRID):
+		Ajustes.madrid_elegida = false
+	lista_zonas.selected = maxi(claves.find(Ajustes.ZONA_MADRID if Ajustes.madrid_elegida else Ajustes.zona), 0)
 	lista_zonas.custom_minimum_size.x = 520
 	lista_zonas.item_selected.connect(func(i):
+		if claves[i] == Ajustes.ZONA_MADRID:
+			Ajustes.madrid_elegida = true
+			_modo_madrid()
+			return
+		Ajustes.madrid_elegida = false
+		if claves[i] == Ajustes.zona:
+			_modo_madrid()
+			return
 		Ajustes.cambiar_zona(claves[i])
 		get_tree().reload_current_scene())
 	fila_z.add_child(lista_zonas)
+	var b_mapa := Button.new()
+	b_mapa.text = "  Elegir en el mapa…  "
+	b_mapa.tooltip_text = "Mapa de España con todas las carreteras del juego: pincha en una y sales allí"
+	b_mapa.pressed.connect(_abrir_mapa_viaje)
+	fila_z.add_child(b_mapa)
 	col.add_child(fila_z)
+	info_madrid.text = ("Mapa abierto: todas las carreteras interurbanas de la Comunidad de Madrid, con sus cruces, glorietas y tráfico. " +
+		"Sales en la A-6; con M abres el mapa y el GPS, y con Esc la pausa (desde ahí, \"Cambiar de carretera\").")
+	info_madrid.autowrap_mode = TextServer.AUTOWRAP_WORD
+	info_madrid.modulate = Color(1, 0.85, 0.6)
+	info_madrid.add_theme_font_size_override("font_size", 16)
+	col.add_child(info_madrid)
 	# carretera
 	var fila := HBoxContainer.new()
 	fila.add_child(_etq("Carretera:", 140))
@@ -78,6 +114,7 @@ func _ready() -> void:
 	lista_rutas.item_selected.connect(_al_cambiar_ruta)
 	fila.add_child(lista_rutas)
 	col.add_child(fila)
+	filas_carretera.append(fila)
 	# coche (real, con su ficha técnica)
 	var fila_c := HBoxContainer.new()
 	fila_c.add_child(_etq("Coche:", 140))
@@ -97,10 +134,14 @@ func _ready() -> void:
 	col.add_child(ficha_txt)
 	lista_coches.selected = Catalogo.elegida
 	_al_cambiar_coche(Catalogo.elegida)
-	perfil.custom_minimum_size = Vector2(0, 150)
+	# más bajo en pantallas de 720 de alto, para que "¡A conducir!" quepa sin desplazar
+	perfil.custom_minimum_size = Vector2(0, 150 if get_viewport().get_visible_rect().size.y >= 900 else 100)
 	col.add_child(perfil)
-	col.add_child(_fila_slider("Km inicio:", km_ini, lbl_ini))
-	col.add_child(_fila_slider("Km fin:", km_fin, lbl_fin))
+	var f_ini := _fila_slider("Km inicio:", km_ini, lbl_ini)
+	var f_fin := _fila_slider("Km fin:", km_fin, lbl_fin)
+	col.add_child(f_ini)
+	col.add_child(f_fin)
+	filas_carretera.append_array([perfil, f_ini, f_fin, info])
 	info.add_theme_font_size_override("font_size", 16)
 	info.modulate = Color(1, 0.85, 0.6)
 	col.add_child(info)
@@ -108,12 +149,14 @@ func _ready() -> void:
 	vel.max_value = 150
 	vel.step = 5
 	vel.value = Ajustes.velocidad
-	col.add_child(_fila_slider("Velocidad:", vel, lbl_vel))
+	var fila_ajustes := HFlowContainer.new()     # velocidad, tráfico y sonido en una sola fila (antes tres)
+	fila_ajustes.add_theme_constant_override("h_separation", 18)
+	fila_ajustes.add_child(_grupo_slider("Velocidad:", vel, lbl_vel))
 	traf.min_value = 0
 	traf.max_value = 100
 	traf.step = 5
 	traf.value = Ajustes.trafico * 100.0
-	col.add_child(_fila_slider("Tráfico:", traf, lbl_traf))
+	fila_ajustes.add_child(_grupo_slider("Tráfico:", traf, lbl_traf))
 	# sonido del motor (sonido_motor.gd); en carretera, N lo silencia
 	vol_motor.min_value = 0
 	vol_motor.max_value = 100
@@ -124,10 +167,14 @@ func _ready() -> void:
 		Ajustes.volumen_motor = x / 100.0
 		Ajustes.silencio = x <= 0.0
 		lbl_vol_motor.text = "%d %%" % roundi(x))
-	col.add_child(_fila_slider("Sonido motor:", vol_motor, lbl_vol_motor))
-	var opciones := HBoxContainer.new()
-	opciones.add_theme_constant_override("separation", 24)
-	chk_piloto.text = "Piloto automático (sigue su carril a la velocidad elegida)"
+	fila_ajustes.add_child(_grupo_slider("Sonido motor:", vol_motor, lbl_vol_motor))
+	col.add_child(fila_ajustes)
+	# en varias líneas si no caben (a 1280×720 las cuatro casillas y la cámara se salían por la derecha)
+	var opciones := HFlowContainer.new()
+	opciones.add_theme_constant_override("h_separation", 24)
+	opciones.add_theme_constant_override("v_separation", 6)
+	chk_piloto.text = "Piloto automático"
+	chk_piloto.tooltip_text = "Sigue su carril a la velocidad elegida"
 	chk_piloto.button_pressed = Ajustes.piloto
 	chk_curvas.text = "Adaptar velocidad en curvas"
 	chk_curvas.button_pressed = Ajustes.adaptar_curvas
@@ -137,7 +184,7 @@ func _ready() -> void:
 	chk_limite_adel.tooltip_text = "Si está marcado, al adelantar no pasa del límite de velocidad del tramo (y si así no le da, no adelanta)"
 	chk_limite_adel.button_pressed = Ajustes.limite_adelantar
 	opciones.add_child(chk_limite_adel)
-	chk_piloto_lim.text = "Piloto respeta límites de velocidad"
+	chk_piloto_lim.text = "Piloto respeta límites"
 	chk_piloto_lim.tooltip_text = "Si está marcado, el piloto automático no pasa del límite de cada tramo; si no, va a la velocidad elegida (frenando igual en las curvas)"
 	chk_piloto_lim.button_pressed = Ajustes.piloto_limites
 	opciones.add_child(chk_piloto_lim)
@@ -156,20 +203,22 @@ func _ready() -> void:
 	var ayuda := Label.new()
 	ayuda.text = "   Si la velocidad es mayor de la que permite una curva y no adaptas, el coche se sale (física real)."
 	ayuda.modulate = Color(0.7, 0.75, 0.8)
+	ayuda.autowrap_mode = TextServer.AUTOWRAP_WORD
+	ayuda.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	ayuda.custom_minimum_size.x = 200
 	fila_b.add_child(ayuda)
 	col.add_child(fila_b)
 	# Gráficos y mapa abierto, debajo del botón (así el botón se ve sin desplazar en 16:9)
 	col.add_child(Paisaje.fila_menu())   # Gráficos alto/bajo y Estación (paisaje.gd; oculto en la web)
 	col.add_child(Rendimiento.fila_nota())   # por qué está en "bajo" si se eligió solo (rendimiento.gd)
-	col.add_child(MaMundo.fila_menu(self))   # mapa abierto de la Comunidad de Madrid (ma_mundo.gd; oculto en la web)
 	col.add_child(_fila_mundo_stream())      # prototipo del mundo por teselas (scripts/mundo_stream/; oculto en la web)
 	var mandos := Label.new()
 	mandos.text = ("Mandos en carretera: W/↑ acelerar · S/↓ frenar (parado: marcha atrás) · G/T bajar/subir marcha (cambio manual; T mantenida vuelve al automático) · " +
 		"P piloto automático · O adelantar (con el piloto) · L respetar límite al adelantar · +/− velocidad · K adaptar en curvas · 9/0 menos/más tráfico · " +
-		"V cámara · R volver a la carretera · N silenciar el motor · Esc pausa (tráfico, velocidad y volumen) · H ayuda\n" +
+		"V cámara · R volver a la carretera · N silenciar el motor · Esc pausa (opciones, cambiar de carretera en el mapa, menú, salir) · H ayuda\n" +
 		"Mando de PS4: R2 acelerar · L2 frenar (parado: marcha atrás) · joystick izquierdo girar · joystick derecho mirar alrededor · " +
 		"L1/R1 bajar/subir marcha (R1 mantenido: automático) · ✕ freno de mano · △ piloto · □ adelantar · " +
-		"cruceta ↑↓ velocidad y ←→ tráfico · ○ cámara · L3/R3 volver a la carretera · OPTIONS pausa (curvas y límite al adelantar) · SHARE ayuda. " +
+		"cruceta ↑↓ velocidad y ←→ tráfico · ○ cámara · L3/R3 volver a la carretera · OPTIONS pausa (opciones y cambiar de carretera) · SHARE ayuda. " +
 		"En el navegador, pulsa un botón del mando para que lo detecte; en este menú, cruceta para moverte y ✕ para elegir.")
 	mandos.autowrap_mode = TextServer.AUTOWRAP_WORD
 	mandos.modulate = Color(0.65, 0.7, 0.75)
@@ -185,6 +234,7 @@ func _ready() -> void:
 		s.value_changed.connect(func(_v): _refrescar())
 	lista_rutas.selected = Ajustes.ruta_idx
 	_al_cambiar_ruta(Ajustes.ruta_idx)
+	_modo_madrid()
 	# mando: con uno conectado, el foco empieza en "¡A conducir!" (cruceta para moverse, ✕ para pulsar)
 	Input.joy_connection_changed.connect(_al_cambiar_mando)
 	if not Input.get_connected_joypads().is_empty():
@@ -246,6 +296,19 @@ func _fila_slider(t: String, s: HSlider, lbl: Label) -> HBoxContainer:
 	return f
 
 
+## Etiqueta + deslizador + valor, compactos (tres en una fila)
+func _grupo_slider(t: String, s: HSlider, lbl: Label) -> HBoxContainer:
+	var f := HBoxContainer.new()
+	f.add_child(_etq(t, 112 if t.length() > 10 else 84))
+	s.custom_minimum_size.x = 190
+	s.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	f.add_child(s)
+	lbl.custom_minimum_size.x = 96
+	lbl.clip_text = true
+	f.add_child(lbl)
+	return f
+
+
 func _al_cambiar_coche(i: int) -> void:
 	Catalogo.elegida = i
 	var f := Catalogo.ficha_elegida()
@@ -289,7 +352,7 @@ func _refrescar() -> void:
 	lbl_ini.text = ("km %.1f · %d m" % [km_ini.value, roundi(r.punto(perfil.s0).y)]).replace(".", ",")
 	lbl_fin.text = ("km %.1f · %d m" % [km_fin.value, roundi(r.punto(perfil.s1).y)]).replace(".", ",")
 	lbl_vel.text = "%d km/h" % roundi(vel.value)
-	lbl_traf.text = "%d %%" % roundi(traf.value) + ("  (sin tráfico)" if traf.value == 0 else "")
+	lbl_traf.text = "%d %%" % roundi(traf.value) + (" (ninguno)" if traf.value == 0 else "")
 	var t := r.resumen_tramo(perfil.s0, perfil.s1)
 	var sentido := "subiendo" if t["z_fin"] > t["z_ini"] else "bajando"
 	info.text = "Tramo: %.2f km (%s) · de %d a %d m · desnivel +%d / −%d m · pendiente máx (100 m): %.1f %%%s" % [
@@ -298,7 +361,47 @@ func _refrescar() -> void:
 	info.text = info.text.replace(".", ",")
 
 
+## Con la Comunidad de Madrid elegida no hay carretera ni tramo que elegir: se ocultan esas filas
+func _modo_madrid() -> void:
+	var m := Ajustes.madrid_elegida
+	for f in filas_carretera:
+		f.visible = not m
+	info_madrid.visible = m
+	sub.text = "Trazado real de OpenStreetMap · altitud real del MDT del IGN · zona: %s" % (Ajustes.NOMBRE_MADRID if m else Ajustes.ZONAS.get(Ajustes.zona, Ajustes.zona))
+	if ck_stream != null:
+		ck_stream.disabled = m or Ajustes.zona != "navacerrada"
+		if ck_stream.disabled:
+			ck_stream.button_pressed = false
+
+
+## "Elegir en el mapa…": el mismo mapa de viaje que la pausa (mapa_viaje.gd); al pinchar y viajar empieza la partida
+func _abrir_mapa_viaje() -> void:
+	_guardar_opciones()
+	if mapa_viaje == null:
+		mapa_viaje = MapaViaje.new()
+		mapa_viaje.desde_menu = true
+		add_child(mapa_viaje)
+		mapa_viaje.cerrado.connect(func() -> void: boton_empezar.grab_focus.call_deferred())
+	mapa_viaje.visible = true
+	mapa_viaje.centrar_en(Ajustes.ZONA_MADRID if Ajustes.madrid_elegida else Ajustes.zona)
+	mapa_viaje.enfocar()
+
+
+func _guardar_opciones() -> void:
+	Ajustes.velocidad = vel.value
+	Ajustes.trafico = traf.value / 100.0
+	Ajustes.piloto = chk_piloto.button_pressed
+	Ajustes.adaptar_curvas = chk_curvas.button_pressed
+	Ajustes.limite_adelantar = chk_limite_adel.button_pressed
+	Ajustes.piloto_limites = chk_piloto_lim.button_pressed
+	Ajustes.camara = camara.selected
+
+
 func _empezar() -> void:
+	if Ajustes.madrid_elegida:
+		_guardar_opciones()
+		get_tree().change_scene_to_file("res://escenas/madrid.tscn")
+		return
 	if absf(km_fin.value - km_ini.value) < 0.2:
 		info.text = "Elige un tramo de al menos 200 m."
 		return
@@ -335,13 +438,14 @@ func _fila_mundo_stream() -> HBoxContainer:
 		f.visible = false
 		return f
 	var ck := CheckButton.new()
+	ck_stream = ck
 	ck.text = "Mundo real por teselas (beta, solo Puerto de Navacerrada, necesita Internet)"
 	ck.tooltip_text = "Suelo con la ortofoto PNOA del IGN y relieve LiDAR descargados alrededor del coche, con nivel de detalle hasta el horizonte, como BeamNG.Earth"
 	ck.button_pressed = Ajustes.mundo_stream
 	ck.toggled.connect(func(v: bool) -> void: Ajustes.mundo_stream = v)
 	f.add_child(ck)
 	var actualizar := func() -> void:
-		ck.disabled = Ajustes.zona != "navacerrada"
+		ck.disabled = Ajustes.zona != "navacerrada" or Ajustes.madrid_elegida
 		if ck.disabled:
 			ck.button_pressed = false
 	f.visibility_changed.connect(actualizar)

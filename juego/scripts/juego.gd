@@ -66,6 +66,7 @@ var sl_vel := HSlider.new()
 var l_traf_p := Label.new()
 var l_vel_p := Label.new()
 var b_continuar := Button.new()
+var mapa_viaje: MapaViaje = null   # "Cambiar de carretera" en la pausa (mapa_viaje.gd)
 var b_repetir := Button.new()
 var ck_curvas := CheckButton.new()
 var sl_vol := HSlider.new()
@@ -77,6 +78,7 @@ func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	_leer_args()
 	Ajustes.cargar()
+	Ajustes.aplicar_viaje()        # viaje pinchando en el mapa (mapa_viaje.gd): ruta y km más cercanos al punto
 	_ajustes_adelantamiento()
 	var cargando := Label.new()
 	cargando.text = "Cargando terreno y carreteras a escala 1:1…"
@@ -614,7 +616,7 @@ const AYUDA_TECLADO := ("W/↑ acelerar · S/↓ frenar (parado: marcha atrás) 
 	"V cámara · R volver a la carretera · N silenciar motor · Esc pausa · H ocultar ayuda")
 const AYUDA_MANDO := ("Mando: R2 acelerar · L2 frenar (parado: marcha atrás) · joystick izq. girar · joystick der. mirar\n" +
 	"L1/R1 bajar/subir marcha (R1 mantenido: automático) · △ piloto · □ adelantar · ↑↓ velocidad · ←→ tráfico\n" +
-	"✕ freno de mano · ○ cámara · L3 a la carretera · OPTIONS pausa (curvas y límite) · SHARE ayuda")
+	"✕ freno de mano · ○ cámara · L3 a la carretera · OPTIONS pausa (opciones, cambiar de carretera) · SHARE ayuda")
 const PAD_ZONA_MUERTA := 0.08     # joystick: por debajo no gira (deriva del stick)
 const PAD_ZONA_GATILLO := 0.03    # gatillos: holgura en reposo
 var pad_id := -1                  # mando que se lee (-1 = ninguno)
@@ -1043,7 +1045,7 @@ func _hud() -> void:
 func _crear_pausa() -> void:
 	panel_pausa.process_mode = Node.PROCESS_MODE_ALWAYS
 	var v := VBoxContainer.new()
-	v.add_theme_constant_override("separation", 10)
+	v.add_theme_constant_override("separation", 8)
 	var t := Label.new()
 	t.text = "Pausa"
 	t.add_theme_font_size_override("font_size", 28)
@@ -1085,10 +1087,41 @@ func _crear_pausa() -> void:
 	var b3 := Button.new()
 	b3.text = "Menú principal"
 	b3.pressed.connect(func(): get_tree().change_scene_to_file("res://escenas/menu.tscn"))
-	for b in [b1, b2, b3]:
+	var b4 := Button.new()
+	b4.text = "Cambiar de carretera (mapa)"
+	b4.pressed.connect(_abrir_mapa_viaje)
+	var b5 := Button.new()
+	b5.text = "Salir del juego"
+	b5.pressed.connect(func(): get_tree().quit())
+	for b in [b2, b4, b3, b5]:
 		v.add_child(b)
+	# mismo orden que la pausa del mapa abierto (pausa.gd): Continuar arriba, luego las opciones y el resto
+	v.add_child(b1)
+	v.move_child(b1, 1)
+	var to := Label.new()
+	to.text = "Opciones"
+	to.add_theme_font_size_override("font_size", 20)
+	to.modulate = Color(0.75, 0.85, 0.95)
+	v.add_child(to)
+	v.move_child(to, 2)
 	_caja_centrada(panel_pausa, v)
 	panel_pausa.visible = false
+
+
+## Pausa → "Cambiar de carretera": mapa de viaje (mapa_viaje.gd) centrado en el coche; Esc vuelve a la pausa
+func _abrir_mapa_viaje() -> void:
+	if mapa_viaje == null:
+		mapa_viaje = MapaViaje.new()
+		hud.add_child(mapa_viaje)
+		mapa_viaje.cerrado.connect(func() -> void:
+			panel_pausa.visible = pausado
+			if pausado: b_continuar.grab_focus.call_deferred())
+	var o: Array = Ajustes.info.get("origen_utm", [0.0, 0.0])
+	mapa_viaje.aqui = Vector2(float(o[0]) + coche.position.x, float(o[1]) - coche.position.z)
+	mapa_viaje.visible = true
+	mapa_viaje.centrar_en(Ajustes.zona)
+	panel_pausa.visible = false
+	mapa_viaje.enfocar()
 
 
 func _al_cambiar_trafico(x: float) -> void:
@@ -1130,13 +1163,24 @@ func _caja_centrada(p: PanelContainer, hijo: Control) -> void:
 	p.add_theme_stylebox_override("panel", sb)
 	p.add_child(hijo)
 	hud.add_child(p)
+	# centrada de verdad cada vez que se muestra (antes, posición fija: a 1280×720 la pausa se salía por abajo)
+	p.visibility_changed.connect(func() -> void:
+		if p.visible: _centrar.call_deferred(p))
+	p.resized.connect(func() -> void:
+		if p.visible: _centrar.call_deferred(p))
+
+
+func _centrar(p: Control) -> void:
+	p.reset_size()
 	var vs := get_viewport().get_visible_rect().size
-	p.position = Vector2(vs.x / 2 - 220, vs.y / 2 - 230)
+	p.position = ((vs - p.size) * 0.5).max(Vector2.ZERO)
 
 
 func _pausa(on: bool) -> void:
 	pausado = on
 	panel_pausa.visible = on
+	if mapa_viaje != null:
+		mapa_viaje.visible = false
 	if on:
 		sl_traf.value = Ajustes.trafico * 100.0
 		sl_vel.value = Ajustes.velocidad
